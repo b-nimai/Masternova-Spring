@@ -32,6 +32,7 @@ class ResendMailProviderTest {
               URI.create("http://localhost:4200"),
               "Masternova <no-reply@masternova.dev>",
               NotificationProperties.Provider.RESEND,
+              "test-unsubscribe-secret-0123456789abcdef",
               new NotificationProperties.Resend(URI.create("https://api.resend.test"), "re_key")));
 
   private final OutboundEmail email =
@@ -98,6 +99,7 @@ class ResendMailProviderTest {
                         URI.create("http://localhost:4200"),
                         "x@y.z",
                         NotificationProperties.Provider.RESEND,
+                        "test-unsubscribe-secret-0123456789abcdef",
                         new NotificationProperties.Resend(URI.create("https://x"), " "))))
         .hasMessageContaining("api-key is required");
   }

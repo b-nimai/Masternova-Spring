@@ -14,6 +14,7 @@ import org.springframework.validation.annotation.Validated;
  * @param webUrl the Angular app's public URL — every link in an email starts here
  * @param from the sender, e.g. {@code Masternova <no-reply@masternova.dev>}
  * @param provider which {@code MailProvider} adapter sends (smtp | resend)
+ * @param tokenSecret HMAC key for unsubscribe links — the SAME value the api verifies with
  * @param resend Resend HTTP API settings (only read when provider = resend)
  */
 @Validated
@@ -22,6 +23,7 @@ public record NotificationProperties(
     @NotNull URI webUrl,
     @DefaultValue("Masternova <no-reply@masternova.dev>") @NotBlank String from,
     @DefaultValue("smtp") @NotNull Provider provider,
+    @NotBlank String tokenSecret,
     @Valid @DefaultValue Resend resend) {
 
   public enum Provider {
