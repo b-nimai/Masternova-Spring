@@ -14,6 +14,8 @@ x-app-env: &app-env
   DATABASE_PASSWORD: masternova
   REDIS_HOST: redis
   REDIS_PORT: 6379
+  LOG_VERIFICATION_LINKS: 'false' # never log live tokens outside a developer's own terminal
+  JWT_ACCESS_SECRET: compose-local-secret-not-for-production-0123456789
 
 services:
   postgres:

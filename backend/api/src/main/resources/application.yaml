@@ -31,6 +31,13 @@ masternova: # → MasternovaProperties (typed + validated at startup)
   checkout:
     cart-max-items: 20
     payment-timeout: 10s
+  identity: # → IdentityProperties
+    # dev-only default secret (≥ 32 bytes). Every real environment sets JWT_ACCESS_SECRET.
+    jwt-secret: ${JWT_ACCESS_SECRET:dev-only-secret-change-me-0123456789abcdef}
+    access-token-ttl: 15m
+    refresh-token-ttl: 30d
+    secure-cookies: ${SECURE_COOKIES:false} # true behind HTTPS
+    log-verification-links: ${LOG_VERIFICATION_LINKS:true} # dev convenience — false in prod
   outbox: # → MasternovaProperties.Outbox (all have defaults; listed here for visibility)
     relay-enabled: true
     poll-interval: 1s
