@@ -1,9 +1,40 @@
-<mat-toolbar>
+<mat-toolbar class="toolbar">
+  @if (isHandset()) {
+    <button mat-icon-button type="button" aria-label="Open navigation" (click)="toggleDrawer()">
+      <mat-icon>menu</mat-icon>
+    </button>
+  }
   <a routerLink="/" class="brand">Masternova</a>
   <span class="spacer"></span>
-  <a mat-button routerLink="/playground">Playground</a>
+  <!-- the auth area (log in / user menu) arrives in Phase 3.9 -->
 </mat-toolbar>
 
-<main>
-  <router-outlet />
-</main>
+<mat-sidenav-container class="container">
+  <mat-sidenav
+    class="sidenav"
+    [mode]="sidenavMode()"
+    [opened]="sidenavOpened()"
+    (closedStart)="drawerOpen.set(false)"
+  >
+    <mat-nav-list>
+      @for (item of navItems; track item.link) {
+        <a
+          mat-list-item
+          [routerLink]="item.link"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: item.link === '/' }"
+          (click)="closeOnHandset()"
+        >
+          <mat-icon matListItemIcon aria-hidden="true">{{ item.icon }}</mat-icon>
+          <span matListItemTitle>{{ item.label }}</span>
+        </a>
+      }
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    <main>
+      <router-outlet />
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

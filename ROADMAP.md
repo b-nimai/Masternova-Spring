@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 in progress on `phase-3/identity`: 3.1–3.5 ✅, 3.6 ⏸. Next: 3.7 (Angular app shell).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 in progress on `phase-3/identity`: 3.1–3.5 ✅, 3.6 ⏸, 3.7 ✅. Next: 3.9 (auth store, interceptor, guards — before 3.8, since the pages use them).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -115,7 +115,7 @@ Phases are listed **in the order you do them**.
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 8 | 16 h | ~15 h | ✅ |
-| 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 5 | 26 h | ~13 h | 🔨 |
+| 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 6 | 26 h | ~14.5 h | 🔨 |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **36** | **~326 h** | ~52 h | |
+| | **Total** | **137** | **37** | **~326 h** | ~53.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -235,7 +235,7 @@ screen lives in.
 | 3.4 | Login (timing-safe, no account probing) → 15-min HS256 JWT + rotating httpOnly/SameSite=Strict refresh cookie; reuse revokes the family (committed via `noRollbackFor`); logout; `/me`; deny-by-default chain fed by modules' `PublicEndpoints`; 401/403 as Problem Details; 6th error kind | Spring Security 7, resource server, `JwtEncoder`/`JwtDecoder` + validators, `ResponseCookie`, `@CookieValue`, `noRollbackFor` | — | **Chain of Responsibility** (filter chain) | 5 h | ✅ | 2026-10-02 |
 | 3.5 | RBAC: `CurrentUser` argument resolver; admin role management with `@PreAuthorize` on the service; self-demotion guard; first-admin bootstrap runner; `AccessDeniedException` → 403 problem | `@EnableMethodSecurity`, SpEL, `HandlerMethodArgumentResolver`, `ApplicationRunner` | — | — | 2 h | ✅ | 2026-10-02 |
 | 3.6 | Google sign-in (optional) as a second `AuthenticationProvider` | OAuth2 client | — | **Strategy** (auth methods): catalog row 1 | 2 h | ⏸ | deferred: needs real Google OAuth client credentials (Google Cloud console) — pick up when they exist |
-| 3.7 | Angular app shell: Material toolbar + sidenav, responsive layout, lazy feature routes | — | layout, `MatSidenav`, `BreakpointObserver`, `loadChildren` | — | 2 h | ☐ | |
+| 3.7 | Angular app shell: sticky toolbar + sidenav (overlay on handsets, side on desktop) driven by `NAV_ITEMS`; lazy routes | — | `MatSidenav`, `BreakpointObserver` → `toSignal`, `routerLinkActive`, faking breakpoints in tests | — | 2 h | ✅ | 2026-10-02 |
 | 3.8 | Signup / login / verify pages | — | **typed reactive forms**, custom validators, error mapping from Problem Details | — | 3 h | ☐ | |
 | 3.9 | Auth store with signals, functional interceptor (attach token, single-flight refresh on 401), `CanMatchFn` guards, role-based UI | — | `HttpInterceptorFn`, `shareReplay`, guards, signal stores | — | 4 h | ☐ | |
 | 3.10 | Tests: `@WebMvcTest` + `spring-security-test`, reuse-detection IT, interceptor + guard specs | `@WithMockUser`, `jwt()` post-processor | `HttpTestingController` | — | 2 h | ☐ | |
