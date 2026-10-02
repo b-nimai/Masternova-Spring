@@ -22,6 +22,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -75,6 +76,20 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "VERSION_CONFLICT",
                 "This was changed elsewhere. Reload and try again.",
                 request));
+  }
+
+  /**
+   * @PreAuthorize on a service method throws INSIDE Spring MVC — without this handler the catch-all
+   * below would turn a missing role into a 500. Same shape as the security chain's 403.
+   */
+  @ExceptionHandler(AccessDeniedException.class)
+  ResponseEntity<ProblemDetail> handleAccessDenied(
+      AccessDeniedException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(
+            HttpStatus.FORBIDDEN, "FORBIDDEN", "You do not have permission to do this.", request);
+    problem.setProperty("reason", "INSUFFICIENT_ROLE");
+    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
   }
 
   @ExceptionHandler(Exception.class)
