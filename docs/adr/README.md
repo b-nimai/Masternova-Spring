@@ -15,3 +15,4 @@ re-derived rather than copied.
 | [0002](0002-maven-multi-module.md) | Maven multi-module build over Gradle | accepted |
 | [0003](0003-vertical-slices.md) | Build in vertical slices (backend + Angular per module) | accepted |
 | [0004](0004-kubernetes-first-deploy.md) | Local Kubernetes + GitOps first, AWS last and optional | accepted |
+| [0005](0005-hand-rolled-outbox-over-modulith-registry.md) | Hand-rolled transactional outbox over Spring Modulith's event publication registry | accepted |
