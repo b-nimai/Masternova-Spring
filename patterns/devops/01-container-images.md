@@ -5,9 +5,9 @@
 > **what is in each layer**, and **how often each layer changes**. Order the Dockerfile from
 > least-changing to most-changing, keep the runtime image to what the app needs, and measure.
 
-**Roadmap:** D1.1 (layers, Buildpacks) · D1.2 (slim runtime, to come) · **Last updated:** 2026-10-02
+**Roadmap:** D1.1 (layers, Buildpacks) · D1.2 (slim runtime → Alpine JRE, [ADR-0007](../../docs/adr/0007-alpine-jre-runtime-image.md)) · **Last updated:** 2026-10-02
 **Real files:** [`backend/Dockerfile`](../../backend/Dockerfile) (one Dockerfile for `api` and `worker`), [`backend/healthcheck.sh`](../../backend/healthcheck.sh), [`backend/.dockerignore`](../../backend/.dockerignore)
-**Measured on:** Docker 29.7 (containerd image store), `eclipse-temurin:25-jre` (Ubuntu 26.04), Spring Boot 4.1, api image.
+**Measured on:** Docker 29.7 (containerd image store), Spring Boot 4.1, the api image. §1–§6 measure the **original** Ubuntu-based `eclipse-temurin:25-jre` image (D1.1); §7 compares five bases and switches to the Alpine JRE (D1.2).
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
 
@@ -19,10 +19,11 @@
 | 4 | [Inspecting images: `docker history`, `dive`](#4-inspecting-images-docker-history-dive-) | ⭐⭐ |
 | 5 | [Build context and `.dockerignore`](#5-build-context-and-dockerignore-) | ⭐⭐ |
 | 6 | [Dockerfile vs Cloud Native Buildpacks](#6-dockerfile-vs-cloud-native-buildpacks-) | ⭐⭐ |
-| 7 | [Command cheat sheet](#7-command-cheat-sheet-) | ⭐⭐ |
-| 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ |
-| 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ |
-| 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ |
+| 7 | [Slim runtimes: five bases measured](#7-slim-runtimes-five-bases-measured-) | ⭐⭐⭐ |
+| 8 | [Command cheat sheet](#8-command-cheat-sheet-) | ⭐⭐ |
+| 9 | [Common mistakes](#9-common-mistakes-) | ⭐⭐⭐ |
+| 10 | [Interview Q&A](#10-interview-qa-) | ⭐⭐⭐ |
+| 11 | [30-second recall](#11-30-second-recall) | ⭐⭐⭐ |
 
 ---
 
@@ -75,8 +76,8 @@ RUN cp ${APP}/target/${APP}-*.jar app.jar \
                                                  # ⭐ split the fat jar into 4 folders (below)
 
 # ---- stage 2: runtime ----
-FROM eclipse-temurin:25-jre AS runtime           # JRE only: no compiler, no Maven, no sources
-RUN groupadd --system app && useradd --system --gid app --no-create-home app
+FROM eclipse-temurin:25-jre-alpine AS runtime    # JRE only: no compiler, no Maven, no sources (Alpine since D1.2, §7)
+RUN apk upgrade --no-cache && addgroup -S app && adduser -S -G app -H app
 COPY --chmod=755 healthcheck.sh /usr/local/bin/healthcheck   # rarely changes → early (§3)
 WORKDIR /app
 COPY --from=build /src/extracted/dependencies/ ./            # 78 MB, changes when the pom changes
@@ -98,7 +99,7 @@ ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
 | **`jarmode=tools extract --layers`** | a fat jar is one 80 MB file: change one class and the whole 80 MB layer changes. Extracted, the 78 MB of libraries become their own layer, which stays cached. |
 | **`--launcher`** + `JarLauncher` | keeps Boot's classpath ordering from the jar, so the extracted app behaves exactly like `java -jar`. |
 | **Non-root `USER`** | a container escape or app RCE lands as an unprivileged user. Kubernetes `runAsNonRoot` (D4) refuses root images anyway. |
-| **No curl/wget**, a bash `/dev/tcp` healthcheck | every extra package brings its own CVEs (§6, and D1.2). |
+| **Nothing installed for the healthcheck** | every extra package brings its own CVEs. On Ubuntu it was a bash `/dev/tcp` script; on Alpine it's BusyBox `wget`, already in the base (§7). |
 | **Exec-form `ENTRYPOINT`** `["java", …]` | Java is PID 1 and receives `SIGTERM` directly, so graceful shutdown works. The shell form `ENTRYPOINT java …` wraps it in `/bin/sh -c`, which doesn't forward signals. |
 | **One Dockerfile, `ARG APP`** | api and worker share the kernel module and the whole recipe. Two copies would drift. |
 
@@ -152,7 +153,7 @@ first), condensed:
 ```
 
 **Only ~79 MB of the 444 MB is ours.** The rest is the base image. That's why the base image is
-the lever for size and CVEs (D1.2).
+the lever for size and CVEs (§7).
 
 **`dive <image>`** (run as a container, no install needed):
 
@@ -233,17 +234,101 @@ It runs the Paketo **builder** (`paketobuildpacks/builder-noble-java-tiny`): bui
 | SBOM and sensible JVM memory flags for free | fast, cache-friendly builds in CI without pulling a 1.27 GB builder |
 
 **Our decision:** keep the Dockerfile. It's the learning goal, and it builds 5× faster here. But
-Buildpacks shows the real lesson: **41 → 4 CVEs, just by shipping fewer OS packages.** D1.2 gets
-the same benefit inside our own Dockerfile (jlink / distroless / chiseled) and records the choice
-in an ADR.
+Buildpacks shows the real lesson: **41 → 4 CVEs, just by shipping fewer OS packages.** §7 gets
+the same benefit (in fact 41 → 0) inside our own Dockerfile.
 
-⚠️ **No shell = no `healthcheck.sh`.** Our healthcheck needs bash. On a shell-less image you
-rely on the orchestrator's HTTP probes instead: Kubernetes `livenessProbe`/`readinessProbe` (D4)
+⚠️ **No shell = no `healthcheck.sh`.** A script-based healthcheck needs a shell. On a shell-less
+image you rely on the orchestrator's HTTP probes instead: Kubernetes `livenessProbe`/`readinessProbe` (D4)
 or a Java-based check. Docker's `HEALTHCHECK` is ignored by Kubernetes anyway.
 
 ---
 
-## 7. Command cheat sheet ⭐⭐
+## 7. Slim runtimes: five bases measured ⭐⭐⭐
+
+The base image was 365 of the 444 MB and all 41 CVEs. So we built **the same app on five runtime
+bases**. For each one we booted it against the compose Postgres + Redis, called signup, login and
+health, and ran Trivy over every severity. The experiment's Dockerfile had one build stage and five
+`--target`s.
+
+| Runtime base | Unpacked | Compressed | CVEs (Trivy) | Shell | Result |
+|---|---|---|---|---|---|
+| `eclipse-temurin:25-jre` (Ubuntu 26.04), *before* | 444 MB | 189 MB | 41 (37 M, 4 L) | bash | ✅ |
+| ⭐ **`eclipse-temurin:25-jre-alpine`** | 309 MB | 145 MB | 1, fixable → **0** after `apk upgrade` | BusyBox | ✅ **chosen** |
+| `gcr.io/distroless/java25-debian13:nonroot` | 311 MB | 143 MB | 64, incl. **8 HIGH** (libexpat, libuuid) | none | ✅ |
+| `ubuntu/jre:25-26.04_stable` (chiseled) | 281 MB | 147 MB | **"0"**: Trivy found no OS to scan | none | ✅, but runs as **root** by default |
+| `jlink` JRE (25 modules) on `distroless/base-debian13` | **176 MB** | **121 MB** | 23 (15 M, 8 L) | none | ❌ → ✅ after adding `jdk.net` |
+
+**Final result (Alpine + `apk upgrade`):**
+
+| | Before | After |
+|---|---|---|
+| unpacked | 444 MB | 316 MB |
+| compressed (pulled) | 189 MB | 148 MB |
+| CVEs, all severities | 41 | **0** |
+
+The worker gets the same image recipe (139 MB compressed, 0 CVEs).
+
+### The three lessons that matter more than the numbers
+
+**1. jlink: the module list is a whitelist that fails at runtime ⭐**
+
+```bash
+jdeps --ignore-missing-deps --multi-release 25 --print-module-deps \
+      --class-path 'extracted/dependencies/BOOT-INF/lib/*' extracted/application/BOOT-INF/classes
+# → java.base, java.desktop, java.instrument, java.management, java.naming, java.net.http, java.sql, …
+jlink --add-modules <that>,jdk.unsupported,… --strip-debug --no-man-pages --no-header-files --compress zip-6 --output /jre
+```
+
+`jdeps` reads **static** references. Spring, Hibernate and Netty load many classes by
+**reflection**, which `jdeps` can't see. Our first jlink image started building its context, then
+died:
+
+```text
+Error creating bean with name 'redisConnectionFactoryVirtualThreads' … jdk/net/ExtendedSocketOptions
+```
+
+Lettuce (via Netty) touches `jdk.net` reflectively. The fix was one module name. But the failure
+appears **only when that code path runs**: here at startup, elsewhere maybe at the first request
+to a rarely used feature. So jlink needs a full boot + traffic test **in CI**. It is the smallest
+image by far, but not worth that ongoing cost for us yet.
+
+**2. A scanner that can't see is worse than a noisy one ⭐**
+
+The chiseled image scanned "clean", but Trivy listed **no OS packages at all**. It doesn't read
+chisel's package manifest (`/var/lib/chisel/manifest.wall`), so the OS was never checked. Before
+trusting "0 CVEs", check that the report has an OS section (`Class: os-pkgs`). Lesson: pick a base
+**your** scanner understands.
+
+**3. Read the image config, not just the docs**
+
+`docker inspect -f '{{.Config.User}}' ubuntu/jre:…` is **empty**, which means root. The image
+contains an `app` user (uid 10001), but you must set `USER` yourself. The Temurin images also
+default to root, which is why our Dockerfile always creates and switches to `app`.
+
+### Why Alpine, and what it costs
+
+| ✅ Gains | ⚠️ Costs |
+|---|---|
+| 41 → 0 CVEs: the CI Trivy gate now flags only *new* problems | **musl, not glibc**: fine for pure-JVM code (Netty falls back to NIO), but a glibc-built native library wouldn't load |
+| −30 % on disk, −22 % to pull | `apk upgrade` means two builds on different days can differ (accepted for security fixes; the web image already does it) |
+| the same JRE vendor (Adoptium), same tag scheme for Dependabot | a shell exists (BusyBox): less than Ubuntu's, more than distroless |
+| BusyBox `wget` → a 1-line healthcheck, nothing installed | — |
+
+The healthcheck, before and after:
+
+```sh
+# Ubuntu (bash):  exec 3<>/dev/tcp/127.0.0.1/8080; printf 'GET … HTTP/1.1…' >&3; head -n1 <&3 | grep -q ' 200 '
+# Alpine (sh):    exec wget -q -T 2 -O /dev/null "http://127.0.0.1:${HEALTH_PORT:-8080}/actuator/health/readiness"
+```
+
+`wget` exits non-zero on a refused connection or a non-2xx answer. Both were checked: `exit=0`
+when healthy, `exit=1` on a wrong port.
+
+Full reasoning and rejected options: [ADR-0007](../../docs/adr/0007-alpine-jre-runtime-image.md).
+
+---
+
+## 8. Command cheat sheet ⭐⭐
 
 | Command | What it tells you |
 |---|---|
@@ -256,10 +341,13 @@ or a Java-based check. Docker's `HEALTHCHECK` is ignored by Kubernetes anyway.
 | `make scan` / `trivy image <img>` | CVEs |
 | `docker build --progress=plain …` | full build log, including which steps were `CACHED` |
 | `./mvnw -pl api spring-boot:build-image` | Buildpacks image, no Dockerfile |
+| `docker build -f Dockerfile.x --target <stage> …` | build one stage of a multi-target experiment |
+| `jdeps --print-module-deps …` → `jlink --add-modules …` | a custom JRE (§7: then **boot and exercise it**) |
+| `docker run --rm --entrypoint java <img> --list-modules` | which JDK modules an image's JRE contains |
 
 ---
 
-## 8. Common mistakes ⭐⭐⭐
+## 9. Common mistakes ⭐⭐⭐
 
 | ❌ Mistake | ✅ Instead | § |
 |---|---|---|
@@ -269,14 +357,17 @@ or a Java-based check. Docker's `HEALTHCHECK` is ignored by Kubernetes anyway.
 | a JDK, Maven and sources in the runtime image | multi-stage: a JRE-only runtime | 2 |
 | running as root | `USER app` | 2 |
 | `ENTRYPOINT java -jar …` (shell form) | exec form `["java", …]`, so signals reach the JVM | 2 |
-| curl/wget installed "just for the healthcheck" | a bash `/dev/tcp` check, or orchestrator probes | 2, 6 |
+| curl/wget installed "just for the healthcheck" | what the base already has (BusyBox `wget`), or orchestrator probes | 2, 7 |
 | no `.dockerignore` | exclude `target/`, `node_modules/`, `.git` | 5 |
 | quoting "the image is 630 MB" | say which size: compressed (pull) or on disk | 1 |
+| trusting `jdeps` for a jlink module list | add the reflective extras (`jdk.unsupported`, `jdk.net`, …) and smoke-test the image | 7 |
+| trusting a "0 CVEs" report blindly | check the scanner actually found the OS packages | 7 |
+| assuming a slim base image is non-root | `docker inspect -f '{{.Config.User}}'`; set `USER` yourself | 7 |
 | `:latest` base images in production | pin a version (and let Dependabot bump it; already set up) | — |
 
 ---
 
-## 9. Interview Q&A ⭐⭐⭐
+## 10. Interview Q&A ⭐⭐⭐
 
 **Q1. What is a Docker image layer, and why does order matter?**
 A layer is a content-addressed tar of filesystem changes from one instruction. Changing a layer
@@ -313,9 +404,23 @@ identical layers. Pin the base images too.
 `docker history` for size per step, and `dive` for files per layer and wasted space (files
 deleted or overwritten in later layers).
 
+**Q8. How would you shrink and harden a Java image?**
+Measure first (`docker history`: the base was 365 of 444 MB). Then switch the runtime base. We
+compared Ubuntu, Alpine, distroless, chiseled and jlink, booting and Trivy-scanning each. Alpine
+gave 41 → 0 CVEs and −22 % pull size with no maintenance cost. jlink was smallest, but `jdeps`
+missed a reflectively used module and the app failed at runtime.
+
+**Q9. jlink, distroless, Alpine: trade-offs?**
+- **jlink:** the smallest image, but you maintain a module list, and gaps fail only at runtime.
+- **Distroless:** no shell or package manager, but it carries the distro's libraries, along with
+  their CVEs, and healthchecks need a binary.
+- **Alpine:** small, a tiny shell, patched fast; the catch is musl instead of glibc.
+
+Pick by measuring size, CVEs **and** operability.
+
 ---
 
-## 10. 30-second recall
+## 11. 30-second recall
 
 - **Image** = manifest + config + content-addressed layers. A container adds one writable layer.
   Sizes: compressed (pull) vs on disk.
@@ -331,4 +436,9 @@ deleted or overwritten in later layers).
 - **Hygiene:** non-root, exec-form entrypoint, no curl, `.dockerignore`, one-`RUN` cleanups.
 - **Buildpacks:** no Dockerfile, tiny base, SBOM, memory calculator; slower builds, no shell.
   **41 → 4 CVEs** by shipping less OS.
-- **Next (D1.2):** slim our own runtime (jlink / distroless / chiseled) and pick one in an ADR.
+- **Slim runtime (D1.2):**
+  - Measured 5 bases → **Alpine Temurin JRE + `apk upgrade`**: 41 → 0 CVEs, 189 → 148 MB
+    pulled, BusyBox `wget` healthcheck (ADR-0007).
+  - jlink is the smallest (121 MB) but brittle: `jdeps` misses reflection (`jdk.net`).
+  - Chiseled was unscannable by Trivy, and defaults to root.
+- **Next (D1.3):** the JVM inside a container: memory/CPU limits, heap sizing, startup.

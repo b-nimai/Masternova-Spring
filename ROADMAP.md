@@ -116,7 +116,7 @@ Phases are listed **in the order you do them**.
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 8 | 16 h | ~15 h | ✅ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
-| 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 1 | 6 h | ~1.5 h | 🔨 |
+| 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 2 | 6 h | ~3.5 h | 🔨 |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **41** | **~326 h** | ~64.5 h | |
+| | **Total** | **137** | **42** | **~326 h** | ~66.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -250,7 +250,7 @@ safer and faster to start.
 | # | Task | DevOps concept | Est | Status | Date |
 |---|---|---|---|---|---|
 | D1.1 | Inspect layers (`docker history`, `dive`); compare with Buildpacks `./mvnw spring-boot:build-image`. Findings: a code change ships 1 layer (0.65 MB) after moving the healthcheck above the app layers; Buildpacks tiny 41 → 4 CVEs. [DevOps note 01](patterns/devops/01-container-images.md) | layer caching, build context, Buildpacks vs Dockerfile, reproducible builds | 1.5 h | ✅ | 2026-10-02 |
-| D1.2 | Slim the runtime: `jlink` custom JRE vs distroless vs Ubuntu chiseled; compare size + Trivy results (today: api ≈ 630 MB) | minimal base images, attack surface | 2 h | ☐ | |
+| D1.2 | Slim the runtime: measured Ubuntu / Alpine / distroless / chiseled / `jlink` (boot + smoke test + Trivy each) → **Alpine Temurin JRE** ([ADR-0007](docs/adr/0007-alpine-jre-runtime-image.md)): api 444 → 316 MB unpacked, 189 → 148 MB compressed, **41 → 0 CVEs**; BusyBox `wget` healthcheck | minimal base images, attack surface, jlink/jdeps pitfalls, scanner blind spots (chisel) | 2 h | ✅ | 2026-10-02 |
 | D1.3 | JVM in containers: memory/CPU limits, `MaxRAMPercentage`, Java 25 AOT cache for startup time | container-aware JVM, startup vs throughput | 1.5 h | ☐ | |
 | D1.4 | Compose hardening: resource limits, restart policies, read-only FS, secrets via files | runtime security | 1 h | ☐ | |
 
@@ -532,7 +532,7 @@ Each line is a sentence you can say *and* a file or test you can show.
 | One `backend/Dockerfile` with `--build-arg APP=api\|worker` instead of one Dockerfile per app | Both apps build identically; one file can't drift from the other |
 | `spring-modulith-starter-jpa` removed from the Initializr selection | Its event-publication table would need a hand-written migration now. Phase 2 hand-rolls the outbox first, then compares (2.5). |
 | google-java-format pinned to 1.35.0 | 1.36+ pulls in a commonmark dependency that Spotless 3.10 fails to load |
-| Healthcheck via bash `/dev/tcp` instead of curl | The Temurin JRE image ships no curl/wget; installing them only adds CVEs |
+| Healthcheck via BusyBox `wget` (was bash `/dev/tcp`) | Never install curl/wget just for a healthcheck (they add CVEs). Since D1.2 the runtime is the Alpine JRE ([ADR-0007](docs/adr/0007-alpine-jre-runtime-image.md)), whose BusyBox already has `wget` and has no bash |
 | First CI run failed: `aquasecurity/trivy-action@0.33.1` (tags now carry a `v` prefix) | Fixed to `@v0.36.0` in 94f94b0. Lesson: pin action versions you have verified exist. |
 | The outbox relay runs inside the **api** process in Phase 2 (not the worker, as the HLD shows) | The relay needs the outbox repository; sharing it with the worker needs a shared Spring library module. Phase 4 (4.2) extracts `backend/outbox` and moves the relay; until then `masternova.outbox.relay-enabled` controls it. |
 | `SecurityConfig` is `@ConditionalOnWebApplication(SERVLET)` | Found in 2.4: a non-web context (`@SpringBootTest(webEnvironment = NONE)`) has no `HttpSecurity` bean. |
