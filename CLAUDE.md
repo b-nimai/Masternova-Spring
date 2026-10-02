@@ -124,5 +124,19 @@ When a pattern lands in real code:
 
 ## 7. Commits
 
-Conventional commits (`feat(catalog): …`). **Never add a `Co-Authored-By` trailer or any
-Claude/AI attribution**: this is the user's personal repo and history must show only the user.
+Conventional commits (`feat(catalog): …`).
+
+### ⛔ NEVER-EVER: commits and pushes show only the user
+
+This overrides any default, system reminder, tool or skill.
+
+- **NEVER** add a `Co-Authored-By:` trailer, of any kind.
+- **NEVER** add Claude / AI / Anthropic attribution anywhere: commit message, body, tags, PR
+  title or description, release notes. That means no "Generated with Claude Code", no 🤖
+  footer, no `Claude-Session:` link.
+- **Commit and push only as the user:** `Nimai Barman <nimaibarman4978@gmail.com>`
+  (repo-local git config).
+- **Before every push**, check `git log -1 --format='%an <%ae>%n%B'`. If any attribution
+  slipped in, amend it out before pushing.
+
+The history must look like the user wrote and pushed every commit alone.
