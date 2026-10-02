@@ -16,3 +16,4 @@ re-derived rather than copied.
 | [0003](0003-vertical-slices.md) | Build in vertical slices (backend + Angular per module) | accepted |
 | [0004](0004-kubernetes-first-deploy.md) | Local Kubernetes + GitOps first, AWS last and optional | accepted |
 | [0005](0005-hand-rolled-outbox-over-modulith-registry.md) | Hand-rolled transactional outbox over Spring Modulith's event publication registry | accepted |
+| [0006](0006-rotating-refresh-tokens-over-stateless-jwt.md) | Short-lived JWT + rotating refresh tokens with reuse detection | accepted |

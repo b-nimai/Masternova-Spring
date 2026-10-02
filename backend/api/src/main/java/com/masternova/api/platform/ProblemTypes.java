@@ -1,4 +1,4 @@
-package com.masternova.api.platform.web;
+package com.masternova.api.platform;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
@@ -8,7 +8,9 @@ import org.springframework.http.ProblemDetail;
 
 /**
  * Builds problems in the one Masternova shape, for code that runs OUTSIDE Spring MVC's exception
- * handling (servlet filters, e.g. the idempotency filter).
+ * handling — servlet filters (idempotency) and the security chain (identity's 401/403). Part of the
+ * platform module's PUBLIC API: ModularityTests rejected identity using it while it lived in the
+ * internal platform.web package.
  */
 public final class ProblemTypes {
 

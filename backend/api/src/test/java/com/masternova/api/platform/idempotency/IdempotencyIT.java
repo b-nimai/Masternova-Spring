@@ -65,6 +65,16 @@ class IdempotencyIT {
     EnrollmentController enrollmentController() {
       return new EnrollmentController();
     }
+
+    /**
+     * Test-only routes declare themselves public the same way real modules do (deny-by-default).
+     */
+    @Bean
+    com.masternova.api.platform.PublicEndpoints testEndpointsArePublic() {
+      return () ->
+          java.util.List.of(
+              com.masternova.api.platform.PublicEndpoints.Endpoint.any("/api/v1/test/**"));
+    }
   }
 
   @LocalServerPort int port;

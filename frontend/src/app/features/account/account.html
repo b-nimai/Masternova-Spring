@@ -1,0 +1,32 @@
+@if (auth.user(); as user) {
+  <mat-card appearance="outlined" class="account-card">
+    <mat-card-header>
+      <mat-card-title data-testid="display-name">{{ user.displayName }}</mat-card-title>
+      <mat-card-subtitle>{{ user.email }}</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <dl>
+        <dt>Email</dt>
+        <dd data-testid="email-status">
+          @if (user.emailVerified) {
+            <mat-icon inline>verified</mat-icon> Verified
+          } @else {
+            <mat-icon inline>mark_email_unread</mat-icon> Not verified yet. Check your inbox for the
+            link.
+          }
+        </dd>
+        <dt>Roles</dt>
+        <dd>
+          <mat-chip-set aria-label="Roles">
+            @for (role of user.roles; track role) {
+              <mat-chip>{{ role }}</mat-chip>
+            }
+          </mat-chip-set>
+        </dd>
+      </dl>
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-stroked-button type="button" (click)="logout()">Log out</button>
+    </mat-card-actions>
+  </mat-card>
+}

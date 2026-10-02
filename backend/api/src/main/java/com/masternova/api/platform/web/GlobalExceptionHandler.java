@@ -4,7 +4,9 @@ import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.DomainException;
 import com.masternova.api.platform.ForbiddenException;
 import com.masternova.api.platform.NotFoundException;
+import com.masternova.api.platform.ProblemTypes;
 import com.masternova.api.platform.RuleViolationException;
+import com.masternova.api.platform.UnauthenticatedException;
 import com.masternova.api.platform.ValidationException;
 import com.masternova.api.platform.ValidationException.FieldError;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +22,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -55,6 +58,7 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
           case ForbiddenException e -> HttpStatus.FORBIDDEN;
           case ConflictException e -> HttpStatus.CONFLICT;
           case RuleViolationException e -> HttpStatus.UNPROCESSABLE_CONTENT;
+          case UnauthenticatedException e -> HttpStatus.UNAUTHORIZED;
         };
     ProblemDetail problem = problem(status, ex.code(), ex.getMessage(), request);
     ex.details().forEach(problem::setProperty);
@@ -72,6 +76,20 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "VERSION_CONFLICT",
                 "This was changed elsewhere. Reload and try again.",
                 request));
+  }
+
+  /**
+   * @PreAuthorize on a service method throws INSIDE Spring MVC — without this handler the catch-all
+   * below would turn a missing role into a 500. Same shape as the security chain's 403.
+   */
+  @ExceptionHandler(AccessDeniedException.class)
+  ResponseEntity<ProblemDetail> handleAccessDenied(
+      AccessDeniedException ex, HttpServletRequest request) {
+    ProblemDetail problem =
+        problem(
+            HttpStatus.FORBIDDEN, "FORBIDDEN", "You do not have permission to do this.", request);
+    problem.setProperty("reason", "INSUFFICIENT_ROLE");
+    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
   }
 
   @ExceptionHandler(Exception.class)

@@ -27,7 +27,8 @@ public abstract sealed class DomainException extends RuntimeException
         ConflictException,
         ValidationException,
         RuleViolationException,
-        ForbiddenException {
+        ForbiddenException,
+        UnauthenticatedException {
 
   private final String code;
   private final Map<String, Object> details;

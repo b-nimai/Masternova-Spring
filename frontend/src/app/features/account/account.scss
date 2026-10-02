@@ -1,0 +1,25 @@
+:host {
+  display: block;
+  padding: 32px 16px;
+}
+
+.account-card {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 12px 24px;
+  align-items: center;
+  margin: 16px 0 0;
+}
+
+dt {
+  font-weight: 500;
+}
+
+dd {
+  margin: 0;
+}

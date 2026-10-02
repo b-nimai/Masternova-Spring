@@ -1,9 +1,9 @@
 package com.masternova.api.platform.idempotency;
 
 import com.masternova.api.platform.MasternovaProperties;
+import com.masternova.api.platform.ProblemTypes;
 import com.masternova.api.platform.idempotency.IdempotencyStore.Claim;
 import com.masternova.api.platform.idempotency.IdempotencyStore.StoredResponse;
-import com.masternova.api.platform.web.ProblemTypes;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
 import jakarta.servlet.FilterChain;
