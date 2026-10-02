@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build: compile the Angular app to static files ----
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 # Dependencies first — this layer is reused until package.json / the lockfile change.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
