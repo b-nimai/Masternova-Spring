@@ -443,4 +443,4 @@ jshell> try { throw new java.io.IOException("disk"); } catch (Exception e) { thr
   - A return type only. Chain `map`/`filter`/`flatMap`/`or`.
   - Use `orElseGet` for expensive defaults and `orElseThrow(domainEx)` for missing values.
   - Never `get()`, never fields or parameters.
-- **Next:** [06 — OOP: composition over inheritance](README.md) (task 1.6).
+- **Next:** [06 — OOP: composition over inheritance](06-oop-composition-over-inheritance.md) (task 1.6).
