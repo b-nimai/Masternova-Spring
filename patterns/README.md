@@ -71,7 +71,7 @@ The catalog is checked by tests, so it can't go stale:
 | 9 | Factory Method / Registry | Creational | Outbox handler registry: event type → `OutboxHandler` (Phase 4) · job processor registry (Phase 7) | `com.masternova.messaging.outbox.OutboxRelay` | [note](docs/09-factory-method-registry.md) | [lab](lab/src/main/java/com/masternova/patterns/registry/) | ✅ |
 | 10 | Builder | Creational | ffmpeg HLS command builder · test data builders (Phases 5, 7) | — | — | — | ☐ |
 | 11 | Prototype | Creational | Course duplication (Phase 5) | — | — | — | ☐ |
-| 12 | Adapter | Structural | Razorpay gateway · mail provider · S3/MinIO storage (Phases 4, 7, 9) | — | — | — | ☐ |
+| 12 | Adapter | Structural | Mail provider: SMTP / Resend behind `MailProvider`, vendor failures translated to our permanent/temporary contract (Phase 4) · Razorpay gateway · S3/MinIO storage (Phases 7, 9) | `com.masternova.worker.notification.mail.MailProvider`<br>`com.masternova.worker.notification.mail.SmtpMailProvider`<br>`com.masternova.worker.notification.mail.ResendMailProvider` | [note](docs/12-adapter.md) | [lab](lab/src/main/java/com/masternova/patterns/adapter/) | ✅ |
 | 13 | Decorator | Structural | Cached entitlement repository · progress write-back buffer (Phases 8, 10) | — | [note](java/06-oop-composition-over-inheritance.md) | [lab](lab/src/main/java/com/masternova/java/oop/notify/) | 🔨 |
 | 14 | Facade | Structural | `EntitlementService` · `CheckoutService` (Phases 8, 9) | — | — | — | ☐ |
 | 15 | Proxy | Structural | Spring's own: `@Transactional` / `@PreAuthorize` / `@Cacheable` proxies · lazy video manifests · playback guard (Phases 1, 8) | — | [note](docs/15-proxy.md) | [lab](lab/src/main/java/com/masternova/patterns/proxy/) | 🔨 |
