@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-02 · **Status:** decided up front, carried over from the NestJS
+**Last updated:** 2026-10-02 · **Status:** §1 implemented (2.2); the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -10,7 +10,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 
 | # | Rule | Enforced from |
 |---|---|---|
-| 1 | Error envelope = RFC 9457 Problem Details | Phase 0 (skeleton) → Phase 2 (domain codes) |
+| 1 | Error envelope = RFC 9457 Problem Details | ✅ Phase 2.2 |
 | 2 | Cursor (keyset) pagination, no `total` | Phase 5 |
 | 3 | Optimistic concurrency on content writes | Phase 6 |
 | 4 | `Idempotency-Key` on unsafe, unversioned writes | Phase 2 |
@@ -27,6 +27,21 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 
 Every error is `application/problem+json`. Spring builds it natively (`ProblemDetail`), and
 `GlobalExceptionHandler` (in the `platform` module) is the only place that shapes errors.
+**Implemented in Phase 2.2.** Modules throw one of the sealed `DomainException` kinds from
+`com.masternova.api.platform`; they never build responses themselves.
+
+| Kind (throw this) | Status | `code` | Extension members |
+|---|---|---|---|
+| `NotFoundException(resource, id)` | 404 | `NOT_FOUND` | `resource` |
+| `ValidationException` (or a failed `@Valid`) | 400 | `VALIDATION_FAILED` | `errors[]`: `{field, code, message}`, sorted |
+| `ForbiddenException(reason, msg)` | 403 | `FORBIDDEN` | `reason` (e.g. `NO_ENTITLEMENT`) |
+| `ConflictException` / `ConflictException.versionConflict(e, a)` | 409 | module-specific / `VERSION_CONFLICT` | e.g. `expectedVersion`, `currentVersion` |
+| `RuleViolationException(code, msg)` | 422 | the rule's own (`COUPON_EXPIRED`) | optional |
+| Spring MVC's own (malformed JSON, 405, 415, no route) | as Spring decides | the status name (`BAD_REQUEST`, `METHOD_NOT_ALLOWED`…) | — |
+| anything else (a bug) | 500 | `INTERNAL` | none. Logged with the stack trace; the message is never sent. |
+
+`type` is always `https://masternova.dev/problems/<code-in-kebab-case>`, and `instance` is the
+request path. Proven by `GlobalExceptionHandlerTest`.
 
 ```jsonc
 {
