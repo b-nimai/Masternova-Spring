@@ -1,0 +1,11 @@
+<button
+  mat-stroked-button
+  type="button"
+  (click)="toggle()"
+  [attr.aria-label]="'Sort by price ' + direction()"
+>
+  <mat-icon aria-hidden="true">{{
+    direction() === 'asc' ? 'arrow_upward' : 'arrow_downward'
+  }}</mat-icon>
+  Price {{ direction() === 'asc' ? 'low → high' : 'high → low' }}
+</button>

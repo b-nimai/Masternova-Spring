@@ -1,0 +1,59 @@
+<section class="playground">
+  <h1>Course explorer</h1>
+  <p class="hint">
+    Angular essentials playground — signals, inputs/outputs, control flow and RxJS. Study note:
+    <code>patterns/angular/01-angular-essentials.md</code>
+  </p>
+
+  <div class="toolbar">
+    <mat-form-field appearance="outline" class="search">
+      <mat-label>Search courses</mat-label>
+      <input
+        matInput
+        data-testid="search"
+        [value]="query()"
+        (input)="onSearchInput($event)"
+        placeholder="try: java, devops, error"
+      />
+    </mat-form-field>
+    <!-- [( )] "banana in a box": two-way binding to the child's model() -->
+    <app-sort-toggle [(direction)]="sort" />
+  </div>
+
+  @let current = state();
+  @switch (current.kind) {
+    @case ('idle') {
+      <p data-testid="status">Type at least 2 characters.</p>
+    }
+    @case ('loading') {
+      <mat-progress-bar mode="indeterminate" aria-label="Searching" />
+    }
+    @case ('error') {
+      <p class="error" role="alert" data-testid="status">{{ current.message }}</p>
+    }
+    @case ('ok') {
+      <div class="grid">
+        @for (course of results(); track course.id) {
+          <app-course-card
+            [course]="course"
+            [inCart]="cart.has(course.id)"
+            (added)="cart.add($event)"
+          />
+        } @empty {
+          <p data-testid="status">No courses match "{{ current.term }}".</p>
+        }
+      </div>
+    }
+  }
+
+  <aside class="cart" aria-label="Cart">
+    <h2>Cart · {{ cart.count() }}</h2>
+    @for (course of cart.courses(); track course.id) {
+      <div class="cart-line">
+        <span>{{ course.title }}</span>
+        <button mat-button type="button" (click)="cart.remove(course.id)">Remove</button>
+      </div>
+    }
+    <p class="total" data-testid="total">Total {{ cart.totalMinor() / 100 | currency: 'INR' }}</p>
+  </aside>
+</section>

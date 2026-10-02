@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress: 1.1–1.4 ✅. Next: 1.5 (exceptions & `Optional`).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: Phase 1 ✅ (11/11) — PR to `main` from `phase-1/java-spring-warmup`. Next: Phase 2 (platform kernel).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -32,7 +32,10 @@ interleaved where there's something real to ship (see §2 for the order).
 4. Run the **`code-review`** skill on the diff, then **`simplify`**.
 5. Walk the Definition of Done (§1.4). **All of it.** Then flip to `✅` and fill the Date.
 6. Update the dashboard's Done/Spent columns.
-7. Commit with conventional commits (`feat(identity): …`). **No `Co-Authored-By`, no AI attribution.**
+7. **Commit on the phase branch** (`phase-N/<name>`) with a conventional commit (`feat(identity): …`).
+   **Don't push yet.** **No `Co-Authored-By`, no AI attribution.**
+8. **When the whole phase is done:** push the branch, open a PR to `main`, wait for green CI,
+   merge (merge commit, so the per-task commits are kept), then branch off `main` for the next phase.
 
 ### 1.2 The order of work for every backend unit
 
@@ -110,7 +113,7 @@ Phases are listed **in the order you do them**.
 | # | Phase | Tasks | Done | Est | Spent | Status |
 |---|---|---|---|---|---|---|
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
-| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 4 | 14 h | ~6.5 h | 🔨 |
+| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 0 | 16 h | — | ☐ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
@@ -127,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **16** | **~326 h** | ~13.5 h | |
+| | **Total** | **137** | **23** | **~326 h** | ~24 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -191,13 +194,13 @@ a code walkthrough, common mistakes, interview Q&A and a 30-second recall. Sprin
 | 1.2 | `PaymentOutcome`, `CouponRule`, `LectureContent`, `Expr` ([study note](patterns/java/02-sealed-types-and-pattern-matching.md)) | `sealed` / `permits` / `non-sealed`, switch expressions, type/record/nested patterns, guards, `_`, exhaustiveness, dominance | — | sealed+switch vs Strategy vs Visitor | 1 h | ✅ | 2026-10-02 |
 | 1.3 | Catalog dataset kata: top courses, revenue by category, instructors by rating ([study note](patterns/java/03-collections-and-streams.md)) | Collections + Map API, HashMap internals, CME, `Comparator` chains, lazy streams, `groupingBy`/`partitioningBy`/`toMap`/`teeing`, gatherers | — | — | 1.5 h | ✅ | 2026-10-02 |
 | 1.4 | `Result<T>`, `Page<T>`, `Registry<K, V>`, `Ranking`, `TypedSettings` ([study note](patterns/java/04-generics.md)) | generics, invariance, bounded types, wildcards (PECS), type erasure, raw types, type tokens | — | generic Strategy registry | 1 h | ✅ | 2026-10-02 |
-| 1.5 | Exceptions + resources | checked vs unchecked, custom hierarchies, try-with-resources, `Optional` done right | — | — | 1 h | ☐ | |
-| 1.6 | OOP drills: refactor an inheritance mess to composition | interfaces vs abstract classes, composition over inheritance, encapsulation (package-private) | — | Strategy vs Template Method | 1.5 h | ☐ | |
-| 1.7 | Concurrency lab: race condition → `AtomicLong` / `synchronized` / lock; 10k virtual threads | threads, `ExecutorService`, `CompletableFuture`, virtual threads, structured concurrency | — | — | 2 h | ☐ | |
-| 1.8 | Spring IoC spike: `@ConfigurationProperties` record, profiles, bean scopes, constructor injection | ApplicationContext, bean lifecycle, `@Configuration` vs `@Component` | — | — | 1.5 h | ☐ | |
-| 1.9 | AOP + proxies: a `@LogExecutionTime` aspect; prove the `@Transactional` self-invocation pitfall in a test | JDK vs CGLIB proxies, `@Aspect` | — | **Proxy**: catalog row 15 | 1.5 h | ☐ | |
-| 1.10 | Request lifecycle + JPA spike: filter → interceptor → controller → advice; entity lifecycle, persistence context, an N+1 caught in a test | DispatcherServlet, Bean Validation, Hibernate first-level cache, lazy loading | — | — | 1.5 h | ☐ | |
-| 1.11 | Angular essentials playground route | — | `signal` / `computed` / `effect`, `input()` / `output()`, RxJS `map` / `switchMap` / `debounceTime` / `catchError` | — | 1 h | ☐ | |
+| 1.5 | Domain exceptions, CSV importer, resources, `Optional` lookups, retry ([study note](patterns/java/05-exceptions-and-optional.md)) | checked vs unchecked, sealed exception hierarchy → HTTP, try-with-resources + suppressed, `finally` traps, `InterruptedException`, `Optional` done right | — | prototype of Phase 2 error model | 1 h | ✅ | 2026-10-02 |
+| 1.6 | Fragile base class, Channel decorators, email Template Method, rich `Cart`, dispatch traps ([study note](patterns/java/06-oop-composition-over-inheritance.md)) | interfaces vs abstract classes, composition over inheritance, encapsulation as invariants, overriding vs overloading, SOLID in code | — | **Decorator**, **Template Method**; Strategy vs Decorator vs Template Method | 1.5 h | ✅ | 2026-10-02 |
+| 1.7 | Counters, cohort seats (CAS), 50× webhook idempotency, quote fan-out, 10k virtual threads, `ScopedValue`, outbox producer–consumer ([study note](patterns/java/07-concurrency-and-virtual-threads.md)) | races, JMM/`volatile`, atomics/locks, `ConcurrentHashMap`, executors, `CompletableFuture`, virtual threads, `ScopedValue`, back-pressure, deadlock | — | — | 2 h | ✅ | 2026-10-02 |
+| 1.8 | Real `MasternovaProperties` + IoC learning tests with `ApplicationContextRunner` ([study note](patterns/java/08-spring-ioc-and-di.md)) | DI resolution (`@Primary`/`@Qualifier`/`List`/`ObjectProvider`), scopes + prototype trap, lifecycle, full vs lite `@Configuration`, profiles, conditions, auto-config back-off, `@ConfigurationProperties` | — | — | 1.5 h | ✅ | 2026-10-02 |
+| 1.9 | AOP + proxy learning tests (recording transaction manager), Proxy pattern note + lab ([study note](patterns/java/09-spring-aop-and-proxies.md), [pattern](patterns/docs/15-proxy.md)) | JDK vs CGLIB proxies, `@Aspect`/`@Around`, self-invocation, `@Transactional` rollback rules & propagation, `TransactionTemplate` | — | **Proxy**: catalog row 15 | 1.5 h | ✅ | 2026-10-02 |
+| 1.10 | Request lifecycle learning test + JPA fundamentals IT on real Postgres ([study note](patterns/java/10-request-lifecycle-and-jpa.md)) | DispatcherServlet order, filter vs interceptor vs advice, Bean Validation, persistence context, entity states, dirty checking, lazy loading, **N+1 measured (11 → 1)**, Spring Data | — | — | 1.5 h | ✅ | 2026-10-02 |
+| 1.11 | Angular essentials `/playground` route ([study note](patterns/angular/01-angular-essentials.md)) | — | `signal`/`computed`/`effect`, signal store, `input()`/`output()`/`model()`, control flow, RxJS typeahead (`debounceTime`/`distinctUntilChanged`/`switchMap`/`catchError`), marble tests, zoneless | — | 1 h | ✅ | 2026-10-02 |
 
 ---
 
@@ -477,23 +480,23 @@ Tick these as they're used *for real* in the project, not just read about.
 ### 3.1 Java
 
 - [x] records, compact constructors · [x] sealed interfaces + pattern-matching `switch` · [x] annotations + reflection
-- [x] generics (bounded, wildcards) · [x] Streams + Collectors · [ ] `Optional` · [ ] exception hierarchies
-- [x] `equals`/`hashCode`/immutability · [ ] interfaces vs abstract classes · [ ] package-private encapsulation
-- [ ] threads, executors, `CompletableFuture` · [x] virtual threads (config) · [ ] locks / atomics · [ ] `ProcessBuilder`
+- [x] generics (bounded, wildcards) · [x] Streams + Collectors · [x] `Optional` · [x] exception hierarchies
+- [x] `equals`/`hashCode`/immutability · [x] interfaces vs abstract classes · [x] package-private encapsulation
+- [x] threads, executors, `CompletableFuture` · [x] virtual threads (config) · [x] locks / atomics · [ ] `ProcessBuilder`
 
 ### 3.2 Spring
 
 - [x] Boot auto-configuration + starters · [x] `@RestController` / records as DTOs · [x] ProblemDetail · [x] Actuator
-- [ ] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [ ] AOP + proxies · [ ] Bean Validation
-- [ ] Spring Data JPA / Hibernate · [x] Flyway · [ ] transactions + propagation · [ ] Spring Security 7 + JWT
+- [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [x] Bean Validation
+- [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [ ] Spring Security 7 + JWT
 - [ ] Spring Modulith events · [x] Modulith verification · [ ] Spring Cache + Redis · [ ] `@Scheduled` / ShedLock · [ ] SSE
 - [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [ ] `@WebMvcTest` / `@DataJpaTest` slices
 
 ### 3.3 Angular
 
 - [x] standalone components · [x] `@Service()` + `inject()` · [x] `toSignal` · [x] `@switch` / `@let` control flow · [x] lazy routes
-- [ ] `signal` / `computed` / `effect` · [ ] `input()` / `output()` · [ ] typed reactive forms · [ ] interceptors · [ ] guards
-- [ ] RxJS operators in anger · [ ] Material (stepper, dialog, table) · [ ] CDK drag-drop / virtual scroll · [ ] `@defer`
+- [x] `signal` / `computed` / `effect` · [x] `input()` / `output()` · [ ] typed reactive forms · [ ] interceptors · [ ] guards
+- [x] RxJS operators in anger · [ ] Material (stepper, dialog, table) · [ ] CDK drag-drop / virtual scroll · [ ] `@defer`
 - [x] Vitest + `HttpTestingController` · [ ] Playwright e2e
 
 ### 3.4 DevOps
