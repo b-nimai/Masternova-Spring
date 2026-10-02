@@ -51,4 +51,18 @@ class PatternCatalogTest {
       }
     }
   }
+
+  /**
+   * Kernel classes in the catalog must exist and carry @DesignPattern (api/worker check theirs).
+   */
+  @Test
+  void everyCatalogedKernelClassExistsAndIsAnnotated() throws ClassNotFoundException {
+    PatternCatalog catalog = PatternCatalog.locateFrom(Path.of(""));
+
+    for (String className : catalog.realClassesUnder("com.masternova.kernel.")) {
+      assertThat(Class.forName(className).getAnnotationsByType(DesignPattern.class))
+          .as("%s is in the catalog but has no @DesignPattern", className)
+          .isNotEmpty();
+    }
+  }
 }
