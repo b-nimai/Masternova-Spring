@@ -1,0 +1,42 @@
+<mat-card appearance="outlined" class="auth-card">
+  <mat-card-header>
+    <mat-card-title>Log in</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <mat-form-field appearance="outline">
+        <mat-label>Email</mat-label>
+        <input matInput formControlName="email" type="email" autocomplete="email" />
+        @if (form.controls.email.hasError('required')) {
+          <mat-error>Email is required.</mat-error>
+        } @else if (form.controls.email.hasError('email')) {
+          <mat-error>Enter a valid email address.</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Password</mat-label>
+        <input
+          matInput
+          formControlName="password"
+          type="password"
+          autocomplete="current-password"
+        />
+        @if (form.controls.password.hasError('required')) {
+          <mat-error>Password is required.</mat-error>
+        }
+      </mat-form-field>
+
+      @if (error(); as message) {
+        <p class="form-error" role="alert" data-testid="form-error">{{ message }}</p>
+      }
+
+      <button mat-flat-button type="submit" [disabled]="submitting()">
+        {{ submitting() ? 'Logging in…' : 'Log in' }}
+      </button>
+    </form>
+  </mat-card-content>
+  <mat-card-actions>
+    <a mat-button routerLink="/signup">No account? Sign up</a>
+  </mat-card-actions>
+</mat-card>

@@ -1,0 +1,37 @@
+<mat-card appearance="outlined" class="auth-card">
+  <mat-card-header>
+    <mat-card-title>Email verification</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    @switch (state()) {
+      @case ('verifying') {
+        <div class="verifying" data-testid="verifying">
+          <mat-spinner diameter="32" />
+          <span>Verifying your email…</span>
+        </div>
+      }
+      @case ('verified') {
+        <p data-testid="verified">Your email is verified. Thanks!</p>
+      }
+      @case ('invalid') {
+        <p class="form-error" data-testid="invalid">
+          This verification link is invalid or has expired.
+        </p>
+      }
+      @case ('missing') {
+        <p class="form-error" data-testid="missing">
+          The link is missing its token. Open it again from the email.
+        </p>
+      }
+    }
+  </mat-card-content>
+  @if (state() !== 'verifying') {
+    <mat-card-actions>
+      @if (auth.isAuthenticated()) {
+        <a mat-flat-button routerLink="/account">Go to my account</a>
+      } @else {
+        <a mat-flat-button routerLink="/login">Log in</a>
+      }
+    </mat-card-actions>
+  }
+</mat-card>

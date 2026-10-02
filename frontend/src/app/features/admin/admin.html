@@ -1,0 +1,51 @@
+<mat-card appearance="outlined" class="admin-card">
+  <mat-card-header>
+    <mat-card-title>User roles</mat-card-title>
+    <mat-card-subtitle>Find a user by id, then change their roles</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="lookup" (ngSubmit)="find()" class="lookup" novalidate>
+      <mat-form-field appearance="outline">
+        <mat-label>User id</mat-label>
+        <input matInput formControlName="id" placeholder="00000000-0000-0000-0000-000000000000" />
+        @if (lookup.controls.id.hasError('required')) {
+          <mat-error>User id is required.</mat-error>
+        } @else if (lookup.controls.id.hasError('uuid')) {
+          <mat-error data-testid="uuid-error">That's not a valid id (UUID).</mat-error>
+        }
+      </mat-form-field>
+      <button mat-flat-button type="submit" [disabled]="busy()">Find</button>
+    </form>
+
+    @if (error(); as message) {
+      <p class="form-error" role="alert" data-testid="admin-error">{{ message }}</p>
+    }
+
+    @if (user(); as u) {
+      <section class="user" data-testid="found-user">
+        <h3>{{ u.displayName }}</h3>
+        <p>{{ u.email }}</p>
+        <form [formGroup]="rolesForm" (ngSubmit)="save()" novalidate>
+          @for (role of roles; track role) {
+            <mat-checkbox [formControlName]="role">{{ role }}</mat-checkbox>
+          }
+          @if (rolesForm.hasError('noRole')) {
+            <p class="form-error">A user needs at least one role.</p>
+          }
+          <div>
+            <button
+              mat-flat-button
+              type="submit"
+              [disabled]="busy() || rolesForm.invalid || rolesForm.pristine"
+            >
+              Save roles
+            </button>
+            @if (saved()) {
+              <span class="saved" data-testid="saved">Saved.</span>
+            }
+          </div>
+        </form>
+      </section>
+    }
+  </mat-card-content>
+</mat-card>
