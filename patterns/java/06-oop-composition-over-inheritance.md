@@ -418,4 +418,4 @@ need proxying.)
   - Fields and statics: not polymorphic.
   - Always write `@Override`.
 - **The three lookalikes:** Strategy (swap), Decorator (wrap), Template Method (fill in steps).
-- **Next:** [07 — Concurrency & virtual threads](README.md) (task 1.7).
+- **Next:** [07 — Concurrency & virtual threads](07-concurrency-and-virtual-threads.md) (task 1.7).
