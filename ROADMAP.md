@@ -119,7 +119,7 @@ Phases are listed **in the order you do them**.
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
-| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 2 | 20 h | ~2 h | 🔨 |
+| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 3 | 20 h | ~5 h | 🔨 |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **60** | **~326 h** | ~94.5 h | |
+| | **Total** | **137** | **61** | **~326 h** | ~97.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -296,7 +296,7 @@ versioned, scanned artifacts.
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
 | 5.1 | [`docs/lld/catalog.md`](docs/lld/catalog.md) (§1–§9: aggregate boundaries, viewer-dependent visibility, Specification leaves, typed cursor, 2-statement detail, Prototype duplicate) + [ADR-0009](docs/adr/0009-keyset-pagination-over-offset.md) (keyset over OFFSET, Spring Data `Window`) | — | — | — | 1.5 h | ✅ | 2026-10-02 |
-| 5.2 | JPA model: `Course` / `Section` / `Lecture` / `Category`; fetch strategies; N+1 test with Hibernate statistics | associations, `@EntityGraph`, `JOIN FETCH` | — | — | 3 h | ☐ | |
+| 5.2 | JPA model (`V6__catalog.sql`, no secondary indexes yet): `Course` aggregate root (rollups kept by `addLecture`, `publishedAt` stamped once + DB `CHECK`, micros-truncated times) → `Section` → `Lecture` (owning sides, `@OrderBy`, cascade + orphanRemoval), seeded two-level `Category`, instructor as id + name snapshot; one repository per aggregate. `CourseQueryCountIT` counts statements: course page **2** (entity graph `{category, sections}` + `@BatchSize` lectures; 11 / 13 without it), naive 4, lazy to-one in a list 1 + distinct, `MultipleBagFetchException` proven. `CatalogPersistenceIT`: round trip, constraints. Java note [12 JPA mapping & fetching](patterns/java/12-jpa-mapping-and-fetching.md) | associations, owning side, `@EntityGraph`, `@BatchSize`, bags, Hibernate statistics | — | Repository (one per aggregate) | 3 h | ✅ | 2026-10-02 |
 | 5.3 | *(done before 5.2: the entities need it)* `Money` moves to the **kernel** as a JPA `@Embeddable` record (compile-only, optional `jakarta.persistence-api`; the compact constructor also guards rows Hibernate loads); `LectureDuration` is one column, so an auto-applied `AttributeConverter` in `infrastructure/` (the entity never names it). Kernel catalog check now covers kernel classes. Catalog row 18 ✅ | `@Embeddable` records, `AttributeConverter` + `autoApply`, optional Maven deps | — | **Value Object**: catalog row 18 | 1 h | ✅ | 2026-10-02 |
 | 5.4 | Composable search filters | JPA Criteria API, `Specification<T>` | — | **Specification** | 2.5 h | ☐ | |
 | 5.5 | Keyset pagination with an opaque cursor | `Window` / `ScrollPosition` or hand-rolled | — | — | 2 h | ☐ | |
@@ -496,7 +496,7 @@ Tick these as they're used *for real* in the project, not just read about.
 - [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [x] Bean Validation
 - [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [x] Spring Security 7 + JWT
 - [x] Spring Modulith events · [x] Modulith verification · [ ] Spring Cache + Redis · [ ] `@Scheduled` / ShedLock · [ ] SSE
-- [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [ ] `@WebMvcTest` / `@DataJpaTest` slices
+- [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [x] `@WebMvcTest` / `@DataJpaTest` slices
 
 ### 3.3 Angular
 

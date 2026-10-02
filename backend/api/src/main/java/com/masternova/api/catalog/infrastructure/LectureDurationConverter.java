@@ -12,8 +12,8 @@ import jakarta.persistence.Converter;
  * infrastructure → domain, as the module layering requires (a {@code @Convert(converter = …)} on
  * the entity would point the other way).
  *
- * <p>Null in, null out: JPA calls converters for nulls too, and the column's NOT NULL constraint is
- * the place that refuses them.
+ * <p>Null in, null out: a JPA provider may call a converter with null, and the column's NOT NULL
+ * constraint is the place that refuses it.
  */
 @Converter(autoApply = true)
 class LectureDurationConverter implements AttributeConverter<LectureDuration, Integer> {

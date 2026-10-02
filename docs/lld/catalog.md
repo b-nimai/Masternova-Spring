@@ -278,7 +278,12 @@ flushing). The duplicate is one read-write transaction: load, copy, `save`, comm
 
 ## 10. Tests that prove it
 
-*(filled in as the tasks land)*
+| Level | Test | Proves |
+|---|---|---|
+| unit (no Spring) | `MoneyTest` (kernel), `LectureDurationConverterTest` | value semantics, overflow, mixed currencies refused, a corrupt row fails on load |
+| unit (no Spring) | `CourseTest` | the aggregate's rules: rollups move with `addLecture`, a foreign section is refused, the curriculum can't be edited behind the root, `publishedAt` stamped once, slug/language shapes, rating summary consistency |
+| integration (Postgres) | `CatalogPersistenceIT` | the aggregate round-trips with its value objects and section/lecture order; the DB refuses a duplicate slug and a published course without `published_at`; the seeded category tree |
+| ⭐ integration (Postgres) | `CourseQueryCountIT` (Hibernate statistics) | the course page is **2 statements** whatever the curriculum size (11 / 13 without `@BatchSize`, measured); a lazy to-one in a list costs 1 + distinct targets; two bags can't be join-fetched |
 
 ## 11. Interview notes — 60-second recall
 

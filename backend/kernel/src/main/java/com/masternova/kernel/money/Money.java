@@ -27,7 +27,7 @@ import java.util.Objects;
  * <p>Why {@code @Embeddable} and not an {@code AttributeConverter}: a converter maps ONE attribute
  * to ONE column. Money is two columns (amount + currency), so it's an embeddable. Single-column
  * value objects (catalog's {@code LectureDuration}) use a converter. Study note: {@code
- * patterns/java/12-jpa-value-objects-and-fetching.md}.
+ * patterns/java/12-jpa-mapping-and-fetching.md}.
  */
 @Embeddable
 @DesignPattern(
