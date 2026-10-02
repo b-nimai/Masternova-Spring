@@ -3,6 +3,7 @@
 #   patterns-lab → mvn test
 #   frontend     → lint, unit tests (Vitest), production build
 #   workflows    → actionlint on every workflow file
+#   e2e          → the whole stack in compose + Playwright in Chromium (sign up, log in, reload, …)
 #   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL);
 #                  on main, push the scanned images to GHCR as :sha-<commit> and :main, with SBOM +
 #                  provenance attestations, and sign them keylessly with cosign
@@ -31,6 +32,7 @@ jobs:
       lab: ${{ steps.filter.outputs.lab }}
       frontend: ${{ steps.filter.outputs.frontend }}
       workflows: ${{ steps.filter.outputs.workflows }}
+      e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -49,6 +51,10 @@ jobs:
               - '.github/workflows/ci.yml'
             workflows:
               - '.github/**'
+            e2e:
+              - 'e2e/**'
+              - 'compose.yaml'
+              - '.github/workflows/ci.yml'
 
   backend:
     needs: changes
@@ -218,12 +224,85 @@ jobs:
           DIGEST: ${{ steps.push.outputs.digest }}
         run: cosign sign --yes "$IMAGE@$DIGEST"
 
+  e2e:
+    needs: [changes, images]
+    if: >-
+      !failure() && !cancelled() &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.e2e == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      # The images job just built these; with the same inputs every layer comes from its cache.
+      - name: Load api image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          build-args: |
+            APP=api
+            GIT_SHA=${{ github.sha }}
+          tags: masternova-spring/api:local
+          load: true
+          cache-from: type=gha,scope=api
+      - name: Load worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          build-args: |
+            APP=worker
+            PORT=8090
+            GIT_SHA=${{ github.sha }}
+          tags: masternova-spring/worker:local
+          load: true
+          cache-from: type=gha,scope=worker
+      - name: Load web image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: masternova-spring/web:local
+          load: true
+          cache-from: type=gha,scope=web
+      - name: Start the stack
+        run: |
+          make secrets
+          docker compose --profile app up -d --wait postgres redis minio mailpit api worker web
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: e2e/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: e2e/pnpm-lock.yaml
+      - name: Install Playwright + Chromium
+        working-directory: e2e
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Run e2e tests
+        working-directory: e2e
+        run: pnpm test
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+      - name: Container logs
+        if: failure()
+        run: docker compose --profile app logs --no-color --tail 300 api worker web
+
   # ⭐ The ONE check branch protection requires. Path filters skip jobs whose files didn't change,
   #    and the job list grows over time; this job turns "every job passed or was skipped" into a
   #    single stable status, so the protection rule never needs editing.
   ci-ok:
     if: always()
-    needs: [changes, backend, patterns-lab, frontend, workflows, images]
+    needs: [changes, backend, patterns-lab, frontend, workflows, images, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Every job succeeded or was skipped

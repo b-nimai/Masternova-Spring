@@ -21,6 +21,7 @@ seam: use a concrete class until a second implementation is real or planned.
 |---|---|
 | `backend/` | Maven multi-module: `kernel` (plain Java, shared), `api` (Spring Boot :8080, Modulith), `worker` (Spring Boot :8090) |
 | `frontend/` | Angular 22 (pnpm, Material, Vitest, angular-eslint) |
+| `e2e/` | Playwright browser tests against the full container stack (`make stack && make e2e`) |
 | `patterns/` | Pattern catalog (`README.md`), notes (`docs/`), Spring-free runnable copies (`lab/`) |
 | `docs/` | `adr/` · `lld/` · `hld/` · `api/conventions.md` · `runbooks/` |
 | `deploy/` | Helm, Argo CD (D4) and Terraform (D6), filled in by the DevOps phases |
@@ -37,6 +38,8 @@ make format      # Spotless (google-java-format) + Prettier
 make secrets     # generate the gitignored secret files the container stack mounts
 make stack       # everything in containers, web on :8081 (runs `make secrets` first)
 make scan        # Trivy on all images
+make e2e         # Playwright browser tests against the running stack
+make release VERSION=X.Y.Z  # tag a release from a clean main (release.yml promotes the images)
 ```
 
 The JDK lives in SDKMAN (`~/.sdkman/candidates/java/current`). A non-login shell may need

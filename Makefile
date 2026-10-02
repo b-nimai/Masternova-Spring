@@ -51,6 +51,9 @@ scan: images ## Scan images for HIGH/CRITICAL CVEs with Trivy (runs in Docker)
 	    --severity HIGH,CRITICAL --ignore-unfixed masternova-spring/$$img:local; \
 	done
 
+e2e: ## Browser e2e tests (Playwright) against the running stack: make stack && make e2e
+	cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
+
 release: ## Tag and push a release from an up-to-date, clean main: make release VERSION=1.2.3
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "usage: make release VERSION=X.Y.Z"; exit 1; }
 	@[ "$$(git rev-parse --abbrev-ref HEAD)" = main ] && git diff --quiet && git diff --cached --quiet \
@@ -59,4 +62,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack api worker web test format images scan release
+.PHONY: help up down nuke secrets stack api worker web test format images scan e2e release

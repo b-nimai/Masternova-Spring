@@ -6,7 +6,7 @@
 > checks.
 
 **Roadmap:** D2.1–D2.6 · **Last updated:** 2026-10-02
-**Real files:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/release.yml`](../../.github/workflows/release.yml), [`.github/workflows/codeql.yml`](../../.github/workflows/codeql.yml), [`backend/pom.xml`](../../backend/pom.xml) (JaCoCo gate), [`Makefile`](../../Makefile) (`make release`)
+**Real files:** [`e2e/`](../../e2e/) (Playwright), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/release.yml`](../../.github/workflows/release.yml), [`.github/workflows/codeql.yml`](../../.github/workflows/codeql.yml), [`backend/pom.xml`](../../backend/pom.xml) (JaCoCo gate), [`Makefile`](../../Makefile) (`make release`)
 **Decisions for this repo** (2026-10-02):
 - **Releases are tag-driven:** a `vX.Y.Z` tag pushed by the owner, never a bot commit.
 - **No Dependabot auto-merge:** updates are re-applied as the owner's commit.
@@ -23,6 +23,10 @@
 | 4 | [Supply chain: SBOMs, provenance, keyless signing](#4-supply-chain-sboms-provenance-keyless-signing-) | ⭐⭐⭐ | D2.3 |
 | 5 | [Quality gates: coverage, CodeQL, actionlint, dependency policy](#5-quality-gates-coverage-codeql-actionlint-dependency-policy-) | ⭐⭐ | D2.4 |
 | 6 | [Protecting main: one required check](#6-protecting-main-one-required-check-) | ⭐⭐⭐ | D2.5 |
+| 7 | [End-to-end tests against the real stack](#7-end-to-end-tests-against-the-real-stack-) | ⭐⭐ | D2.6 |
+| 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ | — |
+| 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ | — |
+| 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ | — |
 
 ---
 
@@ -34,7 +38,10 @@ flowchart LR
   F --> B["backend: mvn verify<br/>(unit + ITs + Spotless + JaCoCo)"]
   F --> L["patterns-lab: mvn test"]
   F --> W["frontend: format, lint, test, build"]
+  F --> A["workflows: actionlint"]
   B & W --> I["images: build → Trivy scan<br/>(HIGH/CRITICAL fixable = fail)"]
+  I --> E["e2e: compose stack + Playwright"]
+  B & L & W & A & I & E --> OK{{"ci-ok<br/>(the required check)"}}
   I -- "PR: stop here" --> X(("✔"))
   I -- "main: push + SBOM/provenance + cosign sign" --> G[("ghcr.io<br/>:sha-abc1234<br/>:main")]
 ```
@@ -455,4 +462,146 @@ reported blocks every merge until it does.
 - **`pull_request_template.md`:** what/why, how it was verified, and a checklist (tests, docs,
   roadmap, no secrets, owner-only commits).
 - **`CODEOWNERS`:** `* @b-nimai` documents ownership and auto-requests reviews on anyone else's PR.
+
+---
+
+## 7. End-to-end tests against the real stack ⭐⭐
+
+**The gap e2e closes:** every unit spec and IT so far mocks *something*. The Angular specs fake
+HTTP; the Spring ITs have no browser. Nothing proved these facts in a **real browser**:
+
+- the refresh cookie is actually stored;
+- it comes back across a reload;
+- the app initializer restores the session before the guard runs.
+
+```text
+e2e/tests/auth.spec.ts  (Playwright, Chromium)  →  http://localhost:8081
+  nginx (web) → Angular → /api proxy → Spring (api) → Postgres / Redis       all real containers
+```
+
+| Test | What only a browser can prove |
+|---|---|
+| sign up → log in → **reload** → log out | the httpOnly `mn_refresh` cookie (`SameSite=Strict`, `Path=/api/v1/auth`) survives a reload, and the session is restored from it; no JWT in `localStorage`/`sessionStorage`; logout → `/account` redirects to `/login?returnUrl=%2Faccount` |
+| wrong password | one generic message, no account probing |
+| a learner and `/admin` | no nav link, and a typed URL is redirected by `roleGuard` |
+| `returnUrl=//evil.example` | login lands on `/account`, never on another host |
+
+All 4 pass locally in **6.9 s** (`make stack && make e2e`).
+
+**Design rules:**
+
+- **A fresh account per test** (`e2e-<time>-<random>@example.com`): tests are independent and
+  repeatable against a database that already has data.
+- **Select like a user:** `getByLabel('Email')`, `getByRole('button', { name: 'Log in' })`, plus a
+  few `data-testid`s for values. CSS classes change; labels are the UI contract.
+- **`retries: 0`:** a flaky e2e test is a bug to fix, not to hide. `trace: 'retain-on-failure'`
+  keeps a full timeline (DOM snapshots, network, console) of any failed test.
+- **Smoke, not exhaustive:** e2e is the slowest and most fragile layer. A handful of critical
+  journeys here; logic belongs in unit tests and ITs (the test pyramid).
+
+**In CI (`e2e` job):**
+
+1. Load the three images with `build-push-action` from the **GHA cache the `images` job just
+   filled**. Same inputs, so no rebuild.
+2. `make secrets` + `docker compose --profile app up -d --wait` (healthchecks gate readiness).
+3. `pnpm install --frozen-lockfile` + `playwright install --with-deps chromium`.
+4. `pnpm test`. On failure, upload the Playwright report and traces, and print the last 300 log
+   lines of api, worker and web.
+
+It feeds `ci-ok`, so a broken journey blocks the merge.
+
+---
+
+## 8. Common mistakes ⭐⭐⭐
+
+| ❌ Mistake | ✅ Instead | § |
+|---|---|---|
+| deploying `:latest` / `:main` | immutable `:sha-…` or a digest | 2 |
+| `packages: write` for the whole workflow | per job, only where it pushes | 2 |
+| pushing before scanning | build → scan → push (the push is a cache hit) | 2 |
+| rebuilding at release time | promote the tested digest (`imagetools create`) | 3 |
+| releasing from any branch | the tagged commit must be on `main` | 3 |
+| signing a tag | sign the digest; every tag that points at it is covered | 4 |
+| a long-lived signing key in CI secrets | keyless (OIDC → Fulcio → Rekor) | 4 |
+| secrets in build args | runtime secret files; build args end up in provenance | 4 |
+| a coverage gate on unit tests only | merge unit + IT data first | 5 |
+| lowering the coverage floor to pass | raise it as coverage grows; never lower | 5 |
+| listing every job as a required check | one `ci-ok` aggregate with `if: always()` | 6 |
+| an aggregate job without `if: always()` | it gets *skipped* on failure, and a skipped required check passes | 6 |
+| e2e with retries "for stability" | fix the flake; keep traces | 7 |
+| e2e for every rule | a few journeys; rules belong in unit tests and ITs | 7 |
+
+---
+
+## 9. Interview Q&A ⭐⭐⭐
+
+**Q1. Walk me through your pipeline.**
+On a PR, path-filtered jobs run:
+
+- **backend:** unit + Testcontainers ITs, a merged-coverage gate, Spotless;
+- **frontend:** format, lint, test, build;
+- **workflow lint;**
+- **images:** built and Trivy-scanned;
+- **e2e:** Playwright against the compose stack.
+
+One aggregate check, `ci-ok`, is required by branch protection, plus CodeQL. On `main`, the
+scanned images are pushed to GHCR as `:sha-<commit>`, with SBOM and provenance attestations, and
+signed keylessly with cosign. A `vX.Y.Z` tag promotes that exact digest to version tags and
+creates a GitHub Release with SBOMs.
+
+**Q2. Why tag images with the commit SHA?**
+It's immutable and traceable: one tag = one build. Rollbacks and "what's running?" become exact.
+`:latest` can point at different code on different nodes.
+
+**Q3. How do you make sure the released artifact is the tested one?**
+Promote, don't rebuild: retag the digest CI built and scanned (`imagetools create`). A rebuild
+could pull different base layers or packages.
+
+**Q4. What is keyless signing?**
+The CI job gets an OIDC token from GitHub. Sigstore's Fulcio issues a short-lived certificate for
+that workflow identity, cosign signs the image digest, and the signature is logged in Rekor.
+There's no private key to manage. Verifiers check the **identity** (repo + workflow + issuer).
+
+**Q5. SBOM vs provenance?**
+An SBOM lists what's inside (packages and versions), for CVE response and licensing. Provenance
+records how it was built: source commit, builder, parameters. SLSA levels are about the
+trustworthiness of the provenance.
+
+**Q6. How do you handle required checks with path-filtered jobs?**
+Require one aggregate job that `needs` all the others, runs with `if: always()`, and fails unless
+every result is success or skipped. Skipped jobs count as passing, so without `if: always()` the
+aggregate itself would be skipped on failure, and the PR could merge red.
+
+**Q7. Unit coverage was 27 %; merged with ITs it's 91 %. Which is right?**
+The merged number, for *what is exercised*. Integration tests legitimately cover the web, security
+and SQL layers. The gate uses the merged data, with a ratchet floor. Coverage is a smoke alarm,
+not a quality score.
+
+**Q8. Where do e2e tests fit?**
+At the top of the pyramid: few, slow, high-confidence. They cover critical journeys and anything
+only a real browser proves (cookies, redirects, session restore). They run against the real
+containers in CI, with no retries, and traces kept on failure.
+
+---
+
+## 10. 30-second recall
+
+- **PR:** path-filtered jobs → `ci-ok` (`if: always()`, success-or-skipped) + CodeQL = the
+  required checks. Protected `main`: PR + checks, 0 approvals, admins included.
+- **main:**
+  - build → Trivy → push to GHCR as `:sha-<7>` + `:main`.
+  - Per-job `packages: write`.
+  - BuildKit SBOM + SLSA provenance; `cosign sign` the **digest**, keyless via OIDC.
+- **Release:** `make release VERSION=X.Y.Z` → the tag must be on `main` → **promote** the digest
+  to `:X.Y.Z`/`:X.Y` (no rebuild) → a GitHub Release with generated notes + Syft SBOMs. No bot
+  commits.
+- **Which version is running?** `/actuator/info` → `app.commit` (`GIT_SHA` arg after the AOT
+  layer).
+- **Gates:**
+  - JaCoCo merged unit + IT coverage (api 27.5 % → 91 %), ratchet floors 0.88/0.65.
+  - CodeQL Java + TS.
+  - actionlint.
+  - Dependabot without auto-merge (owner-only history).
+- **e2e:** Playwright, the compose stack, 4 journeys in ~7 s. Proves cookie, reload and
+  session-restore behaviour only a browser can. No retries; traces on failure.
 
