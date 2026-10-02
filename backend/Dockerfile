@@ -22,12 +22,14 @@ ARG PORT=8080
 LABEL org.opencontainers.image.source="https://github.com/b-nimai/Masternova-Spring" \
       org.opencontainers.image.title="masternova-${APP}"
 RUN groupadd --system app && useradd --system --gid app --no-create-home app
+# Rarely-changing files first: a layer that comes after a changed one is rebuilt and re-shipped
+# too, so the healthcheck script sits above the application layer (patterns/devops/01 §3).
+COPY --chmod=755 healthcheck.sh /usr/local/bin/healthcheck
 WORKDIR /app
 COPY --from=build /src/extracted/dependencies/ ./
 COPY --from=build /src/extracted/spring-boot-loader/ ./
 COPY --from=build /src/extracted/snapshot-dependencies/ ./
 COPY --from=build /src/extracted/application/ ./
-COPY --chmod=755 healthcheck.sh /usr/local/bin/healthcheck
 USER app
 EXPOSE ${PORT}
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=12 CMD ["healthcheck"]
