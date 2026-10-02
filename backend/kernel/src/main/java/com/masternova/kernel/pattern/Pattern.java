@@ -27,7 +27,8 @@ public enum Pattern {
   REPOSITORY(Category.ENTERPRISE),
   SPECIFICATION(Category.ENTERPRISE),
   UNIT_OF_WORK(Category.ENTERPRISE),
-  TRANSACTIONAL_OUTBOX(Category.ENTERPRISE);
+  TRANSACTIONAL_OUTBOX(Category.ENTERPRISE),
+  VALUE_OBJECT(Category.ENTERPRISE);
 
   private final Category category;
 

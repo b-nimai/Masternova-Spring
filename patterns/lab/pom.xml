@@ -5,7 +5,8 @@
 
 	<!--
 		Pattern lab: simplified, runnable, Spring-free copies of every pattern used in Masternova,
-		plus the Phase 1 Java warm-up exercises. Plain Java 25 + JUnit — nothing to hide behind.
+		plus the Java study code (Phase 1). Plain Java 25 + JUnit — nothing to hide behind.
+		Study notes for every package: ../README.md (patterns) and ../java/ (Java topics).
 		Run: ./mvnw test   (or one pattern: ./mvnw test -Dtest='*Strategy*')
 	-->
 	<groupId>com.masternova</groupId>
@@ -60,4 +61,5 @@
 			</plugin>
 		</plugins>
 	</build>
+
 </project>

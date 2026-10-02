@@ -1,18 +1,38 @@
-# Patterns — review here first
+# Patterns & Java — study hub
 
-> Every design pattern used in Masternova, in one table. Read the **note**, open the
-> **real class** to see it in production code, and run the **lab** copy to see it on its own.
+> Your study material for this project. **Java notes** teach the language, **pattern notes**
+> teach the designs, and every note is paired with real, tested code you can run and change.
 
 **Last updated:** 2026-10-02
+
+## Where to start
+
+| Order | Read | Why |
+|---|---|---|
+| 1 | [Java notes](java/README.md), in number order | The language features every pattern below is built from |
+| 2 | Pattern notes ([catalog below](#catalog)), as each one lands in the project | The design: problem → structure → code → when *not* to use it → interview Q&A |
+| 3 | The code + tests in [`lab/`](lab/) | Run it, break it, change it: `cd patterns/lab && ./mvnw test` |
+
+**Priority marks** in every note:
+
+- **⭐⭐⭐ must know:** interview-critical, and the bugs that come from not knowing it.
+- **⭐⭐ use daily:** what you'll write in every Spring module.
+- **⭐ good to know:** depth for later.
+
+In code, comments starting with **`// ⭐`** mark the lines worth remembering.
+
+**Revision mode:** every note ends with **Interview Q&A** and a **30-second recall**. Reading
+only those two sections across all notes is a full revision pass.
 
 ## How this folder works
 
 | Piece | Where | What it gives you |
 |---|---|---|
-| **Catalog** | this table | One row per pattern: where it lives in the product and its status |
-| **Note** | [`docs/NN-<pattern>.md`](docs/_TEMPLATE.md) | Intent, the Masternova problem, UML, code walkthrough, when *not* to use it, interview Q&A, 30-sec recall |
+| **Java notes** | [`java/NN-<topic>.md`](java/README.md) | One language topic in depth, built around the code in `lab/.../java/` |
+| **Pattern catalog** | this file, below | One row per pattern: where it lives in the product, and its status |
+| **Pattern notes** | [`docs/NN-<pattern>.md`](docs/_TEMPLATE.md) | Intent, the Masternova problem, UML, code walkthrough, when *not* to use it, interview Q&A, 30-sec recall |
 | **Real class** | `backend/**` | The production class, marked `@DesignPattern(value = …, role = …)` |
-| **Lab** | [`lab/`](lab/) | A simplified, runnable, Spring-free copy with a test. `cd patterns/lab && ./mvnw test` |
+| **Lab** | [`lab/`](lab/) | Runnable, Spring-free code + tests: pattern copies in `com.masternova.patterns.*`, Java topics in `com.masternova.java.*` |
 
 The catalog is checked by tests, so it can't go stale:
 
@@ -29,7 +49,7 @@ The catalog is checked by tests, so it can't go stale:
 3. Add a simplified copy + test under `lab/src/{main,test}/java/com/masternova/patterns/<pattern>/`.
 4. Fill in the row below: Real class (fully qualified name in backticks), Note, Lab, and Status `✅`.
 
-**Status:** `☐` planned · `🔨` in progress · `✅` in real code + note + lab
+**Status:** `☐` planned · `🔨` in progress (note + lab exist, real code pending) · `✅` in real code + note + lab
 
 ## Catalog
 
@@ -53,6 +73,7 @@ The catalog is checked by tests, so it can't go stale:
 | 15 | Proxy | Structural | Spring's own: `@Transactional` / `@Cacheable` proxies (Phase 1) | — | — | — | ☐ |
 | 16 | Repository + Unit of Work | Enterprise | Every module's persistence; `@Transactional` is the Unit of Work (Phase 2) | — | — | — | ☐ |
 | 17 | Transactional Outbox | Enterprise | State change + event in one transaction, relayed by the worker (Phase 2) | — | — | — | ☐ |
+| 18 | Value Object | Enterprise | `Money` (course prices, coupons, revenue splits) · `LectureDuration` (Phases 5, 9) | — | [note](java/01-records-and-value-objects.md) | [lab](lab/src/main/java/com/masternova/java/valueobject/) | 🔨 |
 <!-- catalog:end -->
 
 ## Patterns Spring uses on you

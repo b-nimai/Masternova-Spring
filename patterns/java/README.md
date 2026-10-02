@@ -1,0 +1,24 @@
+# Java study notes
+
+One detailed note per topic, each paired with **real, tested code** in
+[`../lab/src/main/java/com/masternova/java/`](../lab/src/main/java/com/masternova/java/).
+
+Priority marks used in every note: **⭐⭐⭐** must know (interviews, and the bugs that come from
+not knowing) · **⭐⭐** use daily · **⭐** good to know. Code comments starting with `// ⭐` mark
+the lines worth remembering.
+
+| # | Topic | Note | Code | Roadmap | Status |
+|---|---|---|---|---|---|
+| 01 | Records & Value Objects: `equals`/`hashCode`, immutability, money done right | [01-records-and-value-objects.md](01-records-and-value-objects.md) | `java/valueobject/` (`Money`, `LectureDuration`) | 1.1 | ✅ |
+| 02 | Sealed types & pattern-matching `switch` | — | — | 1.2 | ☐ |
+| 03 | Collections, Streams & Collectors | — | — | 1.3 | ☐ |
+| 04 | Generics: bounds, wildcards, PECS, erasure | — | — | 1.4 | ☐ |
+| 05 | Exceptions & `Optional` | — | — | 1.5 | ☐ |
+| 06 | OOP: interfaces vs abstract classes, composition over inheritance | — | — | 1.6 | ☐ |
+| 07 | Concurrency: threads, executors, `CompletableFuture`, virtual threads | — | — | 1.7 | ☐ |
+| 08 | Spring IoC & DI | — | — | 1.8 | ☐ |
+| 09 | Spring AOP & proxies (`@Transactional` pitfalls) | — | — | 1.9 | ☐ |
+| 10 | Request lifecycle & JPA fundamentals | — | — | 1.10 | ☐ |
+
+**Run all study code:** `cd patterns/lab && ./mvnw test`
+**Experiment:** `./mvnw -q compile && jshell --class-path target/classes` (see each note's jshell section)
