@@ -511,4 +511,4 @@ Boot also forbids field/setter cycles by default. Fix the design.
     overrides.
   - Use an empty `@DefaultValue` for nested records.
   - Secrets come from the environment.
-- **Next:** [09 — Spring AOP & proxies](README.md) (task 1.9).
+- **Next:** [09 — Spring AOP & proxies](09-spring-aop-and-proxies.md) (task 1.9).

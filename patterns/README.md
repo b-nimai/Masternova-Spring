@@ -61,16 +61,16 @@ The catalog is checked by tests, so it can't go stale:
 | 3 | Chain of Responsibility | Behavioral | Entitlement policy chain, explicit DENY wins (Phase 8) | — | — | — | ☐ |
 | 4 | Command | Behavioral | Undoable curriculum edits (Phase 6) | — | — | — | ☐ |
 | 5 | Memento | Behavioral | Snapshot/restore for curriculum undo (Phase 6) | — | — | — | ☐ |
-| 6 | Template Method | Behavioral | Pipeline job base class · email templates (Phases 4, 7) | — | — | — | ☐ |
+| 6 | Template Method | Behavioral | Pipeline job base class · email templates (Phases 4, 7) | — | [note](java/06-oop-composition-over-inheritance.md) | [lab](lab/src/main/java/com/masternova/java/oop/template/) | 🔨 |
 | 7 | Observer | Behavioral | Domain events → outbox relay → handlers (Phases 2, 4) | — | — | — | ☐ |
 | 8 | Specification | Enterprise | Catalog filters (JPA `Specification`) · coupon rules · publish gate (Phases 5, 6, 9) | — | — | — | ☐ |
 | 9 | Factory Method / Registry | Creational | Job processor registry · email template registry (Phases 4, 7) | — | — | — | ☐ |
 | 10 | Builder | Creational | ffmpeg HLS command builder · test data builders (Phases 5, 7) | — | — | — | ☐ |
 | 11 | Prototype | Creational | Course duplication (Phase 5) | — | — | — | ☐ |
 | 12 | Adapter | Structural | Razorpay gateway · mail provider · S3/MinIO storage (Phases 4, 7, 9) | — | — | — | ☐ |
-| 13 | Decorator | Structural | Cached entitlement repository · progress write-back buffer (Phases 8, 10) | — | — | — | ☐ |
+| 13 | Decorator | Structural | Cached entitlement repository · progress write-back buffer (Phases 8, 10) | — | [note](java/06-oop-composition-over-inheritance.md) | [lab](lab/src/main/java/com/masternova/java/oop/notify/) | 🔨 |
 | 14 | Facade | Structural | `EntitlementService` · `CheckoutService` (Phases 8, 9) | — | — | — | ☐ |
-| 15 | Proxy | Structural | Spring's own: `@Transactional` / `@Cacheable` proxies (Phase 1) | — | — | — | ☐ |
+| 15 | Proxy | Structural | Spring's own: `@Transactional` / `@PreAuthorize` / `@Cacheable` proxies · lazy video manifests · playback guard (Phases 1, 8) | — | [note](docs/15-proxy.md) | [lab](lab/src/main/java/com/masternova/patterns/proxy/) | 🔨 |
 | 16 | Repository + Unit of Work | Enterprise | Every module's persistence; `@Transactional` is the Unit of Work (Phase 2) | — | — | — | ☐ |
 | 17 | Transactional Outbox | Enterprise | State change + event in one transaction, relayed by the worker (Phase 2) | — | — | — | ☐ |
 | 18 | Value Object | Enterprise | `Money` (course prices, coupons, revenue splits) · `LectureDuration` (Phases 5, 9) | — | [note](java/01-records-and-value-objects.md) | [lab](lab/src/main/java/com/masternova/java/valueobject/) | 🔨 |

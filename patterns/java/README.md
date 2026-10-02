@@ -17,7 +17,7 @@ the lines worth remembering.
 | 06 | OOP in production: fragile base class, decorators, Template Method, invariants, dispatch traps, SOLID in code | [06-oop-composition-over-inheritance.md](06-oop-composition-over-inheritance.md) | `java/oop/` (`CountingTagSet`, `Channel` + decorators, `EmailTemplate`, `Cart`, `DispatchTraps`) | 1.6 | ✅ |
 | 07 | Concurrency: races & JMM, atomics/locks/CAS, idempotency under concurrency, executors, `CompletableFuture`, virtual threads, `ScopedValue`, deadlock | [07-concurrency-and-virtual-threads.md](07-concurrency-and-virtual-threads.md) | `java/concurrency/` (`Counters`, `Cohort`, `WebhookProcessor`, `QuoteService`, `VirtualThreads`, `OutboxRelay`) | 1.7 | ✅ |
 | 08 | Spring IoC & DI (with NestJS mapping): bean declaration, constructor injection, resolution, scopes, lifecycle, full vs lite `@Configuration`, conditions & auto-config, `@ConfigurationProperties` | [08-spring-ioc-and-di.md](08-spring-ioc-and-di.md) | `backend/api/.../learning/ioc/` learning tests + real `MasternovaProperties` | 1.8 | ✅ |
-| 09 | Spring AOP & proxies (`@Transactional` pitfalls) | — | — | 1.9 | ☐ |
+| 09 | Spring AOP & proxies: JDK vs CGLIB, aspects, self-invocation, `@Transactional` rollback & propagation, silent-failure checklist | [09-spring-aop-and-proxies.md](09-spring-aop-and-proxies.md) | `backend/api/.../learning/aop/` + pattern lab `patterns/proxy/` | 1.9 | ✅ |
 | 10 | Request lifecycle & JPA fundamentals | — | — | 1.10 | ☐ |
 
 **Run all study code:** `cd patterns/lab && ./mvnw test`
