@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ on `phase-d1/containers` (PR pending) · Next: Phase D2 (CI/CD hardening).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 in progress on `phase-d2/cicd`.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -117,7 +117,7 @@ Phases are listed **in the order you do them**.
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 8 | 16 h | ~15 h | ✅ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
-| 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
+| 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 1 | 10 h | ~1 h | 🔨 |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **44** | **~326 h** | ~70 h | |
+| | **Total** | **137** | **45** | **~326 h** | ~71 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -263,7 +263,7 @@ versioned, scanned artifacts.
 
 | # | Task | DevOps concept | Est | Status | Date |
 |---|---|---|---|---|---|
-| D2.1 | Publish images to **GHCR** on `main` (tags: git SHA + semver) with `GITHUB_TOKEN` | registries, immutable tags | 2 h | ☐ | |
+| D2.1 | Publish images to **GHCR** on `main` as `:sha-<commit>` (immutable) + `:main`, pushed only after the Trivy scan passes, with a job-scoped `packages: write` `GITHUB_TOKEN`; OCI labels; actionlint-clean. [DevOps note 04](patterns/devops/04-ci-cd-pipeline.md) | registries, immutable tags, least privilege | 1 h | ✅ | 2026-10-02 |
 | D2.2 | Releases: conventional commits → release-please (changelog, version bump, tag) | semantic versioning, release automation | 1.5 h | ☐ | |
 | D2.3 | Supply chain: CycloneDX SBOM (Maven plugin + image SBOM), keyless **cosign** signing | SBOM, provenance, signing | 2 h | ☐ | |
 | D2.4 | Quality gates: JaCoCo coverage threshold, CodeQL (Java + TS), Dependabot auto-merge for patches | static analysis, gates | 1.5 h | ☐ | |

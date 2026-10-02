@@ -2,8 +2,9 @@
 #   backend      → mvn verify (unit + Spring Modulith + Testcontainers ITs + Spotless + JaCoCo)
 #   patterns-lab → mvn test
 #   frontend     → lint, unit tests (Vitest), production build
-#   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL)
-# Publishing images to GHCR and deploying come in Phase D2 / D4.
+#   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL);
+#                  on main, push the scanned images to GHCR as :sha-<commit> and :main
+# Versioned releases (vX.Y.Z tags) live in release.yml; deploying comes in Phase D4.
 name: CI
 
 on:
@@ -115,6 +116,12 @@ jobs:
       !failure() && !cancelled() &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the workflow's own GITHUB_TOKEN (no stored secret)
+    env:
+      # Only main publishes. PRs build and scan the same images but never push them.
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     strategy:
       fail-fast: false
       matrix:
@@ -125,12 +132,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v4
+      - name: Image names, tags and OCI labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
+          # sha-<7 chars>: immutable, one per commit (what deployments pin) · main: moving pointer
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=main,enable={{is_default_branch}}
       - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
           build-args: ${{ matrix.args }}
           tags: masternova-spring/${{ matrix.name }}:ci
+          labels: ${{ steps.meta.outputs.labels }}
           load: true
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
@@ -141,3 +158,21 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+      # ⭐ Push only what passed the scan: the same build again, served from the layer cache.
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push ${{ matrix.name }}
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          build-args: ${{ matrix.args }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          cache-from: type=gha,scope=${{ matrix.name }}
