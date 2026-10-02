@@ -1,0 +1,46 @@
+# Defaults target the infra in ../../compose.yaml (`make up`). Every value can be overridden by
+# an environment variable — that's how the container and Kubernetes deployments configure it.
+spring:
+  application:
+    name: api
+  threads:
+    virtual:
+      enabled: true # one virtual thread per request (Java 21+): blocking JDBC without pool starvation
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/masternova}
+    username: ${DATABASE_USER:masternova}
+    password: ${DATABASE_PASSWORD:masternova}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+  jpa:
+    open-in-view: false # no lazy loading from controllers — fetch what you need in the service
+    hibernate:
+      ddl-auto: validate # Flyway owns the schema; Hibernate only checks it matches the entities
+  flyway:
+    locations: classpath:db/migration
+  docker:
+    compose:
+      # `spring-boot:run` from backend/api starts the shared infra if it isn't running yet.
+      file: ../../compose.yaml
+      lifecycle-management: start-only
+
+server:
+  port: ${API_PORT:8080}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,modulith
+  endpoint:
+    health:
+      probes:
+        enabled: true # /actuator/health/liveness and /readiness — used by Docker and Kubernetes
+  info:
+    java:
+      enabled: true
+    os:
+      enabled: true

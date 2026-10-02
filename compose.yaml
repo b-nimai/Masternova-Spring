@@ -1,0 +1,140 @@
+# Masternova-Spring local stack.
+#
+#   docker compose up -d                       # infra only (what `make up` runs) — apps run from your IDE / mvnw / pnpm
+#   docker compose --profile app up -d --build # infra + api + worker + web, all in containers
+#
+# Host ports are offset from the defaults (5433, 6380, 9010, 8026 …) so this can run next to
+# the NestJS Masternova stack or a native Postgres without clashing.
+
+name: masternova-spring
+
+x-app-env: &app-env
+  DATABASE_URL: jdbc:postgresql://postgres:5432/masternova
+  DATABASE_USER: masternova
+  DATABASE_PASSWORD: masternova
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: masternova
+      POSTGRES_USER: masternova
+      POSTGRES_PASSWORD: masternova
+    ports:
+      - '5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U masternova -d masternova']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    labels:
+      # Spring Boot's Docker Compose support only auto-detects the official `postgres` image.
+      org.springframework.boot.service-connection: postgres
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '6380:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9010:9000' # S3 API
+      - '9011:9001' # web console — http://localhost:9011
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Creates the media bucket once. CORS must expose ETag: the browser's multipart uploader reads
+  # it off each part response to build the CompleteMultipartUpload request (Phase 7).
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/masternova-media;
+      mc anonymous set download local/masternova-media/public;
+      mc admin config set local api cors_allow_origin='http://localhost:4200,http://localhost:8081';
+      echo 'minio-init: bucket + cors ready';
+      "
+    labels:
+      org.springframework.boot.ignore: true
+
+  mailpit: # local SMTP inbox — every email the worker sends lands at http://localhost:8026
+    image: axllent/mailpit:latest
+    ports:
+      - '1026:1025' # SMTP
+      - '8026:8025' # web UI
+
+  # ---- applications (profile: app) ----
+
+  api:
+    profiles: [app]
+    build:
+      context: ./backend
+      args:
+        APP: api
+    image: masternova-spring/api:local # healthcheck: built into the image (backend/healthcheck.sh)
+    environment:
+      <<: *app-env
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    profiles: [app]
+    build:
+      context: ./backend
+      args:
+        APP: worker
+        PORT: 8090
+    image: masternova-spring/worker:local
+    environment:
+      <<: *app-env
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+    ports:
+      - '8090:8090'
+    depends_on:
+      api: # the api runs Flyway; the worker starts once the schema exists
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  web:
+    profiles: [app]
+    build: ./frontend
+    image: masternova-spring/web:local
+    ports:
+      - '8081:80' # http://localhost:8081
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  miniodata:

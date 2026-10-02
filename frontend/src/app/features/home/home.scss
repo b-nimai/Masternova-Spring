@@ -1,0 +1,28 @@
+.home {
+  max-width: 640px;
+  margin: 48px auto;
+  padding: 0 16px;
+}
+
+.tagline {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.status p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.up {
+  color: var(--mat-sys-primary);
+}
+
+.down {
+  color: var(--mat-sys-error);
+}
+
+.meta {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}

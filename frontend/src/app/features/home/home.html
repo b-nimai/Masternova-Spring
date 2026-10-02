@@ -1,0 +1,32 @@
+<section class="home">
+  <h1>Masternova</h1>
+  <p class="tagline">
+    Sell access to a video — and make sure only the people who paid can watch it.
+  </p>
+
+  <mat-card appearance="outlined" class="status">
+    <mat-card-header>
+      <mat-card-title>Backend status</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      @let s = status();
+      @switch (s.kind) {
+        @case ('loading') {
+          <p>Checking the API…</p>
+        }
+        @case ('up') {
+          <p class="up" data-testid="api-status">
+            <mat-icon aria-hidden="true">check_circle</mat-icon> API: {{ s.ping.status }}
+          </p>
+          <p class="meta">version {{ s.ping.version }} · {{ s.ping.time }}</p>
+        }
+        @case ('down') {
+          <p class="down" data-testid="api-status">
+            <mat-icon aria-hidden="true">error</mat-icon> API: unreachable — is the backend running
+            on :8080?
+          </p>
+        }
+      }
+    </mat-card-content>
+  </mat-card>
+</section>

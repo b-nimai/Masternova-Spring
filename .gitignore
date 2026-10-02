@@ -1,0 +1,27 @@
+# Java / Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+*.log
+HELP.md
+
+# IDEs
+.idea/
+*.iml
+.vscode/*
+!frontend/.vscode/
+.classpath
+.project
+.settings/
+
+# Env & secrets
+.env
+*.pem
+
+# OS
+.DS_Store
+
+# Terraform (Phase D6)
+.terraform/
+*.tfstate
+*.tfstate.*

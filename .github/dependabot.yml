@@ -1,0 +1,23 @@
+# Weekly dependency PRs, grouped so minor/patch bumps arrive as one PR per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: maven
+    directories: ['/backend', '/patterns/lab']
+    schedule: { interval: weekly }
+    groups:
+      maven-minor: { update-types: [minor, patch] }
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    groups:
+      angular: { patterns: ['@angular/*', '@angular-devkit/*', 'angular-eslint'] }
+      npm-minor: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directories: ['/backend', '/frontend']
+    schedule: { interval: weekly }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
