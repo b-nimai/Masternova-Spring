@@ -5,7 +5,7 @@
 > lost and never dual-written), and **idempotency keys** (a retried request never causes a
 > second effect).
 
-**Module:** `backend/api/src/main/java/com/masternova/api/platform` (+ `backend/kernel` for event contracts) · **Status:** draft (§1–§6, Phase 2.1) → built (2.8)
+**Module:** `backend/api/src/main/java/com/masternova/api/platform` (+ `backend/kernel` for event contracts) · **Status:** built (Phase 2 complete)
 **Last updated:** 2026-10-02 · **Angular:** — (no screens; the error model shapes every client error message)
 
 ## 1. Problem
@@ -197,8 +197,35 @@ sequenceDiagram
 
 ## 10. Tests that prove it
 
-*(Filled in as tasks land; the full list is completed in 2.8.)*
+| Claim | Test | Kind |
+|---|---|---|
+| every error kind → its status, stable `code`, `type` URI; validation shares one `errors[]` shape; 500s leak nothing | `GlobalExceptionHandlerTest` (7) | MockMvc, no DB |
+| events are published only inside a transaction; the outbox append happens **inside** it; AFTER_COMMIT observers never see a rollback | `TransactionalEventPublisherTest` (3) | context runner + recording tx manager |
+| commit → a PENDING row; rollback → **no row**; relay delivers → DONE; failures back off → DEAD; a crashed relay's lease expires → reclaimed; **4 concurrent relays, 200 rows, 0 duplicate claims** | `TransactionalOutboxIT` (8) | Testcontainers Postgres |
+| replay is byte-for-byte; same key + different body → 422; missing required key → 400; a 5xx releases the key; malformed key → 400 | `IdempotencyIT` (6) | real HTTP + Postgres |
+| ⭐ **50 concurrent identical requests → the handler runs exactly once**; successes share one body; the rest are 409 `IDEMPOTENCY_IN_PROGRESS`; a late retry replays | `IdempotencyIT.fiftyConcurrentIdenticalRequestsRunTheHandlerExactlyOnce` | real HTTP + Postgres |
+| the platform module boots on its own (no hidden dependency on other modules) | `PlatformModuleIT` (`@ApplicationModuleTest`) | Spring Modulith |
+| no cross-module internal references | `ModularityTests` | static (ArchUnit via Modulith) |
+| every pattern class listed in the catalog exists and is annotated | `PatternCatalogIntegrityTest` | reflection |
 
 ## 11. Interview notes — 60-second recall
 
-*(Written last, in 2.8.)*
+- **Problem:** every module needs consistent errors, reliable cross-process events, and safe
+  retries. Building them per module gives seven wrong versions.
+- **Errors:** a sealed `DomainException` hierarchy, five kinds, mapped by one exhaustive switch to
+  RFC 9457 problems with stable codes. A new kind can't silently become a 500.
+- **Events (the decision that mattered):** the **transactional outbox**. The event row is inserted
+  in the caller's transaction (`MANDATORY`), so the change and its event commit together. No dual
+  write, no ghost events.
+- **Relay:**
+  - One `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED) RETURNING` gives concurrent
+    relays disjoint batches.
+  - A lease stored in `next_attempt_at` makes crash recovery automatic.
+  - Exponential backoff, then DEAD.
+  - At-least-once delivery, so consumers are idempotent.
+- **Idempotency:**
+  - The `(caller, key)` primary key arbitrates with `INSERT … ON CONFLICT DO NOTHING`.
+  - Takeovers are conditional `UPDATE`s, with sealed outcomes.
+  - The response is stored and replayed byte-for-byte, and a 5xx releases the key.
+- **The numbers that prove it:** 50 concurrent identical requests → **1** execution; 4 relays ×
+  200 messages → **0** duplicate claims; a rolled-back change → **0** outbox rows.

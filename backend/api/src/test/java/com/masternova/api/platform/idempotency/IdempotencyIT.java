@@ -37,11 +37,14 @@ class IdempotencyIT {
   static class EnrollmentController {
     final AtomicInteger executions = new AtomicInteger();
     final AtomicInteger failuresLeft = new AtomicInteger();
+    final AtomicInteger delayMillis = new AtomicInteger(); // makes concurrent requests overlap
 
     @PostMapping("/api/v1/test/enrollments")
     @IdempotencyKeyRequired
-    ResponseEntity<Map<String, Object>> enroll(@RequestBody Map<String, String> body) {
+    ResponseEntity<Map<String, Object>> enroll(@RequestBody Map<String, String> body)
+        throws InterruptedException {
       int run = executions.incrementAndGet();
+      Thread.sleep(delayMillis.get());
       if (failuresLeft.getAndDecrement() > 0) {
         throw new IllegalStateException(
             "payment provider down"); // → 500 via GlobalExceptionHandler
@@ -72,6 +75,7 @@ class IdempotencyIT {
   void reset() {
     controller.executions.set(0);
     controller.failuresLeft.set(0);
+    controller.delayMillis.set(0);
   }
 
   private HttpResponse<String> post(String path, String key, String json) throws Exception {
@@ -157,5 +161,57 @@ class IdempotencyIT {
 
     assertThat(response.statusCode()).isEqualTo(400);
     assertThat(response.body()).contains("IDEMPOTENCY_KEY_INVALID");
+  }
+
+  /**
+   * ⭐ THE PROOF (task 2.8): 50 identical requests — same key, same body — released at the same
+   * instant against a real server and database. The handler is slow, so they genuinely overlap.
+   */
+  @Test
+  void fiftyConcurrentIdenticalRequestsRunTheHandlerExactlyOnce() throws Exception {
+    controller.delayMillis.set(300);
+    String key = newKey();
+    String body = "{\"courseId\":\"c-concurrent\"}";
+    java.util.List<HttpResponse<String>> responses =
+        java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+    java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+
+    try (var clients = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+      for (int i = 0; i < 50; i++) {
+        clients.submit(
+            () -> {
+              start.await();
+              responses.add(post("/api/v1/test/enrollments", key, body));
+              return null;
+            });
+      }
+      start.countDown();
+    }
+
+    assertThat(controller.executions).hasValue(1); // ⭐ 50 requests, ONE effect
+    assertThat(responses).hasSize(50);
+    java.util.Map<Integer, Long> byStatus =
+        responses.stream()
+            .collect(
+                java.util.stream.Collectors.groupingBy(
+                    HttpResponse::statusCode, java.util.stream.Collectors.counting()));
+    assertThat(byStatus.keySet()).isSubsetOf(201, 409); // nothing else — no 500s, no duplicates
+    assertThat(byStatus.get(201)).isGreaterThanOrEqualTo(1);
+    // every success carries the ONE stored response
+    assertThat(
+            responses.stream()
+                .filter(r -> r.statusCode() == 201)
+                .map(HttpResponse::body)
+                .distinct())
+        .hasSize(1);
+    // every 409 is the documented in-progress problem
+    assertThat(responses.stream().filter(r -> r.statusCode() == 409))
+        .allSatisfy(r -> assertThat(r.body()).contains("IDEMPOTENCY_IN_PROGRESS"));
+
+    // and once it has finished, a late retry is a replay, still without a second execution
+    HttpResponse<String> late = post("/api/v1/test/enrollments", key, body);
+    assertThat(late.statusCode()).isEqualTo(201);
+    assertThat(late.headers().firstValue("Idempotent-Replayed")).hasValue("true");
+    assertThat(controller.executions).hasValue(1);
   }
 }
