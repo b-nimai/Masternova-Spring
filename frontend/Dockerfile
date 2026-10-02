@@ -3,9 +3,10 @@
 # ---- build: compile the Angular app to static files ----
 FROM node:22-alpine AS build
 WORKDIR /app
-RUN corepack enable
 # Dependencies first — this layer is reused until package.json / the lockfile change.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# Install the exact pnpm pinned in package.json ("packageManager"). Not corepack: Node 25+ dropped it.
+RUN npm install -g "$(node -p "require('./package.json').packageManager")"
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
