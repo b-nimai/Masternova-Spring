@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: Phase 1 ✅ (merged, PR #10). Phase 2 in progress on `phase-2/platform-kernel`: 2.1–2.6 ✅. Next: 2.7 (Repository + Unit of Work).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: Phase 1 ✅ (merged, PR #10). Phase 2 in progress on `phase-2/platform-kernel`: 2.1–2.7 ✅. Next: 2.8 (proofs + module test), then the Phase 2 PR.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -114,7 +114,7 @@ Phases are listed **in the order you do them**.
 |---|---|---|---|---|---|---|
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
-| 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 6 | 16 h | ~12 h | 🔨 |
+| 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 7 | 16 h | ~13 h | 🔨 |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **29** | **~326 h** | ~36 h | |
+| | **Total** | **137** | **30** | **~326 h** | ~37 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -217,7 +217,7 @@ idempotency), built before any module needs it.
 | 2.4 | Transactional outbox: `outbox_message` (Flyway V2, partial index), writer in the caller's tx, relay claiming with `FOR UPDATE SKIP LOCKED` + lease, backoff → DEAD; IT on Postgres incl. 4 concurrent relays ([pattern](patterns/docs/17-transactional-outbox.md)) | propagation `MANDATORY`, `JdbcClient` + `UPDATE … RETURNING`, `@Scheduled`, typed relay config | — | **Transactional Outbox** (catalog ✅) | 4 h | ✅ | 2026-10-02 |
 | 2.5 | [ADR-0005](docs/adr/0005-hand-rolled-outbox-over-modulith-registry.md): keep the hand-rolled outbox (cross-process, no broker); `@TransactionalEventListener` for non-critical in-process reactions | Modulith events, `@ApplicationModuleListener`, externalization | — | — | 1 h | ✅ | 2026-10-02 |
 | 2.6 | `Idempotency-Key` filter (V3): atomic claim (`ON CONFLICT DO NOTHING` + conditional takeovers), sealed `Claim` outcomes, byte-for-byte replay, 5xx releases the key, `@IdempotencyKeyRequired` interceptor, expiry cleanup; HTTP-level IT | `OncePerRequestFilter`, request-body caching, `ContentCachingResponseWrapper`, SHA-256 hashing | — | Chain of Responsibility (filter) | 3 h | ✅ | 2026-10-02 |
-| 2.7 | Repository + Unit of Work made explicit: domain repository interfaces over Spring Data; `@Transactional` as UoW | Spring Data JPA, derived queries, transactions | — | **Repository + UoW**: catalog row 16 | 1 h | ☐ | |
+| 2.7 | Repository + Unit of Work made explicit: platform repositories behind interfaces; pattern note + hand-built UoW lab (identity map, change tracking, all-or-nothing commit) ([pattern](patterns/docs/16-repository-unit-of-work.md)) | repositories vs DAOs, `@Transactional` + persistence context as the UoW | — | **Repository + UoW** (catalog ✅) | 1 h | ✅ | 2026-10-02 |
 | 2.8 | Proof: 50 concurrent identical requests → 1 effect (IT); `@ApplicationModuleTest` for `platform` | `CountDownLatch`, virtual-thread executors in tests | — | — | 2 h | ☐ | |
 
 ---
