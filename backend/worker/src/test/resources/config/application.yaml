@@ -1,0 +1,13 @@
+# Test-only overrides (Boot loads classpath:/config/application.yaml ON TOP of the main one).
+spring:
+  flyway:
+    # ⭐ The api owns every migration (ADR-0001/0008). Worker ITs run the api's REAL migrations
+    #    from source, plus the outbox migration inside the messaging jar — so the worker is always
+    #    tested against the exact production schema, never a copy that can drift.
+    locations:
+      - filesystem:../api/src/main/resources/db/migration
+      - classpath:db/migration
+management:
+  health:
+    mail:
+      enabled: false # no SMTP server in most ITs

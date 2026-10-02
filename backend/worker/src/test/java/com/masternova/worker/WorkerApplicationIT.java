@@ -9,7 +9,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 
 /** Boots the worker against real Postgres + Redis. */
-@SpringBootTest(properties = "management.health.mail.enabled=false")
+@SpringBootTest
 @Import(TestcontainersConfiguration.class)
 class WorkerApplicationIT {
 
