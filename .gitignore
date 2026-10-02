@@ -17,6 +17,7 @@ HELP.md
 # Env & secrets
 .env
 *.pem
+secrets/
 
 # OS
 .DS_Store

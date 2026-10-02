@@ -5,6 +5,10 @@
 #
 # Host ports are offset from the defaults (5433, 6380, 9010, 8026 …) so this can run next to
 # the NestJS Masternova stack or a native Postgres without clashing.
+#
+# Hardening (D1.4, patterns/devops/03): every service has log rotation and a restart policy; the
+# app containers also get memory/CPU/pids limits, a read-only root filesystem, no Linux
+# capabilities, and their secrets as files. `make stack` creates the gitignored secret files.
 
 name: masternova-spring
 
@@ -15,11 +19,38 @@ x-app-env: &app-env
   REDIS_HOST: redis
   REDIS_PORT: 6379
   LOG_VERIFICATION_LINKS: 'false' # never log live tokens outside a developer's own terminal
-  JWT_ACCESS_SECRET: compose-local-secret-not-for-production-0123456789
+
+# Without rotation the json-file log of a chatty container grows until the disk is full.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
+
+# Shared by api and worker. The numbers come from patterns/devops/02: the api's working set is
+# ~350 MB, and 75 % heap + ~250 MB non-heap fits in 1 GiB.
+x-jvm-app: &jvm-app
+  restart: unless-stopped # come back after a crash or an ExitOnOutOfMemoryError (not after `docker compose stop`)
+  read_only: true # nothing in the image may change at runtime …
+  tmpfs:
+    - /tmp:size=64m # … except /tmp: Tomcat's work dir and the JVM's perf data
+  cap_drop: [ALL] # a non-root JVM on port 8080/8090 needs no Linux capabilities at all
+  security_opt: ['no-new-privileges:true'] # setuid binaries can't raise privileges
+  stop_grace_period: 40s # Spring's graceful shutdown drains requests for up to 30 s
+  deploy:
+    resources:
+      limits:
+        memory: 1g # the JVM sizes its heap from this (MaxRAMPercentage=75 → 768 MB)
+        cpus: '2'
+        pids: 512 # a runaway thread/process leak hits this, not the host
+  memswap_limit: 1g # = the memory limit: no swap; a swapping GC is worse than a restart
+  logging: *logging
 
 services:
   postgres:
     image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_DB: masternova
       POSTGRES_USER: masternova
@@ -39,6 +70,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
+    logging: *logging
     ports:
       - '6380:6379'
     healthcheck:
@@ -49,6 +82,8 @@ services:
 
   minio:
     image: minio/minio:latest
+    restart: unless-stopped
+    logging: *logging
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -79,11 +114,15 @@ services:
       mc admin config set local api cors_allow_origin='http://localhost:4200,http://localhost:8081';
       echo 'minio-init: bucket + cors ready';
       "
+    restart: 'no' # a one-shot job: run once, exit 0, stay stopped
+    logging: *logging
     labels:
       org.springframework.boot.ignore: true
 
   mailpit: # local SMTP inbox — every email the worker sends lands at http://localhost:8026
     image: axllent/mailpit:latest
+    restart: unless-stopped
+    logging: *logging
     ports:
       - '1026:1025' # SMTP
       - '8026:8025' # web UI
@@ -97,8 +136,15 @@ services:
       args:
         APP: api
     image: masternova-spring/api:local # healthcheck: built into the image (backend/healthcheck.sh)
+    <<: *jvm-app
     environment:
       <<: *app-env
+    # ⭐ A file at /run/secrets/JWT_ACCESS_SECRET, not an env var: env vars show up in
+    #    `docker inspect`, /proc/<pid>/environ and crash reports. Spring reads the file through
+    #    `spring.config.import: optional:configtree:/run/secrets/` (application.yaml).
+    secrets:
+      - source: jwt_access_secret
+        target: JWT_ACCESS_SECRET
     ports:
       - '8080:8080'
     depends_on:
@@ -115,6 +161,7 @@ services:
         APP: worker
         PORT: 8090
     image: masternova-spring/worker:local
+    <<: *jvm-app
     environment:
       <<: *app-env
       SMTP_HOST: mailpit
@@ -131,6 +178,25 @@ services:
     profiles: [app]
     build: ./frontend
     image: masternova-spring/web:local
+    restart: unless-stopped
+    read_only: true
+    tmpfs: # nginx writes only its pid file, temp bodies and proxy cache
+      - /var/run
+      - /var/cache/nginx
+      - /tmp
+    # nginx's master starts as root to bind :80, then drops to the `nginx` user for its workers:
+    # keep exactly the capabilities that needs, drop everything else.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
+    security_opt: ['no-new-privileges:true']
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+          cpus: '0.5'
+          pids: 128
+    memswap_limit: 128m
+    logging: *logging
     ports:
       - '8081:80' # http://localhost:8081
     depends_on:
@@ -140,3 +206,7 @@ services:
 volumes:
   pgdata:
   miniodata:
+
+secrets:
+  jwt_access_secret:
+    file: ./secrets/jwt_access_secret # gitignored; `make secrets` generates a random one
