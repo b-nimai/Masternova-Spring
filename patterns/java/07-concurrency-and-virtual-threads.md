@@ -483,4 +483,4 @@ Only if it's stateless or its shared state is thread-safe. Spring doesn't make i
 - **Producer–consumer:** a bounded `BlockingQueue` gives back-pressure; a poison pill shuts
   workers down.
 - **Deadlock:** a circular wait. Fix with a lock order or `tryLock`; diagnose with `jstack`.
-- **Next:** [08 — Spring IoC & DI](README.md) (task 1.8).
+- **Next:** [08 — Spring IoC & DI](08-spring-ioc-and-di.md) (task 1.8).

@@ -26,6 +26,12 @@ spring:
       file: ../../compose.yaml
       lifecycle-management: start-only
 
+masternova: # → MasternovaProperties (typed + validated at startup)
+  web-url: ${WEB_URL:http://localhost:4200}
+  checkout:
+    cart-max-items: 20
+    payment-timeout: 10s
+
 server:
   port: ${API_PORT:8080}
   shutdown: graceful

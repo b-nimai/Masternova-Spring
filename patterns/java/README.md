@@ -16,7 +16,7 @@ the lines worth remembering.
 | 05 | Exceptions & `Optional`: checked vs unchecked, `finally` traps, try-with-resources, custom exceptions → HTTP, `InterruptedException`, `Optional` rules | [05-exceptions-and-optional.md](05-exceptions-and-optional.md) | `java/exceptions/` (`MasternovaException`, `ProblemMapper`, `CourseImporter`, `CourseLookup`, `Retry`) | 1.5 | ✅ |
 | 06 | OOP in production: fragile base class, decorators, Template Method, invariants, dispatch traps, SOLID in code | [06-oop-composition-over-inheritance.md](06-oop-composition-over-inheritance.md) | `java/oop/` (`CountingTagSet`, `Channel` + decorators, `EmailTemplate`, `Cart`, `DispatchTraps`) | 1.6 | ✅ |
 | 07 | Concurrency: races & JMM, atomics/locks/CAS, idempotency under concurrency, executors, `CompletableFuture`, virtual threads, `ScopedValue`, deadlock | [07-concurrency-and-virtual-threads.md](07-concurrency-and-virtual-threads.md) | `java/concurrency/` (`Counters`, `Cohort`, `WebhookProcessor`, `QuoteService`, `VirtualThreads`, `OutboxRelay`) | 1.7 | ✅ |
-| 08 | Spring IoC & DI | — | — | 1.8 | ☐ |
+| 08 | Spring IoC & DI (with NestJS mapping): bean declaration, constructor injection, resolution, scopes, lifecycle, full vs lite `@Configuration`, conditions & auto-config, `@ConfigurationProperties` | [08-spring-ioc-and-di.md](08-spring-ioc-and-di.md) | `backend/api/.../learning/ioc/` learning tests + real `MasternovaProperties` | 1.8 | ✅ |
 | 09 | Spring AOP & proxies (`@Transactional` pitfalls) | — | — | 1.9 | ☐ |
 | 10 | Request lifecycle & JPA fundamentals | — | — | 1.10 | ☐ |
 

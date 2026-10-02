@@ -2,6 +2,7 @@ package com.masternova.api;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
  * Masternova HTTP API — a modular monolith.
@@ -12,6 +13,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * if that rule is broken.
  */
 @SpringBootApplication
+@ConfigurationPropertiesScan // registers every @ConfigurationProperties record
+// (MasternovaProperties)
 public class ApiApplication {
 
   public static void main(String[] args) {
