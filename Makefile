@@ -16,8 +16,10 @@ nuke: ## Stop everything AND delete volumes (fresh database)
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
-	@[ -s secrets/jwt_access_secret ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/jwt_access_secret; \
-	  chmod 644 secrets/jwt_access_secret; echo "created secrets/jwt_access_secret"; }
+	@for f in jwt_access_secret notification_token_secret; do \
+	  [ -s secrets/$$f ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/$$f; \
+	    chmod 644 secrets/$$f; echo "created secrets/$$f"; }; \
+	done
 
 stack: secrets ## Build images and run the whole app in containers (web on :8081)
 	docker compose --profile app up -d --build --wait postgres redis mailpit api worker web

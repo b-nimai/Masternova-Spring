@@ -1,0 +1,48 @@
+<mat-card appearance="outlined" class="unsubscribe-card">
+  <mat-card-header>
+    <mat-card-title>Unsubscribe</mat-card-title>
+  </mat-card-header>
+  <mat-card-content>
+    @switch (state()) {
+      @case ('confirm') {
+        <p data-testid="confirm-text">Stop receiving this kind of email from Masternova?</p>
+      }
+      @case ('working') {
+        <div class="working" data-testid="working"><mat-spinner diameter="32" /></div>
+      }
+      @case ('done') {
+        <p data-testid="done">
+          Done. You won't get <strong>{{ copy[category()!].label }}</strong> emails any more.
+          Receipts and security emails still arrive.
+        </p>
+      }
+      @case ('invalid') {
+        <p class="form-error" data-testid="invalid">
+          This unsubscribe link is invalid or has expired. You can still change every email setting
+          in your account.
+        </p>
+      }
+      @case ('missing') {
+        <p class="form-error" data-testid="missing">
+          The link is missing its token. Open it again from the email.
+        </p>
+      }
+    }
+  </mat-card-content>
+  <mat-card-actions>
+    @if (state() === 'confirm') {
+      <button mat-flat-button type="button" data-testid="confirm" (click)="confirm()">
+        Unsubscribe
+      </button>
+    }
+    @if (state() !== 'confirm' && state() !== 'working') {
+      @if (auth.isAuthenticated()) {
+        <a mat-button routerLink="/account/notifications">Manage email preferences</a>
+      } @else {
+        <a mat-button routerLink="/login" [queryParams]="{ returnUrl: '/account/notifications' }"
+          >Log in to manage email preferences</a
+        >
+      }
+    }
+  </mat-card-actions>
+</mat-card>

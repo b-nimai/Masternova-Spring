@@ -150,6 +150,8 @@ services:
     secrets:
       - source: jwt_access_secret
         target: JWT_ACCESS_SECRET
+      - source: notification_token_secret # verifies unsubscribe links (the worker signs them)
+        target: NOTIFICATION_TOKEN_SECRET
     ports:
       - '8080:8080'
     depends_on:
@@ -171,6 +173,10 @@ services:
       <<: *app-env
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
+      WEB_URL: http://localhost:8081 # links in emails open the containerised web app
+    secrets:
+      - source: notification_token_secret # signs unsubscribe links; the api verifies them
+        target: NOTIFICATION_TOKEN_SECRET
     ports:
       - '8090:8090'
     depends_on:
@@ -215,3 +221,5 @@ volumes:
 secrets:
   jwt_access_secret:
     file: ./secrets/jwt_access_secret # gitignored; `make secrets` generates a random one
+  notification_token_secret:
+    file: ./secrets/notification_token_secret # shared by api + worker (same HMAC key)

@@ -6,12 +6,12 @@
 
 **Type:** Enterprise (distributed systems) · **Status:** ✅ in real code · **Last updated:** 2026-10-02
 **Real code:**
-- **Writer:** [`JsonOutboxWriter`](../../backend/api/src/main/java/com/masternova/api/platform/outbox/JsonOutboxWriter.java), called by [`TransactionalEventPublisher`](../../backend/api/src/main/java/com/masternova/api/platform/events/TransactionalEventPublisher.java) inside the caller's transaction.
-- **Relay:** [`OutboxRelay`](../../backend/api/src/main/java/com/masternova/api/platform/outbox/OutboxRelay.java) + [`OutboxRelayScheduler`](../../backend/api/src/main/java/com/masternova/api/platform/outbox/OutboxRelayScheduler.java).
-- **Claim SQL:** in [`JdbcOutboxRepository`](../../backend/api/src/main/java/com/masternova/api/platform/outbox/JdbcOutboxRepository.java).
-- **Table:** [`V2__platform_outbox.sql`](../../backend/api/src/main/resources/db/migration/V2__platform_outbox.sql).
+- **Writer:** [`JdbcOutboxWriter`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/JdbcOutboxWriter.java), called by [`TransactionalEventPublisher`](../../backend/api/src/main/java/com/masternova/api/platform/events/TransactionalEventPublisher.java) inside the caller's transaction.
+- **Relay:** [`OutboxRelay`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/OutboxRelay.java) + [`OutboxRelayScheduler`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/OutboxRelayScheduler.java).
+- **Claim SQL:** in [`JdbcOutboxRepository`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/JdbcOutboxRepository.java).
+- **Table:** [`V2__platform_outbox.sql`](../../backend/messaging/src/main/resources/db/migration/V2__platform_outbox.sql).
 
-**Proof:** [`TransactionalOutboxIT`](../../backend/api/src/test/java/com/masternova/api/platform/outbox/TransactionalOutboxIT.java) (real Postgres) · **Lab:** [`lab/.../patterns/outbox/`](../lab/src/main/java/com/masternova/patterns/outbox/) · **Design:** [`docs/lld/platform-kernel.md`](../../docs/lld/platform-kernel.md)
+**Proof:** [`TransactionalOutboxIT`](../../backend/messaging/src/test/java/com/masternova/messaging/outbox/TransactionalOutboxIT.java) (real Postgres) · **Lab:** [`lab/.../patterns/outbox/`](../lab/src/main/java/com/masternova/patterns/outbox/) · **Design:** [`docs/lld/platform-kernel.md`](../../docs/lld/platform-kernel.md)
 
 **Trigger phrase:** "*save X **and** tell Y*", whenever Y is another system (email, broker,
 search index, another service) and losing or inventing the message is unacceptable.
@@ -60,7 +60,7 @@ sequenceDiagram
 
 | Role | Masternova class | Responsibility |
 |---|---|---|
-| **Writer** | `TransactionalEventPublisher` → `JsonOutboxWriter` | append the event row **in the caller's transaction** (`Propagation.MANDATORY`) |
+| **Writer** | `TransactionalEventPublisher` → `JdbcOutboxWriter` | append the event row **in the caller's transaction** (`Propagation.MANDATORY`) |
 | **Outbox table** | `outbox_message` | durable queue in the same DB as the business data |
 | **Relay** | `OutboxRelay` (+ scheduler) | claim → deliver → mark; retries with backoff |
 | **Consumer** | an `OutboxHandler` bean per event type | the reaction; **must be idempotent** |

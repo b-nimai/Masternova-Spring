@@ -21,7 +21,6 @@ import org.springframework.validation.annotation.Validated;
  *
  * @param webUrl the public URL of the Angular app (links in emails, CORS)
  * @param checkout checkout rules
- * @param outbox transactional outbox relay tuning (Phase 2.4)
  * @param idempotency Idempotency-Key handling (Phase 2.6)
  */
 @Validated
@@ -31,7 +30,6 @@ public record MasternovaProperties(
     // ⭐ an EMPTY @DefaultValue on a nested record = "build it from its own defaults when no
     //    masternova.checkout.* keys are set". Without it the nested record binds as null.
     @Valid @DefaultValue Checkout checkout,
-    @Valid @DefaultValue Outbox outbox,
     @Valid @DefaultValue Idempotency idempotency) {
 
   /**
@@ -41,25 +39,6 @@ public record MasternovaProperties(
   public record Checkout(
       @DefaultValue("20") @Min(1) @Max(100) int cartMaxItems,
       @DefaultValue("10s") @NotNull Duration paymentTimeout) {}
-
-  /**
-   * @param relayEnabled run the scheduled relay in this process (switched off in tests that drive
-   *     the relay by hand)
-   * @param pollInterval pause between relay batches
-   * @param batchSize rows claimed per batch
-   * @param lease how long a claimed row is reserved before another relay may take it over
-   * @param maxAttempts deliveries before a message is parked as DEAD
-   * @param baseBackoff first retry delay; doubles per attempt up to {@code maxBackoff}
-   * @param maxBackoff ceiling for the retry delay
-   */
-  public record Outbox(
-      @DefaultValue("true") boolean relayEnabled,
-      @DefaultValue("1s") @NotNull Duration pollInterval,
-      @DefaultValue("50") @Min(1) @Max(1000) int batchSize,
-      @DefaultValue("60s") @NotNull Duration lease,
-      @DefaultValue("10") @Min(1) int maxAttempts,
-      @DefaultValue("1s") @NotNull Duration baseBackoff,
-      @DefaultValue("1h") @NotNull Duration maxBackoff) {}
 
   /**
    * @param retention how long a key (and its stored response) is remembered

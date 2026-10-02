@@ -24,6 +24,7 @@
 
 	<modules>
 		<module>kernel</module>
+		<module>messaging</module>
 		<module>api</module>
 		<module>worker</module>
 	</modules>
@@ -52,6 +53,11 @@
 			<dependency>
 				<groupId>com.masternova</groupId>
 				<artifactId>kernel</artifactId>
+				<version>${project.version}</version>
+			</dependency>
+			<dependency>
+				<groupId>com.masternova</groupId>
+				<artifactId>messaging</artifactId>
 				<version>${project.version}</version>
 			</dependency>
 			<dependency>

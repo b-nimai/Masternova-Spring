@@ -2,6 +2,8 @@
 spring:
   application:
     name: worker
+  config:
+    import: optional:configtree:/run/secrets/ # file secrets, e.g. NOTIFICATION_TOKEN_SECRET
   threads:
     virtual:
       enabled: true
@@ -20,6 +22,22 @@ spring:
   mail:
     host: ${SMTP_HOST:localhost}
     port: ${SMTP_PORT:1026}
+
+masternova:
+  notification: # → NotificationProperties
+    web-url: ${WEB_URL:http://localhost:4200} # every link in an email starts here
+    from: ${MAIL_FROM:Masternova <no-reply@masternova.dev>}
+    provider: ${MAIL_PROVIDER:smtp} # smtp (Mailpit in dev) | resend
+    # signs unsubscribe links; MUST equal the api's value. Dev-only default (≥ 32 bytes).
+    token-secret: ${NOTIFICATION_TOKEN_SECRET:dev-only-unsubscribe-secret-0123456789abcdef}
+    resend:
+      api-key: ${RESEND_API_KEY:}
+  outbox: # → messaging's OutboxProperties
+    relay-enabled: true # ⭐ the ONLY process that consumes the outbox (ADR-0008)
+    poll-interval: 1s
+    batch-size: 50
+    lease: 60s # longer than the slowest handler (an SMTP send) may take
+    max-attempts: 10
 
 server:
   port: ${WORKER_PORT:8090} # only actuator is served — the worker has no public API

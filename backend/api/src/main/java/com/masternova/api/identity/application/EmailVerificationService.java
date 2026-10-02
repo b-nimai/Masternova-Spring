@@ -1,9 +1,12 @@
 package com.masternova.api.identity.application;
 
+import com.masternova.api.identity.EmailVerified;
+import com.masternova.api.identity.domain.User;
 import com.masternova.api.identity.domain.UserRepository;
 import com.masternova.api.identity.domain.VerificationToken;
 import com.masternova.api.identity.domain.VerificationTokenRepository;
 import com.masternova.api.identity.infrastructure.SecureTokens;
+import com.masternova.api.platform.EventPublisher;
 import com.masternova.api.platform.RuleViolationException;
 import java.time.Clock;
 import java.time.Instant;
@@ -17,16 +20,19 @@ public class EmailVerificationService {
   private final VerificationTokenRepository verificationTokens;
   private final UserRepository users;
   private final SecureTokens tokens;
+  private final EventPublisher events;
   private final Clock clock;
 
   EmailVerificationService(
       VerificationTokenRepository verificationTokens,
       UserRepository users,
       SecureTokens tokens,
+      EventPublisher events,
       Clock clock) {
     this.verificationTokens = verificationTokens;
     this.users = users;
     this.tokens = tokens;
+    this.events = events;
     this.clock = clock;
   }
 
@@ -40,7 +46,11 @@ public class EmailVerificationService {
     if (!token.use(now)) {
       throw invalid(); // expired or already used — the same answer, deliberately
     }
-    users.findById(token.userId()).orElseThrow(EmailVerificationService::invalid).verifyEmail(now);
+    User user = users.findById(token.userId()).orElseThrow(EmailVerificationService::invalid);
+    user.verifyEmail(now);
+    // same transaction as the state change: the welcome email is owed exactly when this commits
+    events.publish(
+        new EmailVerified(user.id().toString(), user.email().value(), user.displayName()));
     // no save() calls: both entities are MANAGED — dirty checking writes them at commit (note 10
     // §5)
   }

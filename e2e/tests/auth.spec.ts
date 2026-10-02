@@ -1,27 +1,5 @@
-import { expect, Page, test } from '@playwright/test';
-
-const PASSWORD = 'correct-horse-battery';
-
-/** A fresh account per test: tests never depend on each other or on leftover data. */
-function uniqueEmail(): string {
-  return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
-}
-
-async function signUp(page: Page, email: string, displayName = 'E2E Learner'): Promise<void> {
-  await page.goto('/signup');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Display name').fill(displayName);
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-  await page.getByLabel('Confirm password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Sign up' }).click();
-  await expect(page.getByTestId('signup-done')).toContainText(email);
-}
-
-async function logIn(page: Page, email: string, password = PASSWORD): Promise<void> {
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-}
+import { expect, test } from '@playwright/test';
+import { logIn, signUp, uniqueEmail } from './helpers';
 
 test('sign up → log in → survive a reload → log out', async ({ page, context }) => {
   const email = uniqueEmail();

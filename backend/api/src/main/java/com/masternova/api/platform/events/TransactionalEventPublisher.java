@@ -1,10 +1,10 @@
 package com.masternova.api.platform.events;
 
 import com.masternova.api.platform.EventPublisher;
-import com.masternova.api.platform.outbox.OutboxWriter;
 import com.masternova.kernel.event.DomainEvent;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import com.masternova.messaging.OutboxWriter;
 import java.util.Objects;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
@@ -16,7 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <ol>
  *   <li>⭐ durably — appended to the transactional outbox (committed with the business change,
- *       delivered later by the relay to {@code OutboxHandler}s; survives crashes);
+ *       delivered later by the WORKER's relay to {@code OutboxHandler}s; survives crashes —
+ *       ADR-0008);
  *   <li>in-process — through Spring's event bus to {@code @TransactionalEventListener} observers
  *       (cheap, immediate, but lost if the process dies right after commit).
  * </ol>

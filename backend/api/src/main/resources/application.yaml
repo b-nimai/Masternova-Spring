@@ -43,12 +43,13 @@ masternova: # → MasternovaProperties (typed + validated at startup)
     secure-cookies: ${SECURE_COOKIES:false} # true behind HTTPS
     log-verification-links: ${LOG_VERIFICATION_LINKS:true} # dev convenience — false in prod
     bootstrap-admin-email: ${BOOTSTRAP_ADMIN_EMAIL:} # this account gets ADMIN on startup (if it exists)
-  outbox: # → MasternovaProperties.Outbox (all have defaults; listed here for visibility)
-    relay-enabled: true
-    poll-interval: 1s
-    batch-size: 50
-    lease: 60s
-    max-attempts: 10
+  notification: # → NotificationProperties
+    # verifies unsubscribe links; MUST equal the worker's value. Dev-only default (≥ 32 bytes).
+    token-secret: ${NOTIFICATION_TOKEN_SECRET:dev-only-unsubscribe-secret-0123456789abcdef}
+  outbox: # → messaging's OutboxProperties
+    # ⭐ The api only WRITES events; the worker relays them (ADR-0008). A relay here would mark the
+    #    worker's events as "no handler" and swallow them. (false is also the library default.)
+    relay-enabled: false
 
 server:
   port: ${API_PORT:8080}

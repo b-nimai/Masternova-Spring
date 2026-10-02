@@ -13,10 +13,22 @@
 	<artifactId>worker</artifactId>
 	<name>worker</name>
 
+	<properties>
+		<!-- Coverage floor = measured (unit + IT merged) minus a small margin: 97 % lines / 88 % branches
+		     on 2026-10-02. Raise it as coverage grows; never lower it to make a build pass. -->
+		<coverage.line>0.94</coverage.line>
+		<coverage.branch>0.82</coverage.branch>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>com.masternova</groupId>
 			<artifactId>kernel</artifactId>
+		</dependency>
+		<!-- the outbox RELAY runs here (masternova.outbox.relay-enabled=true; ADR-0008) -->
+		<dependency>
+			<groupId>com.masternova</groupId>
+			<artifactId>messaging</artifactId>
 		</dependency>
 
 		<dependency>
@@ -34,6 +46,12 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+		<!-- compile scope (the starter has it at runtime only): SmtpMailProvider reads the SMTP reply
+		     code from Angus's SMTPAddressFailedException to tell permanent rejections (5xx) apart -->
+		<dependency>
+			<groupId>org.eclipse.angus</groupId>
+			<artifactId>angus-mail</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -77,6 +95,17 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- tests only: build the schema from the api's migrations (the worker never migrates in prod) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-flyway</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
 			<scope>test</scope>
 		</dependency>
 		<dependency>

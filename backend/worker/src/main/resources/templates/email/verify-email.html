@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{email/layout.html :: layout(~{::main})}">
+  <body>
+    <main>
+      <p>Hi <strong th:text="${displayName}">Asha</strong>,</p>
+      <p>Confirm your email address to finish setting up your Masternova account.</p>
+      <p style="margin: 28px 0">
+        <a th:href="${verifyUrl}" data-role="cta"
+           style="display: inline-block; background: #3f51b5; color: #ffffff; padding: 12px 22px; border-radius: 6px; text-decoration: none; font-weight: bold">Confirm my email</a>
+      </p>
+      <p style="font-size: 13px; color: #6b7280">
+        Button not working? Paste this link into your browser:<br />
+        <a th:href="${verifyUrl}" th:text="${verifyUrl}" style="color: #3f51b5; word-break: break-all">link</a>
+      </p>
+      <p style="font-size: 13px; color: #6b7280">The link works once and expires in 24 hours. Didn't sign up? Ignore this email.</p>
+    </main>
+  </body>
+</html>
