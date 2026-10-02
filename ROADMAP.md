@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: Phase 1 ✅ (11/11) — PR to `main` from `phase-1/java-spring-warmup`. Next: Phase 2 (platform kernel).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: Phase 1 ✅ (merged, PR #10). Phase 2 in progress on `phase-2/platform-kernel`: 2.1 ✅. Next: 2.2 (error model).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -114,7 +114,7 @@ Phases are listed **in the order you do them**.
 |---|---|---|---|---|---|---|
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
-| 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 0 | 16 h | — | ☐ |
+| 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 1 | 16 h | ~1 h | 🔨 |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **23** | **~326 h** | ~24 h | |
+| | **Total** | **137** | **24** | **~326 h** | ~25 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -211,7 +211,7 @@ idempotency), built before any module needs it.
 
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
-| 2.1 | `docs/lld/platform-kernel.md` (§1–§6) | — | — | — | 1 h | ☐ | |
+| 2.1 | [`docs/lld/platform-kernel.md`](docs/lld/platform-kernel.md) (§1–§9 drafted; §10–§11 after 2.8) | — | — | — | 1 h | ✅ | 2026-10-02 |
 | 2.2 | Domain exception hierarchy → Problem Details with stable `code`s; validation `errors[]` | sealed exception hierarchy, `ProblemDetail` extensions | — | — | 2 h | ☐ | |
 | 2.3 | Domain events as records in `kernel`; publish with `ApplicationEventPublisher` | events, `@TransactionalEventListener` phases | — | **Observer**: decoupled side effects | 2 h | ☐ | |
 | 2.4 | Transactional outbox: `outbox_message` table (Flyway V2), writer in the same transaction, relay with `FOR UPDATE SKIP LOCKED` | `@Transactional` propagation, native queries, `@Scheduled` | — | **Transactional Outbox**: no dual-write | 4 h | ☐ | |
