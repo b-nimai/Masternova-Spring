@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 in progress on `phase-4/notification`.
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR pending, `phase-4/notification`).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -118,7 +118,7 @@ Phases are listed **in the order you do them**.
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
-| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 7 | 14 h | ~12.5 h | 🔨 |
+| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **57** | **~326 h** | ~91 h | |
+| | **Total** | **137** | **58** | **~326 h** | ~92.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -285,7 +285,7 @@ versioned, scanned artifacts.
 | 4.5 | `MailProvider` adapters: SMTP (`JavaMailSender`, 5xx `SMTPAddressFailedException` → permanent) + Resend (`RestClient`, 422 → permanent) behind `masternova.notification.provider`; `NotificationService` (render → claim → send → SENT / FAILED+rethrow / BOUNCED); `SendVerificationEmail` handler with a consumer-owned event view. Tests: fakes for the pipeline, `MockRestServiceServer`, Mailpit container IT; **live: signup → email in Mailpit in 3 s**. Pattern note [12 Adapter](patterns/docs/12-adapter.md) + lab contract test over two fake vendors. | `@ConditionalOnProperty`, `JavaMailSender`, `RestClient`, `MockRestServiceServer`, Testcontainers `GenericContainer` | — | **Adapter** | 2 h | ✅ | 2026-10-02 |
 | 4.6 | Suppression list + preferences (`Audience` repository; consent order: suppressed address beats even mandatory, opt-out only for optional categories; a bounce suppresses the address). Kernel `UnsubscribeTokens` HMAC codec shared by worker (issues) and api (verifies), `NOTIFICATION_TOKEN_SECRET` file secret; footer link + RFC 8058 `List-Unsubscribe` headers. identity publishes `EmailVerified` → `SendWelcomeEmail`. api `notification` module: `GET`/`PUT /me/notification-preferences` (422 `CATEGORY_MANDATORY`), public `POST /notifications/unsubscribe` (+ `/one-click`). Java note [11 HMAC & signed tokens](patterns/java/11-hmac-and-signed-tokens.md). | `Mac` / HMAC-SHA256, `MessageDigest.isEqual`, Base64url, `INSERT … WHERE EXISTS … ON CONFLICT`, `PublicEndpoints` | — | Repository | 1.5 h | ✅ | 2026-10-02 |
 | 4.7 | Angular: `/account/notifications` (one `MatSlideToggle` per category, mandatory ones locked; optimistic update + rollback + snackbar, per-category in-flight lock) and public `/unsubscribe?token=…` (confirm-then-POST so link scanners unsubscribe nobody). `NotificationApi` in `core/api`. **Live:** signup → verify → welcome email with footer link + `List-Unsubscribe` headers → one-click opt-out → a replayed event is `SUPPRESSED`. Angular note [03 Optimistic UI](patterns/angular/03-optimistic-ui-and-server-state.md). | — | `MatSlideToggle`, `MatSnackBar`, optimistic UI, immutable signal updates, `finalize` | — | 1.5 h | ✅ | 2026-10-02 |
-| 4.8 | Tests: relay crash + redelivery IT, handler run-twice test, Mailpit assertion | Testcontainers `GenericContainer` (Mailpit) | — | — | 1.5 h | ☐ | |
+| 4.8 | `NotificationPipelineIT`: outbox row → real relay → handler → Mailpit; a redelivered event (handler runs twice) sends one email; a worker that died mid-send is taken over after its lease (`SENT/2`); welcome headers + opt-out → `SUPPRESSED`. Playwright `notifications.spec.ts`: signup → verification email read from Mailpit → verify → welcome email → unsubscribe link → preferences page. Worker coverage floor 94 % / 82 % (measured 97 / 88). Notification LLD §10–11 complete. | Testcontainers `GenericContainer` (Mailpit), `@DynamicPropertySource`, Playwright `expect.poll` + `request` | e2e against a real inbox | — | 1.5 h | ✅ | 2026-10-02 |
 
 ---
 

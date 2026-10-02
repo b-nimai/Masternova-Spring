@@ -13,6 +13,13 @@
 	<artifactId>worker</artifactId>
 	<name>worker</name>
 
+	<properties>
+		<!-- Coverage floor = measured (unit + IT merged) minus a small margin: 97 % lines / 88 % branches
+		     on 2026-10-02. Raise it as coverage grows; never lower it to make a build pass. -->
+		<coverage.line>0.94</coverage.line>
+		<coverage.branch>0.82</coverage.branch>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>com.masternova</groupId>

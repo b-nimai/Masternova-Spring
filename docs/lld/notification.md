@@ -8,7 +8,7 @@
 - consent side, in the api: `backend/api/src/main/java/com/masternova/api/notification`
 - the outbox protocol both sides share: `backend/messaging` ([ADR-0008](../adr/0008-shared-messaging-module.md))
 
-**Status:** building: 4.1–4.6 done (send pipeline, consent, unsubscribe) → built (4.8) · **Last updated:** 2026-10-02
+**Status:** built (Phase 4, 4.1–4.8) · **Last updated:** 2026-10-02
 **Angular:** `frontend/src/app/features/account/notifications` (preferences), `features/unsubscribe`
 **Reused from:** NestJS Masternova `docs/lld/notification.md` (same forces and the same delivery
 state machine, re-derived for Spring).
@@ -290,8 +290,55 @@ into the `messaging` module's resources: `db/migration/V2__platform_outbox.sql`.
 
 ## 10. Tests that prove it
 
-*(Completed in 4.8.)*
+| Level | Test | Proves |
+|---|---|---|
+| unit (no DB, no SMTP) | `NotificationServiceTest` (fakes: `InMemoryEmailDeliveries`, `InMemoryAudience`, a scripted provider) | redelivered event → **one** email; temporary failure → `FAILED` + rethrow → resent once; permanent → `BOUNCED` + address suppressed; suppression beats a mandatory email; opt-out stops optional only; signed unsubscribe link + RFC 8058 headers on optional emails only; a rendering bug leaves no claimed row |
+| unit | `EmailTemplateTest` | Template Method skeleton: plaintext twin, layout, escaping, unsubscribe invariant, `final render` |
+| unit | `UnsubscribeTokensTest` (kernel) | round trip; expiry; a re-signed category, another secret and garbage are all rejected; short secrets refused |
+| unit | `SmtpMailProviderTest`, `ResendMailProviderTest` (`MockRestServiceServer`) | each adapter's request mapping and **failure translation** (5xx/422 → permanent, rest temporary) |
+| integration (Postgres) | `JdbcEmailDeliveriesIT` | the claim SQL: 20 concurrent claimers → 1 sender; stale `SENDING` taken over after the lease; terminal states stay terminal |
+| integration (Postgres) | `JdbcAudienceIT` | citext suppression lookup; only an explicit `enabled = false` row is an opt-out |
+| integration (SMTP) | `SmtpMailProviderIT` (Mailpit container) | a real multipart email with both parts and custom headers |
+| ⭐ integration (whole send side) | `NotificationPipelineIT`: outbox row → **real relay** → handler → pipeline → Mailpit | a **redelivered event** sends nothing new; a **worker that died mid-send** is taken over once its lease expires (`SENT/2`); the welcome email carries the headers; an opt-out turns the next one into `SUPPRESSED` |
+| integration (api) | `NotificationPreferencesIT`, `SignupIT` | defaults without rows; upsert; 422 `CATEGORY_MANDATORY`; 401 without a token; public unsubscribe (JSON + RFC 8058 form) is idempotent; forged/mandatory tokens change nothing; verifying publishes exactly one `EmailVerified` |
+| frontend | `notifications.spec.ts`, `unsubscribe.spec.ts`, `notification-api.spec.ts` | optimistic toggle + rollback + per-category lock; the unsubscribe page does nothing until clicked |
+| ⭐ e2e (browser + real inbox) | `e2e/tests/notifications.spec.ts` | signup → verification email (read from Mailpit) → verify → welcome email → its unsubscribe link → the preferences page agrees → a toggle survives a reload |
+
+**Coverage floor** (worker, unit + IT merged): 94 % lines / 82 % branches (measured 97 % / 88 %).
 
 ## 11. Interview notes — 60-second recall
 
-*(Written last, in 4.8.)*
+- **What:** turn domain events into **exactly one consented email each**, without a mail outage
+  ever failing the user's request.
+- **Delivery:**
+  - The api writes the event to the **outbox in the same transaction** as the state change.
+  - The worker's relay claims it (`FOR UPDATE SKIP LOCKED`, lease) and dispatches to an
+    `OutboxHandler` by event type (**Registry**).
+  - At-least-once delivery, so **effects must be idempotent**.
+- **Exactly-once effect:**
+  - A unique `(event_id, template, recipient)` row is the claim, behind an
+    `INSERT … ON CONFLICT DO UPDATE … WHERE` state machine (`SENDING → SENT | FAILED | BOUNCED`,
+    `SUPPRESSED`).
+  - A redelivered event finds `SENT` and stops.
+  - A crashed sender's claim is taken over after the lease.
+  - Remaining gap: SMTP accepts the mail, then the worker dies before marking it → one duplicate
+    is possible. Accepted and documented; there is no two-phase commit with an SMTP server.
+- **Consent, in order:**
+  1. A suppressed address gets nothing, **even mandatory** mail (deliverability).
+  2. An opt-out applies only to optional categories.
+  3. A permanent bounce suppresses the address.
+- **Unsubscribe:**
+  - A stateless **HMAC token** (`userId.category.expiry` + tag; constant-time compare) issued by
+    the worker and verified by the api; the codec lives in the kernel.
+  - The email link opens a page that **POSTs on click**, so link scanners can't unsubscribe anyone.
+  - The `List-Unsubscribe` + `List-Unsubscribe-Post` headers give Gmail's one-click button.
+- **Patterns:**
+  - **Template Method:** `EmailTemplate.render`; no email can skip the text part or the
+    unsubscribe link.
+  - **Adapter:** SMTP/Resend behind `MailProvider`, translating failures into permanent vs
+    temporary.
+  - **Registry:** handlers by event type.
+  - **Observer:** durable, via the outbox.
+  - **Repository:** `EmailDeliveries`, `Audience`, so the rules are unit-tested without Postgres.
+- **Why a worker:** the api never waits on a third party (ADR-0001). The shared `messaging`
+  module guarantees both sides speak one outbox protocol (ADR-0008).
