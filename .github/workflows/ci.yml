@@ -217,3 +217,18 @@ jobs:
           IMAGE: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
           DIGEST: ${{ steps.push.outputs.digest }}
         run: cosign sign --yes "$IMAGE@$DIGEST"
+
+  # ⭐ The ONE check branch protection requires. Path filters skip jobs whose files didn't change,
+  #    and the job list grows over time; this job turns "every job passed or was skipped" into a
+  #    single stable status, so the protection rule never needs editing.
+  ci-ok:
+    if: always()
+    needs: [changes, backend, patterns-lab, frontend, workflows, images]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null

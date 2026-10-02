@@ -22,6 +22,7 @@
 | 3 | [Releases: tag-driven, promote don't rebuild](#3-releases-tag-driven-promote-dont-rebuild-) | ⭐⭐⭐ | D2.2 |
 | 4 | [Supply chain: SBOMs, provenance, keyless signing](#4-supply-chain-sboms-provenance-keyless-signing-) | ⭐⭐⭐ | D2.3 |
 | 5 | [Quality gates: coverage, CodeQL, actionlint, dependency policy](#5-quality-gates-coverage-codeql-actionlint-dependency-policy-) | ⭐⭐ | D2.4 |
+| 6 | [Protecting main: one required check](#6-protecting-main-one-required-check-) | ⭐⭐⭐ | D2.5 |
 
 ---
 
@@ -400,4 +401,58 @@ auto-merge green patch updates. **This repo deliberately doesn't**: its history 
 owner. A green Dependabot PR is re-applied as the owner's own commit (same diff, CI proves it
 again), and the bot's PR is closed. The trade-off is a few minutes of manual work per week,
 against a clean, single-author history.
+
+---
+
+## 6. Protecting main: one required check ⭐⭐⭐
+
+**The rule** (GitHub branch protection on `main`, applied with `gh api`):
+
+| Setting | Value | Why |
+|---|---|---|
+| require a pull request | ✅, **0** approvals | nothing reaches `main` without CI. A solo owner can still merge their own PRs. |
+| required status checks | `ci-ok`, `analyze (java-kotlin)`, `analyze (javascript-typescript)` | green CI + CodeQL |
+| require the branch to be up to date | ❌ | avoids rebase churn. Merge commits + CI on `main` catch the rare semantic conflict. |
+| include administrators | ✅ | for a one-person repo the owner *is* the admin; otherwise the rule protects nothing |
+| force pushes / deletion | ❌ / ❌ | `main`'s history is append-only |
+
+**Why one aggregate check (`ci-ok`) instead of listing every job ⭐:**
+
+1. **Path filters skip jobs.** A docs-only PR skips `backend`. GitHub treats a *skipped* job as
+   satisfying a required check, so that part works.
+2. **The job list grows.** Every new CI job (e2e in D2.6, more later) would mean editing the
+   protection rule, and forgetting means the new job isn't actually required.
+3. **Matrix names change.** Rename `image (api)` and the old required name waits forever.
+
+```yaml
+ci-ok:
+  if: always()                                  # run even when something failed or was skipped
+  needs: [changes, backend, patterns-lab, frontend, workflows, images]
+  steps:
+    - env: { NEEDS: '${{ toJSON(needs) }}' }    # via env, never inlined into the script
+      run: echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")'
+```
+
+`if: always()` is essential. Without it, `ci-ok` would itself be *skipped* when a dependency
+failed, and a skipped required check counts as passing: **a red build could merge.**
+
+**The command** (run once, after the PR that introduced `ci-ok` had reported it):
+
+```bash
+gh api -X PUT repos/b-nimai/Masternova-Spring/branches/main/protection --input protection.json
+# protection.json:
+# { "required_status_checks": { "strict": false, "contexts": ["ci-ok", "analyze (java-kotlin)", "analyze (javascript-typescript)"] },
+#   "enforce_admins": true,
+#   "required_pull_request_reviews": { "required_approving_review_count": 0 },
+#   "restrictions": null, "allow_force_pushes": false, "allow_deletions": false }
+```
+
+Apply it only **after** a run has reported those check names. A required check that has never
+reported blocks every merge until it does.
+
+**Also in `.github/`:**
+
+- **`pull_request_template.md`:** what/why, how it was verified, and a checklist (tests, docs,
+  roadmap, no secrets, owner-only commits).
+- **`CODEOWNERS`:** `* @b-nimai` documents ownership and auto-requests reviews on anyone else's PR.
 
