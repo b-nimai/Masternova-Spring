@@ -3,6 +3,7 @@ package com.masternova.api.identity.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.masternova.api.TestcontainersConfiguration;
+import com.masternova.api.identity.EmailVerified;
 import com.masternova.api.identity.UserRegistered;
 import com.masternova.api.identity.domain.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -123,6 +124,14 @@ class SignupIT {
         .bodyJson()
         .extractingPath("$.code")
         .isEqualTo("VERIFICATION_TOKEN_INVALID");
+
+    // ⭐ exactly one EmailVerified, committed with the state change → exactly one welcome email
+    assertThat(
+            jdbc.sql("SELECT count(*) FROM outbox_message WHERE event_type = :type")
+                .param("type", EmailVerified.TYPE)
+                .query(Long.class)
+                .single())
+        .isEqualTo(1);
   }
 
   @Test

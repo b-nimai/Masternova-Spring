@@ -169,7 +169,8 @@ and it would fail on retry anyway.
 
 **Deny by default.** Every route needs `Authorization: Bearer <access token>` unless a module
 declares it public through a `PublicEndpoints` bean (platform API). Today the public routes are
-`/api/v1/auth/**`, `/api/v1/meta/**` and the health endpoints. An unknown route without a token
+`/api/v1/auth/**`, `POST /api/v1/notifications/unsubscribe/**` (§14), `/api/v1/meta/**` and
+the health endpoints. An unknown route without a token
 is 401, not 404, so the API reveals nothing about what exists.
 
 | Endpoint | Body | Answer |
@@ -193,3 +194,25 @@ is 401, not 404, so the API reveals nothing about what exists.
 
 Implemented by `identity.infrastructure.security.SecurityConfig`, `ProblemSecurityHandlers` and
 `identity.web.AuthController`. Design: [`docs/lld/identity.md`](../lld/identity.md).
+
+## 14. Notification consent
+
+| Endpoint | Auth | Body | Answer |
+|---|---|---|---|
+| `GET /me/notification-preferences` | user | — | 200 `[{category, enabled, mandatory}]`, **every** category in a fixed order |
+| `PUT /me/notification-preferences/{category}` | user | `{enabled}` (required, `false` ≠ missing) | 200 `{category, enabled, mandatory}`; 422 `CATEGORY_MANDATORY`; 400 for an unknown category |
+| `POST /notifications/unsubscribe` | public | `{token}` | 200 `{category}`; 422 `UNSUBSCRIBE_TOKEN_INVALID` |
+| `POST /notifications/unsubscribe/one-click?token=…` | public | form `List-Unsubscribe=One-Click` (RFC 8058) | 200 empty |
+
+- **Categories** are the kernel enum `NotificationCategory`. `ACCOUNT_SECURITY` and `PURCHASE`
+  are mandatory: always `enabled: true`, never changeable.
+- **No row means subscribed.** Only changed categories are stored.
+- **The token is the credential** for the public endpoints: an HMAC-signed `userId + category +
+  expiry` (30 days), issued by the worker into each opt-out-able email. Forged, expired,
+  malformed and mandatory-category tokens all get the same 422, so a forger learns nothing.
+- **Unsubscribing is idempotent:** a second click answers 200 again.
+- **Never a GET that changes state.** The email's link opens the web page `/unsubscribe?token=…`,
+  which POSTs; mail scanners that prefetch links therefore can't unsubscribe anyone.
+
+Implemented by `notification.web.NotificationPreferencesController` and `UnsubscribeController`.
+Design: [`docs/lld/notification.md`](../lld/notification.md).

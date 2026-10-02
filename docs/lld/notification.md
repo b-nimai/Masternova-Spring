@@ -8,7 +8,7 @@
 - consent side, in the api: `backend/api/src/main/java/com/masternova/api/notification`
 - the outbox protocol both sides share: `backend/messaging` ([ADR-0008](../adr/0008-shared-messaging-module.md))
 
-**Status:** draft (Phase 4.1) → built (4.8) · **Last updated:** 2026-10-02
+**Status:** building: 4.1–4.6 done (send pipeline, consent, unsubscribe) → built (4.8) · **Last updated:** 2026-10-02
 **Angular:** `frontend/src/app/features/account/notifications` (preferences), `features/unsubscribe`
 **Reused from:** NestJS Masternova `docs/lld/notification.md` (same forces and the same delivery
 state machine, re-derived for Spring).
@@ -183,6 +183,33 @@ sequenceDiagram
 
 The email's link opens the Angular page `/unsubscribe?token=…`, and **the page** POSTs. A
 scanner's GET only loads the page, so it never unsubscribes anyone.
+
+**One-click unsubscribe (RFC 8058).** Gmail and Yahoo require bulk senders to offer an
+"Unsubscribe" button next to the sender name. Each opt-out-able email therefore also carries two
+headers (built by the worker's `UnsubscribeLinks`):
+
+```text
+List-Unsubscribe: <https://…/api/v1/notifications/unsubscribe/one-click?token=…>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+```
+
+The mailbox provider POSTs the form body `List-Unsubscribe=One-Click` to that URL; the api's
+`UnsubscribeController.oneClick` runs the same rule as the page. Mandatory emails carry neither
+the footer link nor the headers.
+
+**Consent order in `NotificationService.send`** (unit-tested in `NotificationServiceTest`):
+
+1. **Suppressed address?** → `SUPPRESSED`, even for a mandatory email: a dead or complaining
+   mailbox hurts deliverability for every user.
+2. **Optional category and opted out?** → `SUPPRESSED` with reason `opted out of <category>`.
+3. Otherwise render (with the unsubscribe link for optional categories), claim and send.
+4. A permanent rejection marks the email `BOUNCED` **and** adds the address to
+   `email_suppression` (reason `BOUNCED`), so later emails stop at step 1.
+
+**api structure:** `NotificationPreferencesService` (list / set / unsubscribe) over the
+`NotificationPreferences` repository (`JdbcNotificationPreferences`: a single-statement
+`INSERT … SELECT … WHERE EXISTS … ON CONFLICT DO UPDATE`). The `WHERE EXISTS` means a link that
+outlives its account writes nothing instead of failing on the foreign key.
 
 **Unsubscribe token:**
 

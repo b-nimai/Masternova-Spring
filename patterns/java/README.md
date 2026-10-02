@@ -19,6 +19,7 @@ the lines worth remembering.
 | 08 | Spring IoC & DI (with NestJS mapping): bean declaration, constructor injection, resolution, scopes, lifecycle, full vs lite `@Configuration`, conditions & auto-config, `@ConfigurationProperties` | [08-spring-ioc-and-di.md](08-spring-ioc-and-di.md) | `backend/api/.../learning/ioc/` learning tests + real `MasternovaProperties` | 1.8 | ✅ |
 | 09 | Spring AOP & proxies: JDK vs CGLIB, aspects, self-invocation, `@Transactional` rollback & propagation, silent-failure checklist | [09-spring-aop-and-proxies.md](09-spring-aop-and-proxies.md) | `backend/api/.../learning/aop/` + pattern lab `patterns/proxy/` | 1.9 | ✅ |
 | 10 | Request lifecycle & JPA: filter/interceptor/advice order, validation, persistence context, entity states, lazy loading, N+1 measured, Spring Data | [10-request-lifecycle-and-jpa.md](10-request-lifecycle-and-jpa.md) | `backend/api/.../learning/web/` + `learning/jpa/` (Testcontainers) | 1.10 | ✅ |
+| 11 | HMAC & signed tokens: hash vs HMAC vs encryption vs signature, length extension, constant-time compare, `Mac` thread safety, stateless vs stored tokens | [11-hmac-and-signed-tokens.md](11-hmac-and-signed-tokens.md) | `backend/kernel/.../notification/UnsubscribeTokens` (+ test) | 4.6 | ✅ |
 
 **Run all study code:** `cd patterns/lab && ./mvnw test`
 **Experiment:** `./mvnw -q compile && jshell --class-path target/classes` (see each note's jshell section)
