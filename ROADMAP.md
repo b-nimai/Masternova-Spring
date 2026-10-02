@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: Phase 1 ✅ (merged, PR #10). Phase 2 in progress on `phase-2/platform-kernel`: 2.1–2.3 ✅. Next: 2.4 (transactional outbox).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: Phase 1 ✅ (merged, PR #10). Phase 2 in progress on `phase-2/platform-kernel`: 2.1–2.4 ✅. Next: 2.5 (ADR-0005: outbox vs Modulith registry).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -114,7 +114,7 @@ Phases are listed **in the order you do them**.
 |---|---|---|---|---|---|---|
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
-| 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 3 | 16 h | ~4.5 h | 🔨 |
+| 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 4 | 16 h | ~8.5 h | 🔨 |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **26** | **~326 h** | ~28.5 h | |
+| | **Total** | **137** | **27** | **~326 h** | ~32.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -214,7 +214,7 @@ idempotency), built before any module needs it.
 | 2.1 | [`docs/lld/platform-kernel.md`](docs/lld/platform-kernel.md) (§1–§9 drafted; §10–§11 after 2.8) | — | — | — | 1 h | ✅ | 2026-10-02 |
 | 2.2 | Sealed `DomainException` kinds → Problem Details with stable `code`s, `type` URIs, `errors[]`; codes for Spring's own errors; no-leak 500 | sealed exception hierarchy, `ProblemDetail` extensions, `ResponseEntityExceptionHandler` hooks | — | — | 2 h | ✅ | 2026-10-02 |
 | 2.3 | `DomainEvent` (kernel) + `EventPublisher` (`MANDATORY` tx) + observer-timing tests; Observer pattern note + lab ([pattern](patterns/docs/07-observer.md)) | events, `@TransactionalEventListener` phases, `Propagation.MANDATORY`, thread-bound transactions | — | **Observer**: decoupled side effects (catalog ✅) | 2 h | ✅ | 2026-10-02 |
-| 2.4 | Transactional outbox: `outbox_message` table (Flyway V2), writer in the same transaction, relay with `FOR UPDATE SKIP LOCKED` | `@Transactional` propagation, native queries, `@Scheduled` | — | **Transactional Outbox**: no dual-write | 4 h | ☐ | |
+| 2.4 | Transactional outbox: `outbox_message` (Flyway V2, partial index), writer in the caller's tx, relay claiming with `FOR UPDATE SKIP LOCKED` + lease, backoff → DEAD; IT on Postgres incl. 4 concurrent relays ([pattern](patterns/docs/17-transactional-outbox.md)) | propagation `MANDATORY`, `JdbcClient` + `UPDATE … RETURNING`, `@Scheduled`, typed relay config | — | **Transactional Outbox** (catalog ✅) | 4 h | ✅ | 2026-10-02 |
 | 2.5 | Compare with the Spring Modulith event publication registry; **ADR-0005** (keep hand-rolled or switch) | Modulith events, `@ApplicationModuleListener` | — | — | 1 h | ☐ | |
 | 2.6 | `Idempotency-Key` filter: stored request hash + response, 400/409/422 rules | `OncePerRequestFilter`, `ContentCachingResponseWrapper` | — | Chain of Responsibility (filter) | 3 h | ☐ | |
 | 2.7 | Repository + Unit of Work made explicit: domain repository interfaces over Spring Data; `@Transactional` as UoW | Spring Data JPA, derived queries, transactions | — | **Repository + UoW**: catalog row 16 | 1 h | ☐ | |
@@ -534,4 +534,6 @@ Each line is a sentence you can say *and* a file or test you can show.
 | google-java-format pinned to 1.35.0 | 1.36+ pulls in a commonmark dependency that Spotless 3.10 fails to load |
 | Healthcheck via bash `/dev/tcp` instead of curl | The Temurin JRE image ships no curl/wget; installing them only adds CVEs |
 | First CI run failed: `aquasecurity/trivy-action@0.33.1` (tags now carry a `v` prefix) | Fixed to `@v0.36.0` in 94f94b0. Lesson: pin action versions you have verified exist. |
+| The outbox relay runs inside the **api** process in Phase 2 (not the worker, as the HLD shows) | The relay needs the outbox repository; sharing it with the worker needs a shared Spring library module. Phase 4 (4.2) extracts `backend/outbox` and moves the relay; until then `masternova.outbox.relay-enabled` controls it. |
+| `SecurityConfig` is `@ConditionalOnWebApplication(SERVLET)` | Found in 2.4: a non-web context (`@SpringBootTest(webEnvironment = NONE)`) has no `HttpSecurity` bean. |
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |

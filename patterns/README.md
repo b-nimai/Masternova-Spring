@@ -74,7 +74,7 @@ The catalog is checked by tests, so it can't go stale:
 | 14 | Facade | Structural | `EntitlementService` · `CheckoutService` (Phases 8, 9) | — | — | — | ☐ |
 | 15 | Proxy | Structural | Spring's own: `@Transactional` / `@PreAuthorize` / `@Cacheable` proxies · lazy video manifests · playback guard (Phases 1, 8) | — | [note](docs/15-proxy.md) | [lab](lab/src/main/java/com/masternova/patterns/proxy/) | 🔨 |
 | 16 | Repository + Unit of Work | Enterprise | Every module's persistence; `@Transactional` is the Unit of Work (Phase 2) | — | — | — | ☐ |
-| 17 | Transactional Outbox | Enterprise | State change + event in one transaction, relayed by the worker (Phase 2) | — | — | — | ☐ |
+| 17 | Transactional Outbox | Enterprise | Event row committed with the state change; relay claims with `SKIP LOCKED`, retries with backoff (Phase 2; relay moves to the worker in Phase 4) | `com.masternova.api.platform.outbox.JsonOutboxWriter`<br>`com.masternova.api.platform.outbox.OutboxRelay` | [note](docs/17-transactional-outbox.md) | [lab](lab/src/main/java/com/masternova/patterns/outbox/) | ✅ |
 | 18 | Value Object | Enterprise | `Money` (course prices, coupons, revenue splits) · `LectureDuration` (Phases 5, 9) | — | [note](java/01-records-and-value-objects.md) | [lab](lab/src/main/java/com/masternova/java/valueobject/) | 🔨 |
 <!-- catalog:end -->
 

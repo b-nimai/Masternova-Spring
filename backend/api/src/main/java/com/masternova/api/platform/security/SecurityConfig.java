@@ -1,5 +1,6 @@
 package com.masternova.api.platform.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -14,6 +15,9 @@ import org.springframework.security.web.SecurityFilterChain;
  * <p>Worth noticing already: {@link SecurityFilterChain} is Spring's own Chain of Responsibility —
  * each filter either handles the request or passes it on.
  */
+// Only for a servlet web app: HttpSecurity doesn't exist in a non-web context (e.g. a
+// @SpringBootTest with webEnvironment = NONE, or a future batch-only profile).
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @Configuration(proxyBeanMethods = false)
 class SecurityConfig {
 

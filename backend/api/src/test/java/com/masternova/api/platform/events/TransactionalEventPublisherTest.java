@@ -118,7 +118,9 @@ class TransactionalEventPublisherTest {
     @Bean
     TransactionalEventPublisher publisher(
         org.springframework.context.ApplicationEventPublisher spring) {
-      return new TransactionalEventPublisher(spring);
+      // the outbox writer is a lambda here: it records WHEN the append happens
+      return new TransactionalEventPublisher(
+          spring, event -> log.add("outbox " + event.aggregateId()));
     }
 
     @Bean
@@ -146,8 +148,9 @@ class TransactionalEventPublisherTest {
           assertThat(log(ctx))
               .containsExactly(
                   "tx: begin",
+                  "outbox c1", //                         ⭐ appended INSIDE the transaction …
                   "@EventListener c1", //                 during the transaction
-                  "tx: commit",
+                  "tx: commit", //                        … so it commits with the change
                   "@TransactionalEventListener c1"); //   after the commit
         });
   }
@@ -169,7 +172,10 @@ class TransactionalEventPublisherTest {
 
           // ⭐ the in-transaction listener already ran (it can't be undone) — the after-commit one
           // never did
-          assertThat(log(ctx)).containsExactly("tx: begin", "@EventListener c2", "tx: rollback");
+          // the outbox append is rolled back WITH the change (in the real DB: no row, no ghost
+          // event)
+          assertThat(log(ctx))
+              .containsExactly("tx: begin", "outbox c2", "@EventListener c2", "tx: rollback");
         });
   }
 
