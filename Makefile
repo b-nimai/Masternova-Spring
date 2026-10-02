@@ -14,7 +14,12 @@ down: ## Stop everything (volumes kept)
 nuke: ## Stop everything AND delete volumes (fresh database)
 	docker compose --profile app down -v
 
-stack: ## Build images and run the whole app in containers (web on :8081)
+secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
+	@mkdir -p secrets
+	@[ -s secrets/jwt_access_secret ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/jwt_access_secret; \
+	  chmod 644 secrets/jwt_access_secret; echo "created secrets/jwt_access_secret"; }
+
+stack: secrets ## Build images and run the whole app in containers (web on :8081)
 	docker compose --profile app up -d --build --wait postgres redis minio mailpit api worker web
 
 api: ## Run the api from source (:8080)
@@ -46,4 +51,4 @@ scan: images ## Scan images for HIGH/CRITICAL CVEs with Trivy (runs in Docker)
 	    --severity HIGH,CRITICAL --ignore-unfixed masternova-spring/$$img:local; \
 	done
 
-.PHONY: help up down nuke stack api worker web test format images scan
+.PHONY: help up down nuke secrets stack api worker web test format images scan

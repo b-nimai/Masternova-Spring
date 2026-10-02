@@ -34,7 +34,8 @@ make api         # run the api from source (Boot reuses the compose infra)
 make web         # Angular dev server :4200, proxies /api → :8080
 make test        # backend verify (incl. Testcontainers) + pattern lab + frontend lint/test
 make format      # Spotless (google-java-format) + Prettier
-make stack       # everything in containers, web on :8081
+make secrets     # generate the gitignored secret files the container stack mounts
+make stack       # everything in containers, web on :8081 (runs `make secrets` first)
 make scan        # Trivy on all images
 ```
 

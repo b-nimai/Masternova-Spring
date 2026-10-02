@@ -3,6 +3,10 @@
 spring:
   application:
     name: api
+  config:
+    # Secrets mounted as files (compose `secrets:`, Kubernetes Secret volumes): each file under
+    # /run/secrets becomes a property named after the file, e.g. JWT_ACCESS_SECRET below.
+    import: optional:configtree:/run/secrets/
   threads:
     virtual:
       enabled: true # one virtual thread per request (Java 21+): blocking JDBC without pool starvation
