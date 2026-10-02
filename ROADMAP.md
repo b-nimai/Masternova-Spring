@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 0 done locally. Next: 0.12 (GitHub repo + green CI), then Phase 1.
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 0 ✅ (repo public, CI green). Next: Phase 1, task 1.1.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -109,7 +109,7 @@ Phases are listed **in the order you do them**.
 
 | # | Phase | Tasks | Done | Est | Spent | Status |
 |---|---|---|---|---|---|---|
-| 1 | [0 — Foundation](#phase-0--foundation) | 12 | 11 | 16 h | ~6 h | 🔨 |
+| 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 0 | 14 h | — | ☐ |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 0 | 16 h | — | ☐ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
@@ -127,7 +127,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **11** | **~326 h** | ~6 h | |
+| | **Total** | **137** | **12** | **~326 h** | ~7 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -163,7 +163,7 @@ docs) before any feature exists.
 | 0.9 | CI (`.github/workflows/ci.yml`: path-filtered backend · lab · frontend · images + Trivy) + Dependabot | — | — | — | 1 h | ✅ | 2026-10-02 |
 | 0.10 | Trivy clean: override Boot-managed Tomcat 11.0.26 / Jackson 3.1.7, `apk upgrade` in nginx | overriding managed versions via properties | — | — | 0.5 h | ✅ | 2026-10-02 |
 | 0.11 | Docs: ADR 0001–0004, LLD template, API conventions, HLD architecture | — | — | — | 1 h | ✅ | 2026-10-02 |
-| 0.12 | Create `github.com/b-nimai/Masternova-Spring`, push, CI green, protect `main` | — | — | — | 0.5 h | ☐ | |
+| 0.12 | Create `github.com/b-nimai/Masternova-Spring` (public), push, CI green. Branch protection moved to D2.5. | `gh` CLI, OAuth `workflow` scope | — | — | 0.5 h | ✅ | 2026-10-02 |
 
 **Exit check** (all green locally, 2026-10-02):
 
@@ -528,4 +528,5 @@ Each line is a sentence you can say *and* a file or test you can show.
 | `spring-modulith-starter-jpa` removed from the Initializr selection | Its event-publication table would need a hand-written migration now. Phase 2 hand-rolls the outbox first, then compares (2.5). |
 | google-java-format pinned to 1.35.0 | 1.36+ pulls in a commonmark dependency that Spotless 3.10 fails to load |
 | Healthcheck via bash `/dev/tcp` instead of curl | The Temurin JRE image ships no curl/wget; installing them only adds CVEs |
+| First CI run failed: `aquasecurity/trivy-action@0.33.1` (tags now carry a `v` prefix) | Fixed to `@v0.36.0` in 94f94b0. Lesson: pin action versions you have verified exist. |
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |
