@@ -5,8 +5,8 @@ MVN := cd backend && ./mvnw -B
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start infra (postgres, redis, minio, mailpit)
-	docker compose up -d --wait postgres redis minio mailpit && docker compose up minio-init
+up: ## Start infra (postgres, redis, mailpit); S3 storage is the opt-in `media` profile until Phase 7
+	docker compose up -d --wait postgres redis mailpit
 
 down: ## Stop everything (volumes kept)
 	docker compose --profile app down
@@ -20,7 +20,7 @@ secrets: ## Generate the local secret files the container stack mounts (gitignor
 	  chmod 644 secrets/jwt_access_secret; echo "created secrets/jwt_access_secret"; }
 
 stack: secrets ## Build images and run the whole app in containers (web on :8081)
-	docker compose --profile app up -d --build --wait postgres redis minio mailpit api worker web
+	docker compose --profile app up -d --build --wait postgres redis mailpit api worker web
 
 api: ## Run the api from source (:8080)
 	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && cd backend && ./mvnw -pl api spring-boot:run

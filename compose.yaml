@@ -80,7 +80,11 @@ services:
       timeout: 3s
       retries: 10
 
+  # ⚠️ MinIO stopped publishing its images (minio/minio and quay.io/minio/* are no longer
+  #    pullable as of 2026-10-02). Opt-in until Phase 7 picks a replacement S3 server:
+  #    `docker compose --profile media up -d` works only where the image is already cached.
   minio:
+    profiles: [media]
     image: minio/minio:latest
     restart: unless-stopped
     logging: *logging
@@ -102,6 +106,7 @@ services:
   # Creates the media bucket once. CORS must expose ETag: the browser's multipart uploader reads
   # it off each part response to build the CompleteMultipartUpload request (Phase 7).
   minio-init:
+    profiles: [media]
     image: minio/mc:latest
     depends_on:
       minio:

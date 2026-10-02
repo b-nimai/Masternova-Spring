@@ -272,7 +272,7 @@ jobs:
       - name: Start the stack
         run: |
           make secrets
-          docker compose --profile app up -d --wait postgres redis minio mailpit api worker web
+          docker compose --profile app up -d --wait postgres redis mailpit api worker web
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: e2e/package.json

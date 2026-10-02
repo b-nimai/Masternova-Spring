@@ -30,7 +30,7 @@ seam: use a concrete class until a second implementation is real or planned.
 ## 2. Commands
 
 ```bash
-make up          # infra: postgres :5433, redis :6380, minio :9010/:9011, mailpit :8026
+make up          # infra: postgres :5433, redis :6380, mailpit :8026 (S3/MinIO: opt-in `media` profile, see ROADMAP Phase 7)
 make api         # run the api from source (Boot reuses the compose infra)
 make web         # Angular dev server :4200, proxies /api → :8080
 make test        # backend verify (incl. Testcontainers) + pattern lab + frontend lint/test

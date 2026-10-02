@@ -330,6 +330,12 @@ concurrent edits.
 **Est 30 h** · Goal: upload → playable HLS in under 5 minutes, surviving crashes without
 duplicates.
 
+> ⚠️ **Open decision for 7.1:** MinIO stopped publishing its container images (`minio/minio` and
+> `quay.io/minio/*` are no longer pullable, found 2026-10-02 when CI couldn't pull them). Compose
+> keeps it as an opt-in `media` profile that works only where the image is cached. 7.1 picks the
+> local S3 replacement (candidates: SeaweedFS, Garage, RustFS, LocalStack) in an ADR, and checks
+> that it supports presigned multipart uploads + CORS exposing `ETag`.
+
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
 | 7.1 | `docs/lld/media.md` + `video-pipeline.md` + ADRs (HLS, provider truth) | — | — | — | 2 h | ☐ | |
@@ -531,6 +537,7 @@ Each line is a sentence you can say *and* a file or test you can show.
 |---|---|
 | One `backend/Dockerfile` with `--build-arg APP=api\|worker` instead of one Dockerfile per app | Both apps build identically; one file can't drift from the other |
 | `spring-modulith-starter-jpa` removed from the Initializr selection | Its event-publication table would need a hand-written migration now. Phase 2 hand-rolls the outbox first, then compares (2.5). |
+| MinIO moved to an opt-in compose profile (`media`) | its images are no longer published (2026-10-02); nothing uses S3 before Phase 7, which chooses a replacement |
 | google-java-format pinned to 1.35.0 | 1.36+ pulls in a commonmark dependency that Spotless 3.10 fails to load |
 | Healthcheck via BusyBox `wget` (was bash `/dev/tcp`) | Never install curl/wget just for a healthcheck (they add CVEs). Since D1.2 the runtime is the Alpine JRE ([ADR-0007](docs/adr/0007-alpine-jre-runtime-image.md)), whose BusyBox already has `wget` and has no bash |
 | First CI run failed: `aquasecurity/trivy-action@0.33.1` (tags now carry a `v` prefix) | Fixed to `@v0.36.0` in 94f94b0. Lesson: pin action versions you have verified exist. |
