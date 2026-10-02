@@ -50,6 +50,7 @@ class IdempotencyIT {
             "payment provider down"); // → 500 via GlobalExceptionHandler
       }
       return ResponseEntity.status(201)
+          .header("Location", "/api/v1/test/enrollments/" + run)
           .body(Map.of("enrollmentNo", run, "courseId", body.get("courseId")));
     }
 
@@ -113,6 +114,8 @@ class IdempotencyIT {
     assertThat(first.statusCode()).isEqualTo(201);
     assertThat(retry.statusCode()).isEqualTo(201);
     assertThat(retry.body()).isEqualTo(first.body()); // byte-for-byte the same response
+    // ⭐ …and it still says WHERE the created thing is (stored since 5.6, V7)
+    assertThat(retry.headers().firstValue("Location")).hasValue("/api/v1/test/enrollments/1");
     assertThat(retry.headers().firstValue("Idempotent-Replayed")).hasValue("true");
     assertThat(first.headers().firstValue("Idempotent-Replayed")).isEmpty();
     assertThat(controller.executions).hasValue(1); // ⭐ the effect happened ONCE

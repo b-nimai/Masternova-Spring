@@ -49,6 +49,22 @@ public class Lecture {
 
   protected Lecture() {} // for Hibernate
 
+  /**
+   * ⭐ PROTOTYPE copy constructor: a new lecture in {@code section} with this one's content. New id;
+   * the media {@code assetId} is SHARED on purpose — the transcoded video is immutable and can be
+   * gigabytes, so the copy points at the same asset instead of duplicating it.
+   */
+  Lecture(Section section, Lecture source) {
+    this.id = UUID.randomUUID();
+    this.section = section;
+    this.title = source.title;
+    this.kind = source.kind;
+    this.position = source.position;
+    this.preview = source.preview;
+    this.duration = source.duration; // a value object: immutable, so sharing it is a copy
+    this.assetId = source.assetId; // ⭐ shallow ON PURPOSE
+  }
+
   Lecture(
       Section section,
       String title,

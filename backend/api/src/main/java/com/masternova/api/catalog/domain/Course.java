@@ -1,6 +1,8 @@
 package com.masternova.api.catalog.domain;
 
 import com.masternova.kernel.money.Money;
+import com.masternova.kernel.pattern.DesignPattern;
+import com.masternova.kernel.pattern.Pattern;
 import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -25,7 +27,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Pattern;
 
 /**
  * A course — the AGGREGATE ROOT of Course → Section → Lecture (docs/lld/catalog.md §3). Every
@@ -38,10 +39,16 @@ import java.util.regex.Pattern;
  */
 @Entity
 @Table(name = "course")
+@DesignPattern(
+    value = Pattern.PROTOTYPE,
+    role = "ConcretePrototype (duplicateAsDraft)",
+    note = "patterns/docs/11-prototype.md")
 public class Course {
 
-  private static final Pattern SLUG = Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
-  private static final Pattern LANGUAGE = Pattern.compile("[a-z]{2}");
+  private static final java.util.regex.Pattern SLUG =
+      java.util.regex.Pattern.compile("[a-z0-9]+(-[a-z0-9]+)*");
+  private static final java.util.regex.Pattern LANGUAGE =
+      java.util.regex.Pattern.compile("[a-z]{2}");
   private static final BigDecimal MAX_RATING = BigDecimal.valueOf(5);
 
   @Id private UUID id;
@@ -124,6 +131,44 @@ public class Course {
 
   protected Course() {} // for Hibernate
 
+  /**
+   * ⭐ PROTOTYPE copy constructor (private: {@link #duplicateAsDraft} is the only way in).
+   *
+   * <ul>
+   *   <li>DEEP: sections and lectures are new objects with new ids (each copied by its own copy
+   *       constructor — every class copies what it owns).
+   *   <li>RESET: status, publishedAt, ratings, enrollments — a copy has no history.
+   *   <li>SHARED: immutable values ({@code Money}), references to other aggregates ({@code
+   *       Category}), and media asset ids.
+   * </ul>
+   */
+  private Course(Course source, String slug, Instant now) {
+    this.id = UUID.randomUUID();
+    this.slug = requireSlug(slug);
+    this.title = copyTitle(source.title);
+    this.subtitle = source.subtitle;
+    this.description = source.description;
+    this.language = source.language;
+    this.level = source.level;
+    this.price = source.price; // ⭐ immutable value object: sharing the reference IS a copy
+    this.category = source.category; // another aggregate: referenced, never copied
+    this.instructorId = source.instructorId; // the copy stays with the course's instructor
+    this.instructorName = source.instructorName;
+    this.status = CourseStatus.DRAFT;
+    this.publishedAt = null;
+    this.ratingAverage = BigDecimal.ZERO.setScale(2);
+    this.ratingCount = 0;
+    this.enrollmentCount = 0;
+    this.createdAt = micros(now);
+    this.updatedAt = this.createdAt;
+    source.sections.forEach(section -> this.sections.add(new Section(this, section)));
+    // the rollups are DERIVED: recompute from the copied curriculum rather than trusting the source
+    this.lectureCount = sections.stream().mapToInt(s -> s.lectures().size()).sum();
+    this.totalDuration =
+        LectureDuration.total(
+            sections.stream().flatMap(s -> s.lectures().stream()).map(Lecture::duration).toList());
+  }
+
   private Course(
       String slug,
       String title,
@@ -190,6 +235,23 @@ public class Course {
     lectureCount++;
     totalDuration = totalDuration.plus(duration);
     return lecture;
+  }
+
+  // ------------------------------------------------------------------ duplication (Prototype)
+
+  /**
+   * A new DRAFT course with this one's content and curriculum (docs/lld/catalog.md §5). Callers
+   * choose the slug (it must be unique; the service generates one).
+   */
+  public Course duplicateAsDraft(String newSlug, Instant now) {
+    return new Course(this, newSlug, now);
+  }
+
+  private static String copyTitle(String title) {
+    String suffix = " (copy)";
+    return title.length() + suffix.length() <= 120
+        ? title + suffix
+        : title.substring(0, 120 - suffix.length()) + suffix;
   }
 
   // ------------------------------------------------------------------ lifecycle (Phase 5 subset)

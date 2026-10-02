@@ -73,7 +73,7 @@ class JdbcIdempotencyStore implements IdempotencyStore {
                   """
                   UPDATE idempotency_record
                      SET request_hash = :hash, status = 'IN_PROGRESS', response_status = NULL,
-                         response_content_type = NULL, response_body = NULL,
+                         response_content_type = NULL, response_location = NULL, response_body = NULL,
                          locked_until = :lockedUntil, created_at = :now, expires_at = :expiresAt
                    WHERE caller = :caller AND idem_key = :key AND expires_at < :now
                   """)
@@ -117,7 +117,8 @@ class JdbcIdempotencyStore implements IdempotencyStore {
   private Optional<Row> find(String caller, String key) {
     return jdbc.sql(
             """
-            SELECT request_hash, status, locked_until, expires_at, response_status, response_content_type, response_body
+            SELECT request_hash, status, locked_until, expires_at,
+                   response_status, response_content_type, response_location, response_body
               FROM idempotency_record WHERE caller = :caller AND idem_key = :key
             """)
         .param("caller", caller)
@@ -133,6 +134,7 @@ class JdbcIdempotencyStore implements IdempotencyStore {
                         ? new StoredResponse(
                             rs.getInt("response_status"),
                             rs.getString("response_content_type"),
+                            rs.getString("response_location"),
                             rs.getBytes("response_body"))
                         : null))
         .optional();
@@ -144,11 +146,13 @@ class JdbcIdempotencyStore implements IdempotencyStore {
             """
             UPDATE idempotency_record
                SET status = 'COMPLETED', response_status = :status,
-                   response_content_type = :contentType, response_body = :body
+                   response_content_type = :contentType, response_location = :location,
+                   response_body = :body
              WHERE caller = :caller AND idem_key = :key
             """)
         .param("status", response.status())
         .param("contentType", response.contentType())
+        .param("location", response.location())
         .param("body", response.body())
         .param("caller", caller)
         .param("key", key)

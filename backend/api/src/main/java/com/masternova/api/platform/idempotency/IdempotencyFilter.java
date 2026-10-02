@@ -18,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Set;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
@@ -135,7 +136,10 @@ class IdempotencyFilter extends OncePerRequestFilter {
             caller,
             key,
             new StoredResponse(
-                captured.getStatus(), captured.getContentType(), captured.getContentAsByteArray()));
+                captured.getStatus(),
+                captured.getContentType(),
+                captured.getHeader(HttpHeaders.LOCATION),
+                captured.getContentAsByteArray()));
         completed = true;
       }
     } finally {
@@ -152,6 +156,9 @@ class IdempotencyFilter extends OncePerRequestFilter {
     response.setStatus(stored.status());
     if (stored.contentType() != null) {
       response.setContentType(stored.contentType());
+    }
+    if (stored.location() != null) {
+      response.setHeader(HttpHeaders.LOCATION, stored.location()); // a replayed 201 still points
     }
     response.setHeader(REPLAYED_HEADER, "true");
     response.getOutputStream().write(stored.body() == null ? new byte[0] : stored.body());

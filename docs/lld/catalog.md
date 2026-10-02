@@ -189,7 +189,7 @@ sequenceDiagram
   IC->>D: duplicate(id, actor)   [@PreAuthorize INSTRUCTOR or ADMIN]
   D->>R: load the source with its curriculum
   D->>D: owner or admin? otherwise 404
-  D->>P: duplicateAsDraft(newSlug, actor, now)
+  D->>P: duplicateAsDraft(newSlug, now) — the copy stays with the course's instructor
   Note over P: deep copy: new ids, DRAFT, no publishedAt, counters reset<br/>shared: media assetIds (immutable, gigabytes)
   D->>R: save(copy) — one transaction, cascade to sections + lectures
   IC-->>I: 201 Location: /api/v1/courses/{newSlug}
@@ -255,7 +255,9 @@ sequenceDiagram
 | many courses share one sort key (same price) | `id` is always the last sort key | a total order; pages never overlap | — |
 | unknown category slug | — | an empty list, not a 404 (a stale bookmark shouldn't error) | — |
 | `limit` / `minRating` out of range, unknown enum | Bean Validation / binding on `BrowseCoursesRequest` | 400 `VALIDATION_FAILED`, one entry per field | — |
-| double-clicked "Duplicate" | `Idempotency-Key` (platform) | the stored 201 is replayed; **one** copy | — |
+| double-clicked "Duplicate" | `Idempotency-Key` (platform) | the stored 201 is replayed, `Location` included; **one** copy | — |
+| an admin duplicates someone's course | role check | allowed; the copy stays with the original instructor (the admin acts on their behalf) | — |
+| the random slug suffix collides | `UNIQUE (slug)` | the insert fails (500), the key is released; a retry draws a new suffix | 1 in 2 billion per course; accepted |
 | duplicate fails half-way | one transaction | no course, no sections | retry with the same key |
 | learner calls an instructor endpoint | `@PreAuthorize` | 403 `FORBIDDEN` | — |
 | instructor duplicates someone else's course | ownership check | 404 (same reason as drafts) | — |
@@ -267,7 +269,8 @@ sequenceDiagram
 `V6__catalog.sql`: tables `category`, `course`, `section`, `lecture`, plus the seeded category
 tree. Only primary keys, unique constraints and foreign keys: **no secondary indexes yet**.
 
-`V7__catalog_indexes.sql` (task 5.9): every secondary index arrives in its own migration, after
+`V8__catalog_indexes.sql` (task 5.9; `V7` went to the idempotency `Location` fix found in 5.6):
+every secondary index arrives in its own migration, after
 measuring each list query with `EXPLAIN ANALYZE` on 10,000 seeded courses. Two migrations on
 purpose: the "before" number is then a real point in this schema's history. Evidence:
 [`docs/db/indexes.md`](../db/indexes.md).
@@ -293,6 +296,8 @@ flushing). The duplicate is one read-write transaction: load, copy, `save`, comm
 | ⭐ integration (Postgres) | `CourseSpecificationsIT` | every leaf selects exactly its rows on the real schema; `%` and `_` in search text are literals; and/or/not compose; **the SQL and in-memory visibility rules agree** for 5 kinds of viewer; a search composes only the facets it has |
 | unit | `CourseCursorTest` | typed round trip per sort; URL-safe; a cursor from another sort and every kind of garbage → 400, never a 500 |
 | ⭐ HTTP + security + Postgres | `CatalogApiIT` | **55 rows sharing one sort key page as 20/20/15 with no duplicates**; a course published between two page loads doesn't shift page 2 (the OFFSET bug); price ties broken by id; **a page is 1 statement**; query-string binding + validation; a draft is 404 for strangers and 200 for its owner/admins; drafts never in the public list; the instructor list is role-gated (401/403) and shows every state |
+| ⭐ unit (Prototype) | `CourseDuplicationTest` | new ids, DRAFT, history reset; content + curriculum copied; children point at the NEW parent; **changing the copy never changes the source**; media asset ids **shared on purpose**; long titles stay ≤ 120 |
+| ⭐ HTTP + Postgres | `CourseDuplicationIT` | 201 + `Location`; the copy is a non-public draft with every lecture persisted; **the same `Idempotency-Key` twice → one copy**, replay carries `Location`; key required; another instructor 404, learner 403, admin allowed (copy stays the instructor's) |
 | ⭐ integration (Postgres) | `CourseQueryCountIT` (Hibernate statistics) | the course page is **2 statements** whatever the curriculum size (11 / 13 without `@BatchSize`, measured); a lazy to-one in a list costs 1 + distinct targets; two bags can't be join-fetched |
 
 ## 11. Interview notes — 60-second recall

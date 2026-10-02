@@ -46,6 +46,17 @@ public class Section {
 
   protected Section() {} // for Hibernate
 
+  /** ⭐ PROTOTYPE copy constructor: a new section in {@code course}, its lectures copied DEEPLY. */
+  Section(Course course, Section source) {
+    this.id = UUID.randomUUID();
+    this.course = course;
+    this.title = source.title;
+    this.position = source.position;
+    // ⭐ a NEW list of NEW lectures: sharing source.lectures would make the two courses edit
+    //    one curriculum (and confuse Hibernate: one collection, two owners)
+    source.lectures.forEach(lecture -> this.lectures.add(new Lecture(this, lecture)));
+  }
+
   Section(Course course, String title, int position) {
     this.id = UUID.randomUUID();
     this.course = course;

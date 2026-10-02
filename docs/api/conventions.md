@@ -112,7 +112,7 @@ Unsafe writes with no version to guard them (duplicate course, undo, complete up
 | Situation | Response |
 |---|---|
 | first request with a key | runs normally; the response is stored for 24 h (`masternova.idempotency.retention`) |
-| retry, same key, same method + path + body | the stored response again, byte-for-byte, with header `Idempotent-Replayed: true` |
+| retry, same key, same method + path + body | the stored response again, byte-for-byte, with its `Location` header (since 5.6, `V7`) and `Idempotent-Replayed: true` |
 | same key, different body | 422 `IDEMPOTENCY_KEY_REUSED` |
 | same key while the first request is still running | 409 `IDEMPOTENCY_IN_PROGRESS` |
 | the first request ended in a 5xx | the key is released, so the retry really runs |

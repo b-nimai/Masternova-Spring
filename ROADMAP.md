@@ -119,7 +119,7 @@ Phases are listed **in the order you do them**.
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
-| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 5 | 20 h | ~10 h | 🔨 |
+| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 6 | 20 h | ~12 h | 🔨 |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **63** | **~326 h** | ~102.5 h | |
+| | **Total** | **137** | **64** | **~326 h** | ~104.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -300,7 +300,7 @@ versioned, scanned artifacts.
 | 5.3 | *(done before 5.2: the entities need it)* `Money` moves to the **kernel** as a JPA `@Embeddable` record (compile-only, optional `jakarta.persistence-api`; the compact constructor also guards rows Hibernate loads); `LectureDuration` is one column, so an auto-applied `AttributeConverter` in `infrastructure/` (the entity never names it). Kernel catalog check now covers kernel classes. Catalog row 18 ✅ | `@Embeddable` records, `AttributeConverter` + `autoApply`, optional Maven deps | — | **Value Object**: catalog row 18 | 1 h | ✅ | 2026-10-02 |
 | 5.4 | Composable search filters: `CourseSpecifications` (9 leaves over the Criteria API: embedded-path `price.amountMinor`, FK id without a join, escaped case-insensitive `LIKE`), `CourseSearch` record composes the facets present with `allOf`; visibility as a sealed `Viewer` (`Anonymous \| Member \| Admin`) with SQL `visibleTo` + in-memory `canSee`. `CourseSpecificationsIT` runs every leaf on Postgres and proves the two visibility forms agree for 5 viewers. [Pattern note 08](patterns/docs/08-specification.md) + lab (full Evans form: `isSatisfiedBy` + `toWhere`, identities, nesting) | JPA Criteria API, Spring Data JPA 4 `Specification` (`allOf`, `unrestricted`), sealed types + record patterns | — | **Specification**: catalog row 8 | 2.5 h | ✅ | 2026-10-02 |
 | 5.5 | Keyset pagination with an opaque cursor + the read API: `GET /courses` (query string bound to a validated record), `GET /courses/{slug}` (public, optional viewer: identity's resolver learns `Optional<CurrentUser>`), `GET /categories`, `GET /instructor/courses` (`@PreAuthorize`). Spring Data `Window` + `ScrollPosition.keyset()`; our typed, sort-bound `CourseCursor`; every sort ends in the id. **Finding:** `project()` is ignored by `scroll()` (Spring Data JPA 4.1) → fetch-join Specification. `CatalogApiIT`: 55 tied rows → 20/20/15 no dupes; publish-mid-scroll doesn't shift pages; **1 statement per page**; 404-not-403 drafts. API conventions §2 + §5 ✅ | `Window`, `KeysetScrollPosition`, record query binding, built-in method validation, `HandlerMethodArgumentResolver` + `Optional` | — | — | 2 h | ✅ | 2026-10-02 |
-| 5.6 | Course duplication (deep copy, new ids, draft state) | copy constructors vs `clone()` | — | **Prototype** | 2 h | ☐ | |
+| 5.6 | Course duplication: `Course.duplicateAsDraft` → private copy constructor + package-private `Section`/`Lecture` copy constructors (deep: new ids, children re-parented; reset: DRAFT, no history; shared: `Money`, category, **media asset ids**); `CourseDuplicationService` (owner or admin, random `-copy-xxxxxx` slug, one transaction); `POST /instructor/courses/{id}/duplicate` with `@IdempotencyKeyRequired`. **Bug found + fixed in platform:** a replayed 201 lost its `Location` header → stored since `V7__platform_idempotency_location.sql`. [Pattern note 11](patterns/docs/11-prototype.md) + lab (`clone()` shallow trap vs copy constructors, prototype manager) | copy constructors vs `clone()` (Effective Java 13), cascade persist of a new tree | — | **Prototype**: catalog row 11 | 2 h | ✅ | 2026-10-02 |
 | 5.7 | Test data builders for every aggregate | fluent APIs | — | **Builder** | 1.5 h | ☐ | |
 | 5.8 | Angular: catalog page (filters ↔ URL query params, infinite scroll with cursor) + course detail page | — | router query params, `withComponentInputBinding`, `@defer`, `CdkVirtualScrollViewport` | — | 5 h | ☐ | |
 | 5.9 | `docs/db/indexes.md` with `EXPLAIN ANALYZE` evidence for every list query | — | — | — | 1.5 h | ☐ | |
@@ -547,3 +547,5 @@ Each line is a sentence you can say *and* a file or test you can show.
 | Security config lives in **identity**, not platform (3.4); public routes come from each module's `PublicEndpoints` bean | identity owns authentication; platform must boot standalone (`PlatformModuleIT`) without a JWT decoder, and a central list of public URLs would couple identity to every module. |
 | `ProblemTypes` moved to the platform's public API | `ModularityTests` rejected identity using it from the internal `platform.web` package. |
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |
+| 5.3 done before 5.2 | the entities embed `Money` and `LectureDuration`, so the value objects came first |
+| `V7` is a platform fix (idempotency `Location`), catalog indexes are `V8` | 5.6's duplicate IT found that a replayed 201 had no `Location`; a migration can't wait for 5.9 |

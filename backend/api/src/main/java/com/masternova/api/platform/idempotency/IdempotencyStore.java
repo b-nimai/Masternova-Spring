@@ -11,8 +11,12 @@ import java.time.Instant;
     note = "patterns/docs/16-repository-unit-of-work.md")
 interface IdempotencyStore {
 
-  /** A response worth replaying. */
-  record StoredResponse(int status, String contentType, byte[] body) {}
+  /**
+   * A response worth replaying: status, body, and the headers a client acts on. {@code location} is
+   * the {@code Location} of a 201 — without it a replayed "created" points nowhere (found in 5.6 by
+   * {@code CourseDuplicationIT}).
+   */
+  record StoredResponse(int status, String contentType, String location, byte[] body) {}
 
   /** ⭐ Every possible outcome of a claim — a sealed type, so the filter's switch is exhaustive. */
   sealed interface Claim {
