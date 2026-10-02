@@ -118,7 +118,7 @@ Phases are listed **in the order you do them**.
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
-| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 3 | 14 h | ~5.5 h | 🔨 |
+| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 4 | 14 h | ~7.5 h | 🔨 |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **53** | **~326 h** | ~84 h | |
+| | **Total** | **137** | **54** | **~326 h** | ~86 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -281,7 +281,7 @@ versioned, scanned artifacts.
 | 4.1 | [`docs/lld/notification.md`](docs/lld/notification.md) (send side in the worker, consent side in the api, per-email delivery state machine, categories, HMAC unsubscribe) + [ADR-0008](docs/adr/0008-shared-messaging-module.md) (shared `messaging` module) | — | — | — | 1 h | ✅ | 2026-10-02 |
 | 4.2 | Shared `messaging` module (ADR-0008): outbox writer + `SKIP LOCKED` relay + handler registry move out of the api (git history kept, `V2` migration moved with the same checksum), wired by Boot **auto-configuration** (writer always; relay + schedule only with `relay-enabled`: the worker). ITs moved with it; `ApplicationContextRunner` tests prove the conditions; coverage 96 % / 86 %. [Pattern note 09](patterns/docs/09-factory-method-registry.md) + lab | `@AutoConfiguration` + `AutoConfiguration.imports`, `@ConditionalOnBooleanProperty` / `OnMissingBean`, `ApplicationContextRunner`, `Map<String, Handler>` from injected `List` | — | **Observer** + **Factory Method / Registry** | 3 h | ✅ | 2026-10-02 |
 | 4.3 | Consumer idempotency for email: `V5__notification.sql` (`email_delivery`, `email_suppression`, `notification_preference`), `NotificationCategory` in the kernel, and the `email_delivery` claim as ONE `INSERT … ON CONFLICT DO UPDATE … WHERE` (re-claim only `FAILED` or a `SENDING` older than the lease) with sealed `Claim` outcomes; IT: **20 concurrent claims → 1 sender**, stale lease taken over, citext pitfall (`citext = text` compares case-sensitively → `CAST`). Worker ITs run the api's real migrations. *(Generic `processed_event` deferred to Phase 9: LLD §6)* | unique constraints as locks, `INSERT … ON CONFLICT … WHERE … RETURNING`, sealed results | — | Repository | 1.5 h | ✅ | 2026-10-02 |
-| 4.4 | Email templates (Thymeleaf): one base class, one subclass per email | Thymeleaf, abstract classes | — | **Template Method** | 2 h | ☐ | |
+| 4.4 | Email templates (Thymeleaf): `EmailTemplate<P>` with a **final** `render` skeleton (unsubscribe-link invariant → model → HTML via a shared table/inline-style `layout.html` → plaintext twin → footer hook); `VerifyEmailTemplate` (mandatory) + `WelcomeEmailTemplate` (PRODUCT_NEWS) with typed payload records; one email engine with HTML + TEXT resolvers; unit tests without Spring (escaping, invariant, `final`). [Pattern note 06](patterns/docs/06-template-method.md) | Thymeleaf HTML/TEXT modes + fragments, abstract classes, generics, `final` methods | — | **Template Method** | 2 h | ✅ | 2026-10-02 |
 | 4.5 | `MailProvider`: SMTP (Mailpit) adapter, Resend adapter behind a property | `@ConditionalOnProperty`, `JavaMailSender` | — | **Adapter** | 2 h | ☐ | |
 | 4.6 | Suppression list, preferences, HMAC unsubscribe link | `Mac` / HMAC-SHA256 | — | — | 1.5 h | ☐ | |
 | 4.7 | Angular: notification preferences page | — | `MatSlideToggle`, optimistic UI | — | 1.5 h | ☐ | |

@@ -1,0 +1,7 @@
+Hi [(${displayName})],
+
+Confirm your email address to finish setting up your Masternova account:
+
+[(${verifyUrl})]
+
+The link works once and expires in 24 hours. Didn't sign up? Ignore this email.

@@ -5,7 +5,7 @@
 > built once** and look the key up. Adding a case means adding a class; the chooser never changes.
 
 **Type:** Creational · **Status:** ✅ in real code · **Last updated:** 2026-10-02
-**Real code:** [`OutboxRelay`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/OutboxRelay.java) (`@DesignPattern(FACTORY_METHOD, "Registry")`) dispatches each outbox message to the `OutboxHandler` registered for its event type. *(Phase 4.4 adds the email template registry.)*
+**Real code:** [`OutboxRelay`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/OutboxRelay.java) (`@DesignPattern(FACTORY_METHOD, "Registry")`) dispatches each outbox message to the `OutboxHandler` registered for its event type. *(Email templates deliberately have **no** registry: each handler injects its own typed template. See [06](06-template-method.md) §7.)*
 **Lab:** [`lab/.../patterns/registry/`](../lab/src/main/java/com/masternova/patterns/registry/): `HandlerRegistry` (instances) and `ExporterFactory` (creators, `Supplier` per key), with `RegistryTest`
 
 **Trigger phrase:**

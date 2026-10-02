@@ -1,0 +1,7 @@
+Welcome aboard, [(${displayName})]!
+
+Your email is verified and your account is ready. Here's a good place to start:
+
+[(${browseUrl})]
+
+Happy learning — the Masternova team
