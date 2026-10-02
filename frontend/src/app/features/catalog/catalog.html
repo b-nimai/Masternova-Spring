@@ -1,0 +1,112 @@
+<section class="catalog">
+  <header class="filters" aria-label="Filter courses">
+    <mat-form-field appearance="outline" class="search" subscriptSizing="dynamic">
+      <mat-label>Search courses</mat-label>
+      <mat-icon matPrefix>search</mat-icon>
+      <input matInput data-testid="search" [formControl]="searchControl" autocomplete="off" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Category</mat-label>
+      <mat-select
+        data-testid="category"
+        [value]="query().category ?? null"
+        (selectionChange)="setCategory($event.value)"
+      >
+        <mat-option [value]="null">All categories</mat-option>
+        @for (root of categories(); track root.slug) {
+          <mat-optgroup [label]="root.name">
+            <mat-option [value]="root.slug">All {{ root.name }}</mat-option>
+            @for (child of root.children; track child.slug) {
+              <mat-option [value]="child.slug">{{ child.name }}</mat-option>
+            }
+          </mat-optgroup>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Sort by</mat-label>
+      <mat-select
+        data-testid="sort"
+        [value]="query().sort ?? 'NEWEST'"
+        (selectionChange)="setSort($event.value)"
+      >
+        @for (s of sorts; track s) {
+          <mat-option [value]="s">{{ sortLabels[s] }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-chip-listbox
+      multiple
+      aria-label="Level"
+      data-testid="levels"
+      [value]="query().level ?? []"
+      (change)="setLevels($event.value)"
+    >
+      @for (l of levels; track l) {
+        <mat-chip-option [value]="l" [attr.data-testid]="'level-' + l">{{
+          levelLabels[l]
+        }}</mat-chip-option>
+      }
+    </mat-chip-listbox>
+
+    <mat-button-toggle-group
+      aria-label="Price"
+      data-testid="price-filter"
+      [value]="query().price ?? ''"
+      (change)="setPrice($event.value)"
+    >
+      <mat-button-toggle value="">Any price</mat-button-toggle>
+      <mat-button-toggle value="FREE" data-testid="price-FREE">Free</mat-button-toggle>
+      <mat-button-toggle value="PAID">Paid</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    @if (hasFilters()) {
+      <button mat-button type="button" data-testid="clear" (click)="clearFilters()">
+        <mat-icon>filter_alt_off</mat-icon> Clear filters
+      </button>
+    }
+  </header>
+
+  @let state = list();
+  <p class="status" data-testid="status" aria-live="polite">
+    @if (state.items.length) {
+      {{ state.items.length }} courses{{ state.nextCursor ? ' so far' : '' }}
+    } @else if (!state.loading && !state.error) {
+      No courses match these filters.
+    }
+  </p>
+
+  @if (state.items.length) {
+    <!-- ⭐ Only the visible cards exist in the DOM; (scrolledIndexChange) asks for the next page. -->
+    <cdk-virtual-scroll-viewport
+      class="results"
+      [itemSize]="cardHeight"
+      (scrolledIndexChange)="onScrolled()"
+    >
+      <app-course-card
+        *cdkVirtualFor="let course of state.items; trackBy: trackById"
+        [course]="course"
+        [style.height.px]="cardHeight"
+      />
+    </cdk-virtual-scroll-viewport>
+  }
+
+  <footer class="more">
+    @if (state.loading) {
+      <mat-spinner diameter="28" data-testid="loading" />
+    } @else if (state.error) {
+      <p class="form-error" data-testid="error">
+        We couldn't load courses.
+        <button mat-button type="button" data-testid="retry" (click)="loadMore()">Retry</button>
+      </p>
+    } @else if (state.nextCursor) {
+      <!-- the keyboard / screen-reader path to the next page (scrolling also loads it) -->
+      <button mat-stroked-button type="button" data-testid="load-more" (click)="loadMore()">
+        Load more
+      </button>
+    }
+  </footer>
+</section>

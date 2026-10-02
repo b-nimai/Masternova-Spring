@@ -1,0 +1,57 @@
+<article class="course-detail">
+  <a mat-button routerLink="/courses"><mat-icon>arrow_back</mat-icon> All courses</a>
+
+  @if (course.isLoading()) {
+    <mat-spinner diameter="36" data-testid="loading" />
+  } @else if (notFound()) {
+    <section data-testid="not-found">
+      <h1>Course not found</h1>
+      <p>It may have been removed, or it isn't published yet.</p>
+    </section>
+  } @else if (course.error()) {
+    <p class="form-error" data-testid="error">
+      We couldn't load this course.
+      <button mat-button type="button" (click)="course.reload()">Retry</button>
+    </p>
+  } @else if (course.value(); as c) {
+    <header>
+      <p class="category">{{ c.category.name }}</p>
+      <h1 data-testid="title">{{ c.title }}</h1>
+      @if (c.subtitle) {
+        <p class="subtitle">{{ c.subtitle }}</p>
+      }
+      <p class="meta">
+        By {{ c.instructorName }} · {{ levelLabels[c.level] }} · {{ c.lectureCount }} lectures ·
+        {{ c.totalDurationSeconds | duration }}
+        @if (c.ratingCount > 0) {
+          · <mat-icon inline>star</mat-icon> {{ c.ratingAverage | number: '1.1-2' }} ({{
+            c.ratingCount
+          }})
+        }
+      </p>
+      @if (c.status !== 'PUBLISHED') {
+        <p class="draft" data-testid="draft-banner">{{ c.status }} — only you can see this page.</p>
+      }
+      <p class="price" data-testid="price">{{ c.priceMinor | money: c.currency }}</p>
+    </header>
+
+    <section class="description">
+      <h2>About this course</h2>
+      <p>{{ c.description }}</p>
+    </section>
+
+    <section class="curriculum">
+      <h2>Course content</h2>
+      <!-- ⭐ deferred: a separate JS chunk, fetched when this block scrolls into view -->
+      @defer (on viewport) {
+        <app-curriculum [sections]="c.sections" />
+      } @placeholder {
+        <p data-testid="curriculum-placeholder">
+          {{ c.sections.length }} sections · {{ c.lectureCount }} lectures
+        </p>
+      } @loading (minimum 200ms) {
+        <mat-spinner diameter="28" />
+      }
+    </section>
+  }
+</article>

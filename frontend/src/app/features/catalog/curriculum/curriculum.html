@@ -1,0 +1,26 @@
+<mat-accordion multi>
+  @for (section of sections(); track section.id; let first = $first) {
+    <mat-expansion-panel [expanded]="first" [attr.data-testid]="'section-' + $index">
+      <mat-expansion-panel-header>
+        <mat-panel-title>{{ section.title }}</mat-panel-title>
+        <mat-panel-description>
+          {{ section.lectures.length }} lectures · {{ sectionSeconds(section) | duration }}
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+      <ul class="lectures">
+        @for (lecture of section.lectures; track lecture.id) {
+          <li>
+            <mat-icon>{{ lecture.kind === 'VIDEO' ? 'play_circle' : 'article' }}</mat-icon>
+            <span class="title">{{ lecture.title }}</span>
+            @if (lecture.preview) {
+              <span class="preview" data-testid="preview">Preview</span>
+            }
+            <span class="time">{{ lecture.durationSeconds | duration: 'clock' }}</span>
+          </li>
+        }
+      </ul>
+    </mat-expansion-panel>
+  } @empty {
+    <p>No lectures yet.</p>
+  }
+</mat-accordion>

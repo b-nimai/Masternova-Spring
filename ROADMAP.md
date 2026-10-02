@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR pending, `phase-4/notification`).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 🔨 on `phase-5/catalog`.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -119,7 +119,7 @@ Phases are listed **in the order you do them**.
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
-| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
+| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **58** | **~326 h** | ~92.5 h | |
+| | **Total** | **137** | **67** | **~326 h** | ~113 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -295,15 +295,15 @@ versioned, scanned artifacts.
 
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
-| 5.1 | `docs/lld/catalog.md` + ADR (keyset over OFFSET) | — | — | — | 1.5 h | ☐ | |
-| 5.2 | JPA model: `Course` / `Section` / `Lecture` / `Category`; fetch strategies; N+1 test with Hibernate statistics | associations, `@EntityGraph`, `JOIN FETCH` | — | — | 3 h | ☐ | |
-| 5.3 | `Money` embeddable / converter, minor units | `@Embeddable`, `AttributeConverter` | — | Value Object | 1 h | ☐ | |
-| 5.4 | Composable search filters | JPA Criteria API, `Specification<T>` | — | **Specification** | 2.5 h | ☐ | |
-| 5.5 | Keyset pagination with an opaque cursor | `Window` / `ScrollPosition` or hand-rolled | — | — | 2 h | ☐ | |
-| 5.6 | Course duplication (deep copy, new ids, draft state) | copy constructors vs `clone()` | — | **Prototype** | 2 h | ☐ | |
-| 5.7 | Test data builders for every aggregate | fluent APIs | — | **Builder** | 1.5 h | ☐ | |
-| 5.8 | Angular: catalog page (filters ↔ URL query params, infinite scroll with cursor) + course detail page | — | router query params, `withComponentInputBinding`, `@defer`, `CdkVirtualScrollViewport` | — | 5 h | ☐ | |
-| 5.9 | `docs/db/indexes.md` with `EXPLAIN ANALYZE` evidence for every list query | — | — | — | 1.5 h | ☐ | |
+| 5.1 | [`docs/lld/catalog.md`](docs/lld/catalog.md) (§1–§9: aggregate boundaries, viewer-dependent visibility, Specification leaves, typed cursor, 2-statement detail, Prototype duplicate) + [ADR-0009](docs/adr/0009-keyset-pagination-over-offset.md) (keyset over OFFSET, Spring Data `Window`) | — | — | — | 1.5 h | ✅ | 2026-10-02 |
+| 5.2 | JPA model (`V6__catalog.sql`, no secondary indexes yet): `Course` aggregate root (rollups kept by `addLecture`, `publishedAt` stamped once + DB `CHECK`, micros-truncated times) → `Section` → `Lecture` (owning sides, `@OrderBy`, cascade + orphanRemoval), seeded two-level `Category`, instructor as id + name snapshot; one repository per aggregate. `CourseQueryCountIT` counts statements: course page **2** (entity graph `{category, sections}` + `@BatchSize` lectures; 11 / 13 without it), naive 4, lazy to-one in a list 1 + distinct, `MultipleBagFetchException` proven. `CatalogPersistenceIT`: round trip, constraints. Java note [12 JPA mapping & fetching](patterns/java/12-jpa-mapping-and-fetching.md) | associations, owning side, `@EntityGraph`, `@BatchSize`, bags, Hibernate statistics | — | Repository (one per aggregate) | 3 h | ✅ | 2026-10-02 |
+| 5.3 | *(done before 5.2: the entities need it)* `Money` moves to the **kernel** as a JPA `@Embeddable` record (compile-only, optional `jakarta.persistence-api`; the compact constructor also guards rows Hibernate loads); `LectureDuration` is one column, so an auto-applied `AttributeConverter` in `infrastructure/` (the entity never names it). Kernel catalog check now covers kernel classes. Catalog row 18 ✅ | `@Embeddable` records, `AttributeConverter` + `autoApply`, optional Maven deps | — | **Value Object**: catalog row 18 | 1 h | ✅ | 2026-10-02 |
+| 5.4 | Composable search filters: `CourseSpecifications` (9 leaves over the Criteria API: embedded-path `price.amountMinor`, FK id without a join, escaped case-insensitive `LIKE`), `CourseSearch` record composes the facets present with `allOf`; visibility as a sealed `Viewer` (`Anonymous \| Member \| Admin`) with SQL `visibleTo` + in-memory `canSee`. `CourseSpecificationsIT` runs every leaf on Postgres and proves the two visibility forms agree for 5 viewers. [Pattern note 08](patterns/docs/08-specification.md) + lab (full Evans form: `isSatisfiedBy` + `toWhere`, identities, nesting) | JPA Criteria API, Spring Data JPA 4 `Specification` (`allOf`, `unrestricted`), sealed types + record patterns | — | **Specification**: catalog row 8 | 2.5 h | ✅ | 2026-10-02 |
+| 5.5 | Keyset pagination with an opaque cursor + the read API: `GET /courses` (query string bound to a validated record), `GET /courses/{slug}` (public, optional viewer: identity's resolver learns `Optional<CurrentUser>`), `GET /categories`, `GET /instructor/courses` (`@PreAuthorize`). Spring Data `Window` + `ScrollPosition.keyset()`; our typed, sort-bound `CourseCursor`; every sort ends in the id. **Finding:** `project()` is ignored by `scroll()` (Spring Data JPA 4.1) → fetch-join Specification. `CatalogApiIT`: 55 tied rows → 20/20/15 no dupes; publish-mid-scroll doesn't shift pages; **1 statement per page**; 404-not-403 drafts. API conventions §2 + §5 ✅ | `Window`, `KeysetScrollPosition`, record query binding, built-in method validation, `HandlerMethodArgumentResolver` + `Optional` | — | — | 2 h | ✅ | 2026-10-02 |
+| 5.6 | Course duplication: `Course.duplicateAsDraft` → private copy constructor + package-private `Section`/`Lecture` copy constructors (deep: new ids, children re-parented; reset: DRAFT, no history; shared: `Money`, category, **media asset ids**); `CourseDuplicationService` (owner or admin, random `-copy-xxxxxx` slug, one transaction); `POST /instructor/courses/{id}/duplicate` with `@IdempotencyKeyRequired`. **Bug found + fixed in platform:** a replayed 201 lost its `Location` header → stored since `V7__platform_idempotency_location.sql`. [Pattern note 11](patterns/docs/11-prototype.md) + lab (`clone()` shallow trap vs copy constructors, prototype manager) | copy constructors vs `clone()` (Effective Java 13), cascade persist of a new tree | — | **Prototype**: catalog row 11 | 2 h | ✅ | 2026-10-02 |
+| 5.7 | Test data builder for the catalog's aggregate: `CourseBuilder.aCourse()` + nested `aLecture()` (unique default slugs, `withSection` / `withCurriculum`, builds through `Course.draft` / `addLecture` / `publish`, so every built course is legal) + `TestInstructors` (FK rows via `JdbcClient` that joins the test transaction). All 8 catalog test classes refactored onto it (the 9-positional-argument seed is gone). `CourseBuilderTest`. [Pattern note 10](patterns/docs/10-builder.md) + lab (Bloch builder: required entry point, cross-field `build()` validation, defensive copies, `toBuilder`) | fluent APIs, nested static builders, varargs, static imports | — | **Builder**: catalog row 10 | 1.5 h | ✅ | 2026-10-02 |
+| 5.8 | Angular `/courses`: every filter (search debounced, category tree, level chips, price, sort) lives in the URL, bound to inputs; infinite scroll in a `CdkVirtualScrollViewport` through one pipeline (`switchMap` per query cancels stale pages, `exhaustMap` per page, `scan`) + an a11y "Load more". `/courses/:slug`: `rxResource` by slug, 404 → "not found", curriculum `@defer (on viewport)` (own 23.5 kB chunk). `CatalogApi`, `money` + `duration` pipes, nav item. `docs/db/seed-catalog.sql` + `make seed` (deterministic; CI seeds before e2e). Playwright `catalog.spec.ts`: reload/Back keep filters, scrolling sends `cursor=`, `@defer` loads, friendly 404. Fixed `make api`/`make worker` (double `cd`). [Angular note 04](patterns/angular/04-url-state-infinite-scroll-defer.md) | — | router query params, `withComponentInputBinding`, `@defer`, `CdkVirtualScrollViewport`, `rxResource`, `exhaustMap` | — | 5 h | ✅ | 2026-10-02 |
+| 5.9 | [`docs/db/indexes.md`](docs/db/indexes.md): every list query (Hibernate's real SQL) `EXPLAIN ANALYZE`d on 10,000 seeded courses, median of 7 (`docs/db/measure_catalog.py`), before/after `V8__catalog_indexes.sql`: 4 partial indexes + trigram GIN, default list **8.5 → 0.14 ms**, no Sort node left. **Findings → code:** Spring Data's keyset OR chain can't seek (2.35 ms at page 250) → `keysetBound` redundant predicate → **0.155 ms** (= row comparison); expression index needs `ANALYZE` (1.38 → 0.68 ms) → in V8. Rejected with numbers: category index (never chosen), non-partial composite (584 vs 376 kB). `CatalogIndexesIT` pins plan shapes. LLD §9–§11 + ADR-0009 outcome | `EXPLAIN (ANALYZE, BUFFERS)`, partial + expression + GIN indexes, `pg_trgm`, planner statistics | — | — | 1.5 h | ✅ | 2026-10-02 |
 
 ---
 
@@ -496,14 +496,14 @@ Tick these as they're used *for real* in the project, not just read about.
 - [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [x] Bean Validation
 - [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [x] Spring Security 7 + JWT
 - [x] Spring Modulith events · [x] Modulith verification · [ ] Spring Cache + Redis · [ ] `@Scheduled` / ShedLock · [ ] SSE
-- [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [ ] `@WebMvcTest` / `@DataJpaTest` slices
+- [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [x] `@WebMvcTest` / `@DataJpaTest` slices
 
 ### 3.3 Angular
 
 - [x] standalone components · [x] `@Service()` + `inject()` · [x] `toSignal` · [x] `@switch` / `@let` control flow · [x] lazy routes
 - [x] `signal` / `computed` / `effect` · [x] `input()` / `output()` · [ ] typed reactive forms · [x] interceptors · [x] guards
-- [x] RxJS operators in anger · [ ] Material (stepper, dialog, table) · [ ] CDK drag-drop / virtual scroll · [ ] `@defer`
-- [x] Vitest + `HttpTestingController` · [ ] Playwright e2e
+- [x] RxJS operators in anger · [ ] Material (stepper, dialog, table) · [ ] CDK drag-drop · [x] CDK virtual scroll · [x] `@defer`
+- [x] Vitest + `HttpTestingController` · [x] Playwright e2e
 
 ### 3.4 DevOps
 
@@ -547,3 +547,6 @@ Each line is a sentence you can say *and* a file or test you can show.
 | Security config lives in **identity**, not platform (3.4); public routes come from each module's `PublicEndpoints` bean | identity owns authentication; platform must boot standalone (`PlatformModuleIT`) without a JWT decoder, and a central list of public URLs would couple identity to every module. |
 | `ProblemTypes` moved to the platform's public API | `ModularityTests` rejected identity using it from the internal `platform.web` package. |
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |
+| 5.3 done before 5.2 | the entities embed `Money` and `LectureDuration`, so the value objects came first |
+| Phase 5 review (`code-review` on the whole branch) found 2 bugs, both fixed with a regression test: the search box swallowed a repeated search after "Clear filters" (`distinctUntilChanged` → compare with the URL), and price sorts mixed currencies (→ one catalog currency, INR: `Course.CATALOG_CURRENCY` + `V9`) | review findings |
+| `V7` is a platform fix (idempotency `Location`), catalog indexes are `V8` | 5.6's duplicate IT found that a replayed 201 had no `Location`; a migration can't wait for 5.9 |

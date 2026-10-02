@@ -45,7 +45,7 @@ describe('App shell', () => {
     const el = fixture.nativeElement as HTMLElement;
 
     expect(el.querySelector('.brand')?.textContent).toContain('Masternova');
-    expect(navLabels(el)).toEqual(['homeHome', 'sciencePlayground']);
+    expect(navLabels(el)).toEqual(['homeHome', 'schoolCourses', 'sciencePlayground']);
     expect(el.textContent).toContain('Log in');
   });
 

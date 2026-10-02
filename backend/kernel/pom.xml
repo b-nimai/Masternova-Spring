@@ -5,7 +5,7 @@
 
 	<!--
 		Shared kernel: plain Java, no Spring. Holds what both deployables (api, worker) agree on —
-		the @DesignPattern marker today; event contracts, outbox and idempotency types from Phase 2.
+		the @DesignPattern marker, event contracts, notification categories and Money (Phase 5).
 	-->
 	<parent>
 		<groupId>com.masternova</groupId>
@@ -23,6 +23,14 @@
 	</properties>
 
 	<dependencies>
+		<!-- Annotations only (@Embeddable on Money): inert metadata without a JPA provider, so the
+		     kernel stays free of Spring and Hibernate. Optional = not passed on to consumers; the
+		     api already has it through spring-boot-starter-data-jpa. docs/lld/catalog.md §7 -->
+		<dependency>
+			<groupId>jakarta.persistence</groupId>
+			<artifactId>jakarta.persistence-api</artifactId>
+			<optional>true</optional>
+		</dependency>
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>
 			<artifactId>junit-jupiter</artifactId>
