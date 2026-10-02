@@ -64,7 +64,7 @@ The catalog is checked by tests, so it can't go stale:
 | 4 | Command | Behavioral | Undoable curriculum edits (Phase 6) | — | — | — | ☐ |
 | 5 | Memento | Behavioral | Snapshot/restore for curriculum undo (Phase 6) | — | — | — | ☐ |
 | 6 | Template Method | Behavioral | Pipeline job base class · email templates (Phases 4, 7) | — | [note](java/06-oop-composition-over-inheritance.md) | [lab](lab/src/main/java/com/masternova/java/oop/template/) | 🔨 |
-| 7 | Observer | Behavioral | Domain events → outbox relay → handlers (Phases 2, 4) | — | — | — | ☐ |
+| 7 | Observer | Behavioral | Domain events: `EventPublisher` → `@TransactionalEventListener` observers; outbox handlers (Phases 2, 4) | `com.masternova.api.platform.events.TransactionalEventPublisher` | [note](docs/07-observer.md) | [lab](lab/src/main/java/com/masternova/patterns/observer/) | ✅ |
 | 8 | Specification | Enterprise | Catalog filters (JPA `Specification`) · coupon rules · publish gate (Phases 5, 6, 9) | — | — | — | ☐ |
 | 9 | Factory Method / Registry | Creational | Job processor registry · email template registry (Phases 4, 7) | — | — | — | ☐ |
 | 10 | Builder | Creational | ffmpeg HLS command builder · test data builders (Phases 5, 7) | — | — | — | ☐ |
