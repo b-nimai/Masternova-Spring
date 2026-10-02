@@ -16,6 +16,12 @@
 	<artifactId>kernel</artifactId>
 	<name>kernel</name>
 
+	<properties>
+		<!-- measured 51 % lines / 81 % branches on 2026-10-02 (mostly annotation/enum declarations) -->
+		<coverage.line>0.45</coverage.line>
+		<coverage.branch>0.75</coverage.branch>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.junit.jupiter</groupId>

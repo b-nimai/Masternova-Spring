@@ -1,9 +1,13 @@
 # CI: every push and PR runs only the jobs whose files changed.
-#   backend      → mvn verify (unit + Spring Modulith + Testcontainers ITs + Spotless + JaCoCo)
+#   backend      → mvn verify (unit + Spring Modulith + Testcontainers ITs + Spotless + JaCoCo gate)
 #   patterns-lab → mvn test
 #   frontend     → lint, unit tests (Vitest), production build
-#   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL)
-# Publishing images to GHCR and deploying come in Phase D2 / D4.
+#   workflows    → actionlint on every workflow file
+#   e2e          → the whole stack in compose + Playwright in Chromium (sign up, log in, reload, …)
+#   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL);
+#                  on main, push the scanned images to GHCR as :sha-<commit> and :main, with SBOM +
+#                  provenance attestations, and sign them keylessly with cosign
+# Versioned releases (vX.Y.Z tags) live in release.yml; deploying comes in Phase D4.
 name: CI
 
 on:
@@ -27,6 +31,8 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       lab: ${{ steps.filter.outputs.lab }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+      e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -42,6 +48,12 @@ jobs:
               - '.github/workflows/ci.yml'
             frontend:
               - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            workflows:
+              - '.github/**'
+            e2e:
+              - 'e2e/**'
+              - 'compose.yaml'
               - '.github/workflows/ci.yml'
 
   backend:
@@ -67,6 +79,26 @@ jobs:
           name: jacoco
           path: backend/*/target/site/jacoco/
           if-no-files-found: ignore
+      - name: Upload SBOMs (CycloneDX, one per app; also inside each jar)
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-maven
+          path: backend/*/target/classes/META-INF/sbom/application.cdx.json
+          if-no-files-found: error
+
+  workflows:
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # a typo in a workflow otherwise surfaces only when that path runs (often on main, or at release)
+      - name: actionlint
+        run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest -color
+      - name: Every action version exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/check-action-refs.sh
 
   patterns-lab:
     needs: changes
@@ -115,6 +147,13 @@ jobs:
       !failure() && !cancelled() &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the workflow's own GITHUB_TOKEN (no stored secret)
+      id-token: write # an OIDC token for keyless cosign signing (no signing key to store or leak)
+    env:
+      # Only main publishes. PRs build and scan the same images but never push them.
+      PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     strategy:
       fail-fast: false
       matrix:
@@ -125,12 +164,24 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v4
+      - name: Image names, tags and OCI labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
+          # sha-<7 chars>: immutable, one per commit (what deployments pin) · main: moving pointer
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=main,enable={{is_default_branch}}
       - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
-          build-args: ${{ matrix.args }}
+          build-args: |
+            ${{ matrix.args }}
+            GIT_SHA=${{ github.sha }}
           tags: masternova-spring/${{ matrix.name }}:ci
+          labels: ${{ steps.meta.outputs.labels }}
           load: true
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
@@ -141,3 +192,126 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+      # ⭐ Push only what passed the scan: the same build again, served from the layer cache.
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push ${{ matrix.name }}
+        if: env.PUBLISH == 'true'
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          build-args: |
+            ${{ matrix.args }}
+            GIT_SHA=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          cache-from: type=gha,scope=${{ matrix.name }}
+          # attestations stored next to the image: an SBOM of everything in it, and how it was built
+          sbom: true
+          provenance: mode=max
+      - uses: sigstore/cosign-installer@v4.1.2 # this action publishes no moving major tag
+        if: env.PUBLISH == 'true'
+      # ⭐ Keyless: GitHub's OIDC token proves "this workflow, this repo, this ref" to Sigstore,
+      #    which issues a 10-minute certificate; the signature lands in the public Rekor log.
+      #    Signing the DIGEST covers every tag that points at it, including later release tags.
+      - name: Sign ${{ matrix.name }}
+        if: env.PUBLISH == 'true'
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+
+  e2e:
+    needs: [changes, images]
+    if: >-
+      !failure() && !cancelled() &&
+      (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.e2e == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      # The images job just built these; with the same inputs every layer comes from its cache.
+      - name: Load api image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          build-args: |
+            APP=api
+            GIT_SHA=${{ github.sha }}
+          tags: masternova-spring/api:local
+          load: true
+          cache-from: type=gha,scope=api
+      - name: Load worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          build-args: |
+            APP=worker
+            PORT=8090
+            GIT_SHA=${{ github.sha }}
+          tags: masternova-spring/worker:local
+          load: true
+          cache-from: type=gha,scope=worker
+      - name: Load web image
+        uses: docker/build-push-action@v6
+        with:
+          context: frontend
+          build-args: GIT_SHA=${{ github.sha }}
+          tags: masternova-spring/web:local
+          load: true
+          cache-from: type=gha,scope=web
+      - name: Start the stack
+        run: |
+          make secrets
+          docker compose --profile app up -d --wait postgres redis mailpit api worker web
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: e2e/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: e2e/pnpm-lock.yaml
+      - name: Install Playwright + Chromium
+        working-directory: e2e
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+      - name: Run e2e tests
+        working-directory: e2e
+        run: pnpm test
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+      - name: Container logs
+        if: failure()
+        run: docker compose --profile app logs --no-color --tail 300 api worker web
+
+  # ⭐ The ONE check branch protection requires. Path filters skip jobs whose files didn't change,
+  #    and the job list grows over time; this job turns "every job passed or was skipped" into a
+  #    single stable status, so the protection rule never needs editing.
+  ci-ok:
+    if: always()
+    needs: [changes, backend, patterns-lab, frontend, workflows, images, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null

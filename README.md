@@ -35,7 +35,7 @@ More: [`docs/hld/01-architecture.md`](docs/hld/01-architecture.md) · [`docs/api
 Prerequisites: JDK 25, Node 22 + pnpm, Docker.
 
 ```bash
-make up      # postgres, redis, minio, mailpit
+make up      # postgres, redis, mailpit (S3 storage: opt-in, Phase 7)
 make api     # http://localhost:8080/api/v1/meta/ping
 make web     # http://localhost:4200
 ```
@@ -52,7 +52,7 @@ make stack   # http://localhost:8081
 | API | http://localhost:8080/api/v1 · health at `/actuator/health` |
 | Worker health | http://localhost:8090/actuator/health |
 | Mailpit (every dev email) | http://localhost:8026 |
-| MinIO console | http://localhost:9011 (minioadmin / minioadmin) |
+| MinIO console | http://localhost:9011 (minioadmin / minioadmin), only with `docker compose --profile media up -d`; MinIO's images are no longer published, so Phase 7 picks a replacement |
 | Postgres | `localhost:5433` (masternova / masternova) |
 
 ## Test

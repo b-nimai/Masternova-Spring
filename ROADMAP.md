@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ on `phase-d1/containers` (PR pending) · Next: Phase D2 (CI/CD hardening).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ on `phase-d2/cicd` (PR pending) · Next: Phase 4 (notification + worker).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -117,7 +117,7 @@ Phases are listed **in the order you do them**.
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 8 | 16 h | ~15 h | ✅ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
-| 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
+| 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **44** | **~326 h** | ~70 h | |
+| | **Total** | **137** | **50** | **~326 h** | ~78.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -263,12 +263,12 @@ versioned, scanned artifacts.
 
 | # | Task | DevOps concept | Est | Status | Date |
 |---|---|---|---|---|---|
-| D2.1 | Publish images to **GHCR** on `main` (tags: git SHA + semver) with `GITHUB_TOKEN` | registries, immutable tags | 2 h | ☐ | |
-| D2.2 | Releases: conventional commits → release-please (changelog, version bump, tag) | semantic versioning, release automation | 1.5 h | ☐ | |
-| D2.3 | Supply chain: CycloneDX SBOM (Maven plugin + image SBOM), keyless **cosign** signing | SBOM, provenance, signing | 2 h | ☐ | |
-| D2.4 | Quality gates: JaCoCo coverage threshold, CodeQL (Java + TS), Dependabot auto-merge for patches | static analysis, gates | 1.5 h | ☐ | |
-| D2.5 | Branch protection, required checks, PR template, CODEOWNERS | trunk-based workflow | 0.5 h | ☐ | |
-| D2.6 | Playwright e2e smoke against the compose stack in CI (sign up → log in → see dashboard) | e2e in CI, service containers | 2.5 h | ☐ | |
+| D2.1 | Publish images to **GHCR** on `main` as `:sha-<commit>` (immutable) + `:main`, pushed only after the Trivy scan passes, with a job-scoped `packages: write` `GITHUB_TOKEN`; OCI labels; actionlint-clean. [DevOps note 04](patterns/devops/04-ci-cd-pipeline.md) | registries, immutable tags, least privilege | 1 h | ✅ | 2026-10-02 |
+| D2.2 | Releases, **tag-driven** (owner's decision: no bot commits, so no release-please): `make release VERSION=X.Y.Z` pushes an annotated tag; `release.yml` guards that it's on `main`, **promotes** CI's scanned `:sha-` image to `:X.Y.Z`/`:X.Y` with `imagetools` (builds only if missing), and creates a GitHub Release with generated notes. Images report their commit at `/actuator/info` (`GIT_SHA` arg after the AOT layer) | semantic versioning, promote-don't-rebuild, release automation without bot commits | 1.5 h | ✅ | 2026-10-02 |
+| D2.3 | Supply chain: CycloneDX SBOM inside each jar (Boot-managed plugin, jars stay byte-reproducible), BuildKit SBOM + SLSA provenance attestations on pushed images, Syft SBOMs as release assets, **keyless cosign** signing of the digest via GitHub OIDC (verification demonstrated) | SBOM, provenance, signing, Sigstore (Fulcio/Rekor) | 2 h | ✅ | 2026-10-02 |
+| D2.4 | Quality gates: JaCoCo **merged** unit + IT coverage (api 27.5 % unit-only → 91 % merged) with per-module ratchet floors that fail `verify`; CodeQL (Java + TS, `build-mode: none`, weekly); actionlint job for workflows; Dependabot **without** auto-merge (owner's decision: re-applied as the owner's commits) | static analysis, gates, coverage ratchets | 1.5 h | ✅ | 2026-10-02 |
+| D2.5 | Branch protection on `main` (owner's decision: PR + green checks, 0 approvals, admins included, no force-push) requiring one aggregate **`ci-ok`** job (`if: always()`, every job success-or-skipped) + CodeQL; PR template; CODEOWNERS | trunk-based workflow, required checks with path filters | 0.5 h | ✅ | 2026-10-02 |
+| D2.6 | Playwright e2e (`e2e/`, Chromium) against the full compose stack: sign up → log in → **reload restores the session from the httpOnly cookie** → log out; generic bad-password message; learner kept out of `/admin`; open-redirect blocked. In CI: images loaded from the `images` job's cache, `compose up --wait`, traces + container logs on failure; feeds `ci-ok`. `make e2e` locally (4 tests, ~7 s) | e2e in CI, test pyramid, browser-only guarantees | 2 h | ✅ | 2026-10-02 |
 
 ---
 
@@ -329,6 +329,12 @@ concurrent edits.
 
 **Est 30 h** · Goal: upload → playable HLS in under 5 minutes, surviving crashes without
 duplicates.
+
+> ⚠️ **Open decision for 7.1:** MinIO stopped publishing its container images (`minio/minio` and
+> `quay.io/minio/*` are no longer pullable, found 2026-10-02 when CI couldn't pull them). Compose
+> keeps it as an opt-in `media` profile that works only where the image is cached. 7.1 picks the
+> local S3 replacement (candidates: SeaweedFS, Garage, RustFS, LocalStack) in an ADR, and checks
+> that it supports presigned multipart uploads + CORS exposing `ETag`.
 
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
@@ -531,6 +537,7 @@ Each line is a sentence you can say *and* a file or test you can show.
 |---|---|
 | One `backend/Dockerfile` with `--build-arg APP=api\|worker` instead of one Dockerfile per app | Both apps build identically; one file can't drift from the other |
 | `spring-modulith-starter-jpa` removed from the Initializr selection | Its event-publication table would need a hand-written migration now. Phase 2 hand-rolls the outbox first, then compares (2.5). |
+| MinIO moved to an opt-in compose profile (`media`) | its images are no longer published (2026-10-02); nothing uses S3 before Phase 7, which chooses a replacement |
 | google-java-format pinned to 1.35.0 | 1.36+ pulls in a commonmark dependency that Spotless 3.10 fails to load |
 | Healthcheck via BusyBox `wget` (was bash `/dev/tcp`) | Never install curl/wget just for a healthcheck (they add CVEs). Since D1.2 the runtime is the Alpine JRE ([ADR-0007](docs/adr/0007-alpine-jre-runtime-image.md)), whose BusyBox already has `wget` and has no bash |
 | First CI run failed: `aquasecurity/trivy-action@0.33.1` (tags now carry a `v` prefix) | Fixed to `@v0.36.0` in 94f94b0. Lesson: pin action versions you have verified exist. |

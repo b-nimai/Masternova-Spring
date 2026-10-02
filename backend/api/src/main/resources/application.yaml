@@ -64,7 +64,15 @@ management:
       probes:
         enabled: true # /actuator/health/liveness and /readiness — used by Docker and Kubernetes
   info:
+    env:
+      enabled: true # publish the info.* properties below at /actuator/info
     java:
       enabled: true
     os:
       enabled: true
+
+info:
+  app:
+    # The commit the image was built from (Dockerfile ARG GIT_SHA). A release tag points at a
+    # commit, so /actuator/info answers "which version is running?" even for promoted images.
+    commit: ${GIT_SHA:local}

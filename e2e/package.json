@@ -1,0 +1,14 @@
+{
+  "name": "masternova-e2e",
+  "private": true,
+  "description": "Browser end-to-end smoke tests against the full container stack (make stack → http://localhost:8081)",
+  "packageManager": "pnpm@12.8.1",
+  "scripts": {
+    "test": "playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^26.6.3"
+  }
+}

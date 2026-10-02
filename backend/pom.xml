@@ -35,6 +35,9 @@
 		<!-- 1.36+ adds a commonmark dependency Spotless 3.10 fails to load; bump when Spotless fixes it. -->
 		<google-java-format.version>1.35.0</google-java-format.version>
 		<jacoco.version>0.8.15</jacoco.version>
+		<!-- coverage floors (0.00–1.00); each module may raise its own -->
+		<coverage.line>0.00</coverage.line>
+		<coverage.branch>0.00</coverage.branch>
 
 		<!--
 			Security overrides of versions Spring Boot manages (found by Trivy in CI).
@@ -100,7 +103,11 @@
 				</executions>
 			</plugin>
 
-			<!-- Coverage: report lands in <module>/target/site/jacoco. Gate is added in Phase D2. -->
+			<!--
+				Coverage (patterns/devops/04 §5): unit tests (jacoco.exec) and Testcontainers ITs
+				(jacoco-it.exec) are MERGED, the report and the gate read the merge. The gate fails
+				`verify` below the module's floor (properties coverage.line / coverage.branch).
+			-->
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
@@ -118,11 +125,60 @@
 						</goals>
 					</execution>
 					<execution>
+						<id>merge</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>merge</goal>
+						</goals>
+						<configuration>
+							<fileSets>
+								<fileSet>
+									<directory>${project.build.directory}</directory>
+									<includes>
+										<include>jacoco.exec</include>
+										<include>jacoco-it.exec</include>
+									</includes>
+								</fileSet>
+							</fileSets>
+							<destFile>${project.build.directory}/jacoco-merged.exec</destFile>
+						</configuration>
+					</execution>
+					<execution>
 						<id>report</id>
 						<phase>verify</phase>
 						<goals>
 							<goal>report</goal>
 						</goals>
+						<configuration>
+							<dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+						</configuration>
+					</execution>
+					<execution>
+						<id>check</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<dataFile>${project.build.directory}/jacoco-merged.exec</dataFile>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${coverage.line}</minimum>
+										</limit>
+										<limit>
+											<counter>BRANCH</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>${coverage.branch}</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
 					</execution>
 				</executions>
 			</plugin>

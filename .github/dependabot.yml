@@ -1,4 +1,6 @@
 # Weekly dependency PRs, grouped so minor/patch bumps arrive as one PR per ecosystem.
+# Policy (patterns/devops/04 §5): no auto-merge. The repo's history shows only its owner, so a
+# green Dependabot PR is re-applied as the owner's own commit and the bot PR is closed.
 version: 2
 updates:
   - package-ecosystem: maven
@@ -8,7 +10,7 @@ updates:
       maven-minor: { update-types: [minor, patch] }
 
   - package-ecosystem: npm
-    directory: /frontend
+    directories: ['/frontend', '/e2e']
     schedule: { interval: weekly }
     groups:
       angular: { patterns: ['@angular/*', '@angular-devkit/*', 'angular-eslint'] }

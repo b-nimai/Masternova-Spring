@@ -26,6 +26,9 @@ server:
   shutdown: graceful
 
 management:
+  info:
+    env:
+      enabled: true # publish the info.* properties below at /actuator/info
   endpoints:
     web:
       exposure:
@@ -34,3 +37,9 @@ management:
     health:
       probes:
         enabled: true
+
+info:
+  app:
+    # The commit the image was built from (Dockerfile ARG GIT_SHA). A release tag points at a
+    # commit, so /actuator/info answers "which version is running?" even for promoted images.
+    commit: ${GIT_SHA:local}

@@ -13,6 +13,13 @@
 	<artifactId>api</artifactId>
 	<name>api</name>
 
+	<properties>
+		<!-- Coverage floor = measured (unit + IT merged) minus a small margin: 91 % lines / 69 % branches
+		     on 2026-10-02. Raise it as coverage grows; never lower it to make a build pass. -->
+		<coverage.line>0.88</coverage.line>
+		<coverage.branch>0.65</coverage.branch>
+	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>com.masternova</groupId>
@@ -161,6 +168,12 @@
 						</goals>
 					</execution>
 				</executions>
+			</plugin>
+			<!-- CycloneDX SBOM of every dependency, written into the jar at META-INF/sbom/application.cdx.json
+			     (version and configuration come from spring-boot-starter-parent). patterns/devops/04 §4 -->
+			<plugin>
+				<groupId>org.cyclonedx</groupId>
+				<artifactId>cyclonedx-maven-plugin</artifactId>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

@@ -1,0 +1,37 @@
+# CodeQL: GitHub's semantic code analysis (injection, path traversal, unsafe deserialisation,
+# hard-coded credentials, …) for the Java backend and the TypeScript frontend. Findings appear
+# under Security → Code scanning, and as a failing check on the PR that introduces them.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 4 * * 1' # weekly: new queries find old bugs
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload the results to code scanning
+    strategy:
+      fail-fast: false
+      matrix:
+        # build-mode none: CodeQL reads the sources directly, no Maven/pnpm build needed
+        language: [java-kotlin, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
