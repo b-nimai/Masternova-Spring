@@ -53,7 +53,7 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
@@ -62,7 +62,7 @@ jobs:
         run: ./mvnw -B verify
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco
           path: backend/*/target/site/jacoco/
@@ -77,7 +77,7 @@ jobs:
         working-directory: patterns/lab
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '25'
@@ -93,10 +93,10 @@ jobs:
         working-directory: frontend
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: frontend/package.json
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: pnpm
@@ -124,7 +124,7 @@ jobs:
           - { name: web, context: frontend, args: "" }
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:

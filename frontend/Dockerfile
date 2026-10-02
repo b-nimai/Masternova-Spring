@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---- build: compile the Angular app to static files ----
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 # Dependencies first — this layer is reused until package.json / the lockfile change.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -12,7 +12,7 @@ COPY . .
 RUN pnpm build
 
 # ---- runtime: nginx serves the files and proxies /api to the backend ----
-FROM nginx:1.30-alpine
+FROM nginx:1.31-alpine
 # Base images lag behind Alpine's security fixes; pull them in at build time (Trivy gate in CI).
 RUN apk upgrade --no-cache
 COPY nginx.conf /etc/nginx/conf.d/default.conf
