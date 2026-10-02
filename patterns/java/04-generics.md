@@ -450,4 +450,4 @@ jshell> Ranking.max(java.util.List.of(java.time.LocalDate.now(), java.time.Local
   - Use `Class<T>` tokens and super type tokens.
 - **Raw types:** they disable checking, so the `ClassCastException` lands at a later read.
   Never use them.
-- **Next:** [05 — Exceptions & `Optional`](README.md) (task 1.5).
+- **Next:** [05 — Exceptions & `Optional`](05-exceptions-and-optional.md) (task 1.5).

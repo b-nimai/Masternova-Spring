@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress: 1.1–1.4 ✅. Next: 1.5 (exceptions & `Optional`).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: 1.1–1.5 ✅. Next: 1.6 (OOP: composition over inheritance).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -32,7 +32,10 @@ interleaved where there's something real to ship (see §2 for the order).
 4. Run the **`code-review`** skill on the diff, then **`simplify`**.
 5. Walk the Definition of Done (§1.4). **All of it.** Then flip to `✅` and fill the Date.
 6. Update the dashboard's Done/Spent columns.
-7. Commit with conventional commits (`feat(identity): …`). **No `Co-Authored-By`, no AI attribution.**
+7. **Commit on the phase branch** (`phase-N/<name>`) with a conventional commit (`feat(identity): …`).
+   **Don't push yet.** **No `Co-Authored-By`, no AI attribution.**
+8. **When the whole phase is done:** push the branch, open a PR to `main`, wait for green CI,
+   merge (merge commit, so the per-task commits are kept), then branch off `main` for the next phase.
 
 ### 1.2 The order of work for every backend unit
 
@@ -110,7 +113,7 @@ Phases are listed **in the order you do them**.
 | # | Phase | Tasks | Done | Est | Spent | Status |
 |---|---|---|---|---|---|---|
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
-| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 4 | 14 h | ~6.5 h | 🔨 |
+| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 5 | 14 h | ~8 h | 🔨 |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 0 | 16 h | — | ☐ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
@@ -127,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **16** | **~326 h** | ~13.5 h | |
+| | **Total** | **137** | **17** | **~326 h** | ~15 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -191,7 +194,7 @@ a code walkthrough, common mistakes, interview Q&A and a 30-second recall. Sprin
 | 1.2 | `PaymentOutcome`, `CouponRule`, `LectureContent`, `Expr` ([study note](patterns/java/02-sealed-types-and-pattern-matching.md)) | `sealed` / `permits` / `non-sealed`, switch expressions, type/record/nested patterns, guards, `_`, exhaustiveness, dominance | — | sealed+switch vs Strategy vs Visitor | 1 h | ✅ | 2026-10-02 |
 | 1.3 | Catalog dataset kata: top courses, revenue by category, instructors by rating ([study note](patterns/java/03-collections-and-streams.md)) | Collections + Map API, HashMap internals, CME, `Comparator` chains, lazy streams, `groupingBy`/`partitioningBy`/`toMap`/`teeing`, gatherers | — | — | 1.5 h | ✅ | 2026-10-02 |
 | 1.4 | `Result<T>`, `Page<T>`, `Registry<K, V>`, `Ranking`, `TypedSettings` ([study note](patterns/java/04-generics.md)) | generics, invariance, bounded types, wildcards (PECS), type erasure, raw types, type tokens | — | generic Strategy registry | 1 h | ✅ | 2026-10-02 |
-| 1.5 | Exceptions + resources | checked vs unchecked, custom hierarchies, try-with-resources, `Optional` done right | — | — | 1 h | ☐ | |
+| 1.5 | Domain exceptions, CSV importer, resources, `Optional` lookups, retry ([study note](patterns/java/05-exceptions-and-optional.md)) | checked vs unchecked, sealed exception hierarchy → HTTP, try-with-resources + suppressed, `finally` traps, `InterruptedException`, `Optional` done right | — | prototype of Phase 2 error model | 1 h | ✅ | 2026-10-02 |
 | 1.6 | OOP drills: refactor an inheritance mess to composition | interfaces vs abstract classes, composition over inheritance, encapsulation (package-private) | — | Strategy vs Template Method | 1.5 h | ☐ | |
 | 1.7 | Concurrency lab: race condition → `AtomicLong` / `synchronized` / lock; 10k virtual threads | threads, `ExecutorService`, `CompletableFuture`, virtual threads, structured concurrency | — | — | 2 h | ☐ | |
 | 1.8 | Spring IoC spike: `@ConfigurationProperties` record, profiles, bean scopes, constructor injection | ApplicationContext, bean lifecycle, `@Configuration` vs `@Component` | — | — | 1.5 h | ☐ | |
@@ -477,7 +480,7 @@ Tick these as they're used *for real* in the project, not just read about.
 ### 3.1 Java
 
 - [x] records, compact constructors · [x] sealed interfaces + pattern-matching `switch` · [x] annotations + reflection
-- [x] generics (bounded, wildcards) · [x] Streams + Collectors · [ ] `Optional` · [ ] exception hierarchies
+- [x] generics (bounded, wildcards) · [x] Streams + Collectors · [x] `Optional` · [x] exception hierarchies
 - [x] `equals`/`hashCode`/immutability · [ ] interfaces vs abstract classes · [ ] package-private encapsulation
 - [ ] threads, executors, `CompletableFuture` · [x] virtual threads (config) · [ ] locks / atomics · [ ] `ProcessBuilder`
 
