@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 in progress on `phase-3/identity`: 3.1 ✅. Next: 3.2 (users, sessions, tokens).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 in progress on `phase-3/identity`: 3.1–3.2 ✅. Next: 3.3 (signup + email verification).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -115,7 +115,7 @@ Phases are listed **in the order you do them**.
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 8 | 16 h | ~15 h | ✅ |
-| 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 1 | 26 h | ~1.5 h | 🔨 |
+| 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 2 | 26 h | ~4 h | 🔨 |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **32** | **~326 h** | ~40.5 h | |
+| | **Total** | **137** | **33** | **~326 h** | ~43 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -230,7 +230,7 @@ screen lives in.
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
 | 3.1 | [`docs/lld/identity.md`](docs/lld/identity.md) + [ADR-0006](docs/adr/0006-rotating-refresh-tokens-over-stateless-jwt.md) (rotating refresh tokens + reuse detection) | — | — | — | 1.5 h | ✅ | 2026-10-02 |
-| 3.2 | `User` / `Session` / `RefreshToken` entities, Flyway V3, `citext` email, password hashing | JPA mapping, enums, `PasswordEncoder` (Argon2/BCrypt) | — | **Strategy** (`PasswordEncoder` is one) | 2.5 h | ☐ | |
+| 3.2 | `User` aggregate, `AuthSession`, `RefreshToken`, `VerificationToken` (V4), `Email` value object, atomic token `consume`, delegating `PasswordEncoder` | JPA mapping, `@ElementCollection`, enums, Spring Data `@Modifying` queries, `SecureRandom` tokens, schema validation | — | **Strategy** (`DelegatingPasswordEncoder`) | 2.5 h | ✅ | 2026-10-02 |
 | 3.3 | Signup + email verification token; `UserRegistered` event → outbox | Bean Validation, events | — | Observer | 2 h | ☐ | |
 | 3.4 | Login: JWT access token (Resource Server, HMAC) + rotating refresh token in an httpOnly cookie; reuse detection revokes the family | Spring Security 7 filter chain, `JwtEncoder`/`Decoder`, cookies | — | **Chain of Responsibility** (filter chain) | 5 h | ☐ | |
 | 3.5 | RBAC: `LEARNER` / `INSTRUCTOR` / `ADMIN`, `@PreAuthorize`, method security | `@EnableMethodSecurity`, SpEL | — | — | 2 h | ☐ | |
