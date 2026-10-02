@@ -118,7 +118,7 @@ Phases are listed **in the order you do them**.
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
-| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 6 | 14 h | ~11 h | 🔨 |
+| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 7 | 14 h | ~12.5 h | 🔨 |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **56** | **~326 h** | ~89.5 h | |
+| | **Total** | **137** | **57** | **~326 h** | ~91 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -284,7 +284,7 @@ versioned, scanned artifacts.
 | 4.4 | Email templates (Thymeleaf): `EmailTemplate<P>` with a **final** `render` skeleton (unsubscribe-link invariant → model → HTML via a shared table/inline-style `layout.html` → plaintext twin → footer hook); `VerifyEmailTemplate` (mandatory) + `WelcomeEmailTemplate` (PRODUCT_NEWS) with typed payload records; one email engine with HTML + TEXT resolvers; unit tests without Spring (escaping, invariant, `final`). [Pattern note 06](patterns/docs/06-template-method.md) | Thymeleaf HTML/TEXT modes + fragments, abstract classes, generics, `final` methods | — | **Template Method** | 2 h | ✅ | 2026-10-02 |
 | 4.5 | `MailProvider` adapters: SMTP (`JavaMailSender`, 5xx `SMTPAddressFailedException` → permanent) + Resend (`RestClient`, 422 → permanent) behind `masternova.notification.provider`; `NotificationService` (render → claim → send → SENT / FAILED+rethrow / BOUNCED); `SendVerificationEmail` handler with a consumer-owned event view. Tests: fakes for the pipeline, `MockRestServiceServer`, Mailpit container IT; **live: signup → email in Mailpit in 3 s**. Pattern note [12 Adapter](patterns/docs/12-adapter.md) + lab contract test over two fake vendors. | `@ConditionalOnProperty`, `JavaMailSender`, `RestClient`, `MockRestServiceServer`, Testcontainers `GenericContainer` | — | **Adapter** | 2 h | ✅ | 2026-10-02 |
 | 4.6 | Suppression list + preferences (`Audience` repository; consent order: suppressed address beats even mandatory, opt-out only for optional categories; a bounce suppresses the address). Kernel `UnsubscribeTokens` HMAC codec shared by worker (issues) and api (verifies), `NOTIFICATION_TOKEN_SECRET` file secret; footer link + RFC 8058 `List-Unsubscribe` headers. identity publishes `EmailVerified` → `SendWelcomeEmail`. api `notification` module: `GET`/`PUT /me/notification-preferences` (422 `CATEGORY_MANDATORY`), public `POST /notifications/unsubscribe` (+ `/one-click`). Java note [11 HMAC & signed tokens](patterns/java/11-hmac-and-signed-tokens.md). | `Mac` / HMAC-SHA256, `MessageDigest.isEqual`, Base64url, `INSERT … WHERE EXISTS … ON CONFLICT`, `PublicEndpoints` | — | Repository | 1.5 h | ✅ | 2026-10-02 |
-| 4.7 | Angular: notification preferences page | — | `MatSlideToggle`, optimistic UI | — | 1.5 h | ☐ | |
+| 4.7 | Angular: `/account/notifications` (one `MatSlideToggle` per category, mandatory ones locked; optimistic update + rollback + snackbar, per-category in-flight lock) and public `/unsubscribe?token=…` (confirm-then-POST so link scanners unsubscribe nobody). `NotificationApi` in `core/api`. **Live:** signup → verify → welcome email with footer link + `List-Unsubscribe` headers → one-click opt-out → a replayed event is `SUPPRESSED`. Angular note [03 Optimistic UI](patterns/angular/03-optimistic-ui-and-server-state.md). | — | `MatSlideToggle`, `MatSnackBar`, optimistic UI, immutable signal updates, `finalize` | — | 1.5 h | ✅ | 2026-10-02 |
 | 4.8 | Tests: relay crash + redelivery IT, handler run-twice test, Mailpit assertion | Testcontainers `GenericContainer` (Mailpit) | — | — | 1.5 h | ☐ | |
 
 ---

@@ -28,9 +28,19 @@ export const routes: Routes = [
       import('./features/auth/verify-email/verify-email').then((m) => m.VerifyEmail),
   },
   {
+    path: 'unsubscribe', // the footer link in optional emails: /unsubscribe?token=… (no login needed)
+    loadComponent: () => import('./features/unsubscribe/unsubscribe').then((m) => m.Unsubscribe),
+  },
+  {
     path: 'account',
     canMatch: [authGuard],
     loadComponent: () => import('./features/account/account').then((m) => m.Account),
+  },
+  {
+    path: 'account/notifications',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/account/notifications/notifications').then((m) => m.Notifications),
   },
   {
     path: 'admin',

@@ -1,0 +1,41 @@
+<mat-card appearance="outlined" class="notifications-card">
+  <mat-card-header>
+    <mat-card-title>Email preferences</mat-card-title>
+    <mat-card-subtitle>Choose which emails Masternova sends you.</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    @switch (state()) {
+      @case ('loading') {
+        <div class="loading" data-testid="loading"><mat-spinner diameter="32" /></div>
+      }
+      @case ('error') {
+        <p class="form-error" data-testid="load-error">
+          We couldn't load your preferences.
+          <button mat-button type="button" (click)="load()">Retry</button>
+        </p>
+      }
+      @case ('ready') {
+        <ul class="preferences">
+          @for (p of preferences(); track p.category) {
+            <li>
+              <div class="copy">
+                <span class="label">{{ copy[p.category].label }}</span>
+                <span class="hint">{{ copy[p.category].hint }}</span>
+              </div>
+              <mat-slide-toggle
+                [attr.data-testid]="'toggle-' + p.category"
+                [checked]="p.enabled"
+                [disabled]="p.mandatory || saving().has(p.category)"
+                [aria-label]="copy[p.category].label"
+                (change)="toggle(p.category, $event.checked)"
+              />
+            </li>
+          }
+        </ul>
+      }
+    }
+  </mat-card-content>
+  <mat-card-actions>
+    <a mat-button routerLink="/account">Back to my account</a>
+  </mat-card-actions>
+</mat-card>
