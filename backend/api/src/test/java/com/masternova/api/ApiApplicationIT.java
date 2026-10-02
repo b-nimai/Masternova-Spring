@@ -37,11 +37,16 @@ class ApiApplicationIT {
   }
 
   @Test
-  void unknownRouteIsAProblemDetail() {
-    assertThat(mvc.get().uri("/api/v1/nope"))
-        .hasStatus(HttpStatus.NOT_FOUND)
+  void theApiIsDenyByDefault() {
+    // ⭐ An unknown route without a token is 401, not 404: we don't even reveal what exists.
+    var result = mvc.get().uri("/api/v1/nope").exchange();
+
+    assertThat(result)
+        .hasStatus(HttpStatus.UNAUTHORIZED)
         .bodyJson()
-        .extractingPath("$.status")
-        .isEqualTo(404);
+        .extractingPath("$.code")
+        .isEqualTo("UNAUTHENTICATED");
+    // RFC 6750 scheme; Spring Security 7 also appends RFC 9728 resource_metadata
+    assertThat(result.getResponse().getHeader("WWW-Authenticate")).startsWith("Bearer");
   }
 }

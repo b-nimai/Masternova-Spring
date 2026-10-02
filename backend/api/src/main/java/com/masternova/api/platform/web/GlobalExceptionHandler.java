@@ -4,7 +4,9 @@ import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.DomainException;
 import com.masternova.api.platform.ForbiddenException;
 import com.masternova.api.platform.NotFoundException;
+import com.masternova.api.platform.ProblemTypes;
 import com.masternova.api.platform.RuleViolationException;
+import com.masternova.api.platform.UnauthenticatedException;
 import com.masternova.api.platform.ValidationException;
 import com.masternova.api.platform.ValidationException.FieldError;
 import jakarta.servlet.http.HttpServletRequest;
@@ -55,6 +57,7 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
           case ForbiddenException e -> HttpStatus.FORBIDDEN;
           case ConflictException e -> HttpStatus.CONFLICT;
           case RuleViolationException e -> HttpStatus.UNPROCESSABLE_CONTENT;
+          case UnauthenticatedException e -> HttpStatus.UNAUTHORIZED;
         };
     ProblemDetail problem = problem(status, ex.code(), ex.getMessage(), request);
     ex.details().forEach(problem::setProperty);

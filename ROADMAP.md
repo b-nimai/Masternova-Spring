@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 in progress on `phase-3/identity`: 3.1–3.3 ✅. Next: 3.4 (login: JWT + rotating refresh tokens).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 in progress on `phase-3/identity`: 3.1–3.4 ✅. Next: 3.5 (RBAC).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -115,7 +115,7 @@ Phases are listed **in the order you do them**.
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
 | 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 11 | 14 h | ~17 h | ✅ |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 8 | 16 h | ~15 h | ✅ |
-| 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 3 | 26 h | ~6 h | 🔨 |
+| 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 4 | 26 h | ~11 h | 🔨 |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 0 | 10 h | — | ☐ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **34** | **~326 h** | ~45 h | |
+| | **Total** | **137** | **35** | **~326 h** | ~50 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -232,7 +232,7 @@ screen lives in.
 | 3.1 | [`docs/lld/identity.md`](docs/lld/identity.md) + [ADR-0006](docs/adr/0006-rotating-refresh-tokens-over-stateless-jwt.md) (rotating refresh tokens + reuse detection) | — | — | — | 1.5 h | ✅ | 2026-10-02 |
 | 3.2 | `User` aggregate, `AuthSession`, `RefreshToken`, `VerificationToken` (V4), `Email` value object, atomic token `consume`, delegating `PasswordEncoder` | JPA mapping, `@ElementCollection`, enums, Spring Data `@Modifying` queries, `SecureRandom` tokens, schema validation | — | **Strategy** (`DelegatingPasswordEncoder`) | 2.5 h | ✅ | 2026-10-02 |
 | 3.3 | Signup (race-safe `EMAIL_TAKEN`) + single-use email verification; `UserRegistered` through the outbox; `IdentityProperties`; dev-only link logger | Bean Validation, value-object validation, `DataIntegrityViolationException` translation, dirty checking, module-owned `@ConfigurationProperties` | — | Observer (via outbox) | 2 h | ✅ | 2026-10-02 |
-| 3.4 | Login: JWT access token (Resource Server, HMAC) + rotating refresh token in an httpOnly cookie; reuse detection revokes the family | Spring Security 7 filter chain, `JwtEncoder`/`Decoder`, cookies | — | **Chain of Responsibility** (filter chain) | 5 h | ☐ | |
+| 3.4 | Login (timing-safe, no account probing) → 15-min HS256 JWT + rotating httpOnly/SameSite=Strict refresh cookie; reuse revokes the family (committed via `noRollbackFor`); logout; `/me`; deny-by-default chain fed by modules' `PublicEndpoints`; 401/403 as Problem Details; 6th error kind | Spring Security 7, resource server, `JwtEncoder`/`JwtDecoder` + validators, `ResponseCookie`, `@CookieValue`, `noRollbackFor` | — | **Chain of Responsibility** (filter chain) | 5 h | ✅ | 2026-10-02 |
 | 3.5 | RBAC: `LEARNER` / `INSTRUCTOR` / `ADMIN`, `@PreAuthorize`, method security | `@EnableMethodSecurity`, SpEL | — | — | 2 h | ☐ | |
 | 3.6 | Google sign-in (optional) as a second `AuthenticationProvider` | OAuth2 client | — | **Strategy** (auth methods): catalog row 1 | 2 h | ☐ | |
 | 3.7 | Angular app shell: Material toolbar + sidenav, responsive layout, lazy feature routes | — | layout, `MatSidenav`, `BreakpointObserver`, `loadChildren` | — | 2 h | ☐ | |
@@ -488,7 +488,7 @@ Tick these as they're used *for real* in the project, not just read about.
 
 - [x] Boot auto-configuration + starters · [x] `@RestController` / records as DTOs · [x] ProblemDetail · [x] Actuator
 - [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [x] Bean Validation
-- [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [ ] Spring Security 7 + JWT
+- [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [x] Spring Security 7 + JWT
 - [x] Spring Modulith events · [x] Modulith verification · [ ] Spring Cache + Redis · [ ] `@Scheduled` / ShedLock · [ ] SSE
 - [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [ ] `@WebMvcTest` / `@DataJpaTest` slices
 
@@ -536,4 +536,6 @@ Each line is a sentence you can say *and* a file or test you can show.
 | First CI run failed: `aquasecurity/trivy-action@0.33.1` (tags now carry a `v` prefix) | Fixed to `@v0.36.0` in 94f94b0. Lesson: pin action versions you have verified exist. |
 | The outbox relay runs inside the **api** process in Phase 2 (not the worker, as the HLD shows) | The relay needs the outbox repository; sharing it with the worker needs a shared Spring library module. Phase 4 (4.2) extracts `backend/outbox` and moves the relay; until then `masternova.outbox.relay-enabled` controls it. |
 | `SecurityConfig` is `@ConditionalOnWebApplication(SERVLET)` | Found in 2.4: a non-web context (`@SpringBootTest(webEnvironment = NONE)`) has no `HttpSecurity` bean. |
+| Security config lives in **identity**, not platform (3.4); public routes come from each module's `PublicEndpoints` bean | identity owns authentication; platform must boot standalone (`PlatformModuleIT`) without a JWT decoder, and a central list of public URLs would couple identity to every module. |
+| `ProblemTypes` moved to the platform's public API | `ModularityTests` rejected identity using it from the internal `platform.web` package. |
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |
