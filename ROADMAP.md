@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: 1.1–1.9 ✅. Next: 1.10 (request lifecycle & JPA fundamentals).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress on branch `phase-1/java-spring-warmup`: 1.1–1.10 ✅. Next: 1.11 (Angular essentials), then the Phase 1 PR.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -113,7 +113,7 @@ Phases are listed **in the order you do them**.
 | # | Phase | Tasks | Done | Est | Spent | Status |
 |---|---|---|---|---|---|---|
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
-| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 9 | 14 h | ~14.5 h | 🔨 |
+| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 10 | 14 h | ~16 h | 🔨 |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 0 | 16 h | — | ☐ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **21** | **~326 h** | ~21.5 h | |
+| | **Total** | **137** | **22** | **~326 h** | ~23 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -199,7 +199,7 @@ a code walkthrough, common mistakes, interview Q&A and a 30-second recall. Sprin
 | 1.7 | Counters, cohort seats (CAS), 50× webhook idempotency, quote fan-out, 10k virtual threads, `ScopedValue`, outbox producer–consumer ([study note](patterns/java/07-concurrency-and-virtual-threads.md)) | races, JMM/`volatile`, atomics/locks, `ConcurrentHashMap`, executors, `CompletableFuture`, virtual threads, `ScopedValue`, back-pressure, deadlock | — | — | 2 h | ✅ | 2026-10-02 |
 | 1.8 | Real `MasternovaProperties` + IoC learning tests with `ApplicationContextRunner` ([study note](patterns/java/08-spring-ioc-and-di.md)) | DI resolution (`@Primary`/`@Qualifier`/`List`/`ObjectProvider`), scopes + prototype trap, lifecycle, full vs lite `@Configuration`, profiles, conditions, auto-config back-off, `@ConfigurationProperties` | — | — | 1.5 h | ✅ | 2026-10-02 |
 | 1.9 | AOP + proxy learning tests (recording transaction manager), Proxy pattern note + lab ([study note](patterns/java/09-spring-aop-and-proxies.md), [pattern](patterns/docs/15-proxy.md)) | JDK vs CGLIB proxies, `@Aspect`/`@Around`, self-invocation, `@Transactional` rollback rules & propagation, `TransactionTemplate` | — | **Proxy**: catalog row 15 | 1.5 h | ✅ | 2026-10-02 |
-| 1.10 | Request lifecycle + JPA spike: filter → interceptor → controller → advice; entity lifecycle, persistence context, an N+1 caught in a test | DispatcherServlet, Bean Validation, Hibernate first-level cache, lazy loading | — | — | 1.5 h | ☐ | |
+| 1.10 | Request lifecycle learning test + JPA fundamentals IT on real Postgres ([study note](patterns/java/10-request-lifecycle-and-jpa.md)) | DispatcherServlet order, filter vs interceptor vs advice, Bean Validation, persistence context, entity states, dirty checking, lazy loading, **N+1 measured (11 → 1)**, Spring Data | — | — | 1.5 h | ✅ | 2026-10-02 |
 | 1.11 | Angular essentials playground route | — | `signal` / `computed` / `effect`, `input()` / `output()`, RxJS `map` / `switchMap` / `debounceTime` / `catchError` | — | 1 h | ☐ | |
 
 ---
@@ -487,8 +487,8 @@ Tick these as they're used *for real* in the project, not just read about.
 ### 3.2 Spring
 
 - [x] Boot auto-configuration + starters · [x] `@RestController` / records as DTOs · [x] ProblemDetail · [x] Actuator
-- [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [ ] Bean Validation
-- [ ] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [ ] Spring Security 7 + JWT
+- [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [x] Bean Validation
+- [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [ ] Spring Security 7 + JWT
 - [ ] Spring Modulith events · [x] Modulith verification · [ ] Spring Cache + Redis · [ ] `@Scheduled` / ShedLock · [ ] SSE
 - [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [ ] `@WebMvcTest` / `@DataJpaTest` slices
 

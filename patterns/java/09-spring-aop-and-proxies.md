@@ -296,4 +296,4 @@ Never do remote calls inside one.
   - `REQUIRED` vs `REQUIRES_NEW`.
   - Goes on service methods. Keep it short, with no remote calls inside.
 - **Proxy vs Decorator:** controls access vs adds behaviour; same shape.
-- **Next:** [10 — Request lifecycle & JPA fundamentals](README.md) (task 1.10).
+- **Next:** [10 — Request lifecycle & JPA fundamentals](10-request-lifecycle-and-jpa.md) (task 1.10).
