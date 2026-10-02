@@ -6,8 +6,10 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { MatMenuModule } from '@angular/material/menu';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { map } from 'rxjs';
+import { AuthStore } from './core/auth/auth-store';
 import { NAV_ITEMS } from './core/layout/nav-items';
 
 /**
@@ -28,6 +30,7 @@ import { NAV_ITEMS } from './core/layout/nav-items';
     MatListModule,
     MatIconModule,
     MatButtonModule,
+    MatMenuModule,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -45,7 +48,27 @@ export class App {
   protected readonly sidenavOpened = computed(() => !this.isHandset() || this.drawerOpen());
   protected readonly sidenavMode = computed(() => (this.isHandset() ? 'over' : 'side'));
 
-  protected readonly navItems = NAV_ITEMS;
+  protected readonly auth = inject(AuthStore);
+  private readonly router = inject(Router);
+
+  /**
+   * ⭐ ROLE-BASED UI: entries the user can't use aren't shown. This is UX only — the API enforces
+   * every rule again (deny-by-default + @PreAuthorize), so hiding a link is never the security.
+   */
+  protected readonly navItems = computed(() =>
+    NAV_ITEMS.filter(
+      (item) =>
+        (!item.requiresAuth || this.auth.isAuthenticated()) &&
+        (item.roles.length === 0 || this.auth.hasAnyRole(item.roles)),
+    ),
+  );
+
+  protected logout(): void {
+    this.auth.logout().subscribe({
+      complete: () => void this.router.navigate(['/']),
+      error: () => void this.router.navigate(['/']), // signed out locally either way
+    });
+  }
 
   protected toggleDrawer(): void {
     this.drawerOpen.update((open) => !open);

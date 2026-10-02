@@ -6,7 +6,19 @@
   }
   <a routerLink="/" class="brand">Masternova</a>
   <span class="spacer"></span>
-  <!-- the auth area (log in / user menu) arrives in Phase 3.9 -->
+  @if (auth.user(); as user) {
+    <button mat-button type="button" [matMenuTriggerFor]="userMenu" data-testid="user-menu">
+      <mat-icon aria-hidden="true">account_circle</mat-icon>
+      {{ user.displayName }}
+    </button>
+    <mat-menu #userMenu="matMenu">
+      <a mat-menu-item routerLink="/account">My account</a>
+      <button mat-menu-item type="button" (click)="logout()">Log out</button>
+    </mat-menu>
+  } @else {
+    <a mat-button routerLink="/login">Log in</a>
+    <a mat-flat-button routerLink="/signup">Sign up</a>
+  }
 </mat-toolbar>
 
 <mat-sidenav-container class="container">
@@ -17,7 +29,7 @@
     (closedStart)="drawerOpen.set(false)"
   >
     <mat-nav-list>
-      @for (item of navItems; track item.link) {
+      @for (item of navItems(); track item.link) {
         <a
           mat-list-item
           [routerLink]="item.link"
