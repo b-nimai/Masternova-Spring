@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-02 · **Status:** §1 implemented (2.2); the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-02 · **Status:** §1 (2.2), §4 (2.6) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -22,6 +22,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | 10 | Authorization denials carry a reason code | Phase 8 |
 | 11 | Media is bought with a short-lived token | Phase 8 |
 | 12 | Payment webhooks answer 200 for almost everything | Phase 9 |
+| 13 | Authentication: deny by default, Bearer access token, refresh by cookie | ✅ Phase 3 |
 
 ## 1. Error envelope: RFC 9457 Problem Details
 
@@ -163,3 +164,32 @@ token.
 signature verifies, it answers 200 for `processed`, `duplicate`, `ignored` and `deferred`
 alike; all of them mean "stop retrying". A bad signature is 400: terminal for the provider,
 and it would fail on retry anyway.
+
+## 13. Authentication
+
+**Deny by default.** Every route needs `Authorization: Bearer <access token>` unless a module
+declares it public through a `PublicEndpoints` bean (platform API). Today the public routes are
+`/api/v1/auth/**`, `/api/v1/meta/**` and the health endpoints. An unknown route without a token
+is 401, not 404, so the API reveals nothing about what exists.
+
+| Endpoint | Body | Answer |
+|---|---|---|
+| `POST /auth/signup` | `{email, displayName, password}` | 201 `UserResponse`; 409 `EMAIL_TAKEN`; 400 field errors |
+| `POST /auth/verify-email` | `{token}` | 204; 422 `VERIFICATION_TOKEN_INVALID` |
+| `POST /auth/login` | `{email, password}` | 200 `TokenResponse` + `Set-Cookie: mn_refresh`; 401 `INVALID_CREDENTIALS` |
+| `POST /auth/refresh` | none (the cookie) | 200 `TokenResponse` + a **rotated** cookie; 401 `SESSION_EXPIRED` / `SESSION_REVOKED` |
+| `POST /auth/logout` | none (the cookie) | 204; clears the cookie |
+| `GET /me` | — | 200 `UserResponse` |
+
+- **Access token:** a 15-minute HS256 JWT with claims `sub` (user id), `roles`, `email_verified`
+  and `sid`. Clients keep it **in memory**.
+- **Refresh token:** only ever in the `mn_refresh` cookie: `HttpOnly`, `Secure` (outside dev),
+  `SameSite=Strict`, `Path=/api/v1/auth`. It is single-use. Presenting a used one revokes the
+  session ([ADR-0006](../adr/0006-rotating-refresh-tokens-over-stateless-jwt.md)), so clients
+  must refresh **single-flight**.
+- **Errors from the security chain** use the same Problem Details shape: 401 `UNAUTHENTICATED`
+  (with `WWW-Authenticate: Bearer`), 403 `FORBIDDEN` with `reason: INSUFFICIENT_ROLE`.
+- **Roles** live in the token, so a role change reaches the client at its next refresh.
+
+Implemented by `identity.infrastructure.security.SecurityConfig`, `ProblemSecurityHandlers` and
+`identity.web.AuthController`. Design: [`docs/lld/identity.md`](../lld/identity.md).
