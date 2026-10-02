@@ -9,9 +9,10 @@
 
 | Order | Read | Why |
 |---|---|---|
-| 1 | [Java notes](java/README.md), in number order | The language features every pattern below is built from |
-| 2 | Pattern notes ([catalog below](#catalog)), as each one lands in the project | The design: problem → structure → code → when *not* to use it → interview Q&A |
-| 3 | The code + tests in [`lab/`](lab/) | Run it, break it, change it: `cd patterns/lab && ./mvnw test` |
+| 1 | [Java notes](java/README.md), in number order | The language and Spring features every pattern below is built from (01–07 Java, 08–10 Spring) |
+| 2 | [Angular notes](angular/README.md) | The frontend side: signals, components, RxJS |
+| 3 | Pattern notes ([catalog below](#catalog)), as each one lands in the project | The design: problem → structure → code → when *not* to use it → interview Q&A |
+| 4 | The code + tests in [`lab/`](lab/) (and the learning tests in `backend/api/src/test/.../learning/`) | Run it, break it, change it: `cd patterns/lab && ./mvnw test` |
 
 **Priority marks** in every note:
 
@@ -28,7 +29,8 @@ only those two sections across all notes is a full revision pass.
 
 | Piece | Where | What it gives you |
 |---|---|---|
-| **Java notes** | [`java/NN-<topic>.md`](java/README.md) | One language topic in depth, built around the code in `lab/.../java/` |
+| **Java notes** | [`java/NN-<topic>.md`](java/README.md) | One language/Spring topic in depth, built around the code in `lab/.../java/` and the backend learning tests |
+| **Angular notes** | [`angular/NN-<topic>.md`](angular/README.md) | One frontend topic in depth, built around code in `frontend/src/app/` |
 | **Pattern catalog** | this file, below | One row per pattern: where it lives in the product, and its status |
 | **Pattern notes** | [`docs/NN-<pattern>.md`](docs/_TEMPLATE.md) | Intent, the Masternova problem, UML, code walkthrough, when *not* to use it, interview Q&A, 30-sec recall |
 | **Real class** | `backend/**` | The production class, marked `@DesignPattern(value = …, role = …)` |

@@ -1,0 +1,47 @@
+.playground {
+  max-width: 1040px;
+  margin: 32px auto;
+  padding: 0 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.hint {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.search {
+  flex: 1 1 280px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.error {
+  color: var(--mat-sys-error);
+}
+
+.cart {
+  border-top: 1px solid var(--mat-sys-outline-variant);
+  padding-top: 8px;
+}
+
+.cart-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.total {
+  font: var(--mat-sys-title-medium);
+}
