@@ -11,7 +11,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +44,6 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-  private static final String TYPE_BASE = "https://masternova.dev/problems/";
 
   @ExceptionHandler(DomainException.class)
   ResponseEntity<ProblemDetail> handleDomain(DomainException ex, HttpServletRequest request) {
@@ -138,16 +136,11 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static ProblemDetail problem(
       HttpStatus status, String code, String detail, HttpServletRequest request) {
-    ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
-    problem.setType(type(code));
-    problem.setInstance(URI.create(request.getRequestURI()));
-    problem.setProperty("code", code);
-    return problem;
+    return ProblemTypes.problem(status, code, detail, request);
   }
 
-  /** {@code VERSION_CONFLICT} → {@code https://masternova.dev/problems/version-conflict} */
   private static URI type(String code) {
-    return URI.create(TYPE_BASE + code.toLowerCase(Locale.ROOT).replace('_', '-'));
+    return ProblemTypes.type(code);
   }
 
   private static String codeFor(HttpStatusCode status) {

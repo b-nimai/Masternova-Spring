@@ -13,7 +13,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | 1 | Error envelope = RFC 9457 Problem Details | ✅ Phase 2.2 |
 | 2 | Cursor (keyset) pagination, no `total` | Phase 5 |
 | 3 | Optimistic concurrency on content writes | Phase 6 |
-| 4 | `Idempotency-Key` on unsafe, unversioned writes | Phase 2 |
+| 4 | `Idempotency-Key` on unsafe, unversioned writes | ✅ Phase 2.6 |
 | 5 | Money in minor units + currency | Phase 5 |
 | 6 | Commands as request bodies (sealed union) | Phase 6 |
 | 7 | 64-bit integers as strings | Phase 7 |
@@ -96,7 +96,20 @@ they re-read the aggregate and re-run their guards.
 ## 4. Idempotency
 
 Unsafe writes with no version to guard them (duplicate course, undo, complete upload, checkout)
-**require** an `Idempotency-Key` header. A repeat with the same key returns the stored
+**require** an `Idempotency-Key` header: annotate the controller method with
+`@IdempotencyKeyRequired`. **Implemented in Phase 2.6** (`IdempotencyFilter`, `IdempotencyIT`):
+
+| Situation | Response |
+|---|---|
+| first request with a key | runs normally; the response is stored for 24 h (`masternova.idempotency.retention`) |
+| retry, same key, same method + path + body | the stored response again, byte-for-byte, with header `Idempotent-Replayed: true` |
+| same key, different body | 422 `IDEMPOTENCY_KEY_REUSED` |
+| same key while the first request is still running | 409 `IDEMPOTENCY_IN_PROGRESS` |
+| the first request ended in a 5xx | the key is released, so the retry really runs |
+| `@IdempotencyKeyRequired` endpoint without the header | 400 `VALIDATION_FAILED` (`errors[0].field = "Idempotency-Key"`) |
+| empty key or key longer than 200 chars | 400 `IDEMPOTENCY_KEY_INVALID` |
+
+Any POST/PUT/PATCH/DELETE that *carries* the header is handled this way, annotated or not. A repeat with the same key returns the stored
 response. The same key with a different body is 422. A request with the key still in flight
 is 409. Keys are scoped **per caller**, never global.
 
