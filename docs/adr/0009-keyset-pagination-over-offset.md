@@ -52,6 +52,20 @@ a number nobody needs in an infinite scroll.
     `(published_at, id) < (?, ?)` can be an index **start** condition; the `OR` form may not.
     5.9 measures both on 10,000 courses and records whether a native query is worth it.
 
+## Outcome (measured in 5.9, 2026-10-02)
+
+On 10,000 seeded courses ([`docs/db/indexes.md`](../db/indexes.md)):
+
+| Page 250 of NEWEST | ms |
+|---|---:|
+| `OFFSET 4980` (what `Pageable` sends), with every index present | 15.7 |
+| Spring Data's keyset OR chain | 2.35 (the scan starts at the top and filters) |
+| row comparison `(published_at, id) < (…)` (hand-written) | 0.19 |
+| ⭐ OR chain **+ redundant `published_at <= :key`** (shipped: `CourseSpecifications.keysetBound`) | **0.155** |
+
+The open question in *Consequences* is answered without leaving Spring Data: the redundant bound
+gives Postgres the start condition the OR chain lacks. `CatalogIndexesIT` pins the plan shape.
+
 ## Alternatives rejected
 
 | Option | Why not |

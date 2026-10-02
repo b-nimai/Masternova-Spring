@@ -4,7 +4,7 @@
 > thousands of them are browsed, filtered and paged **without a growing `if` ladder, without
 > `OFFSET`, and without N+1 queries**.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/catalog` · **Status:** draft (5.1)
+**Module:** `backend/api/src/main/java/com/masternova/api/catalog` · **Status:** built (Phase 5, 5.1–5.9)
 **Last updated:** 2026-10-02 · **Angular:** `frontend/src/app/features/catalog`
 **Reused from:** NestJS Masternova `docs/lld/catalog.md`. Same forces; the decisions are
 re-derived for JPA/Spring Data, and some come out differently (§7).
@@ -232,7 +232,8 @@ sequenceDiagram
 | Option | Why not |
 |---|---|
 | `LIMIT/OFFSET` pagination | slower with depth (the DB reads and discards every skipped row) and **wrong** under concurrent publishes (rows repeat or vanish). [ADR-0009](../adr/0009-keyset-pagination-over-offset.md). |
-| a hand-rolled keyset predicate | Spring Data's `ScrollPosition.keyset()` + `Window` composes with Specifications and handles `limit + 1` / direction. Hand-rolling only wins if we need Postgres' row comparison `(a, b) < (x, y)`; 5.9 measures whether we do. |
+| a hand-rolled keyset predicate / native row comparison | Spring Data's `ScrollPosition.keyset()` + `Window` composes with Specifications and handles `limit + 1` / direction. 5.9 measured its OR chain: it can't seek (2.35 ms at page 250). Instead of leaving Spring Data, one redundant `keysetBound` predicate makes it seek (0.155 ms, equal to the row comparison's 0.19 ms). |
+| an index per category browse | measured in 5.9: never chosen by the planner (the NEWEST index + filter is as fast at this distribution). Recorded in `docs/db/indexes.md` §6. |
 | Spring Data's `KeysetScrollPosition` serialised as-is to the client | its keys are a `Map<String, Object>`; Jackson would leak property names and lose types (an `Instant` comes back as a `String`). Our `CourseCursor` encodes typed values and **the sort it belongs to**, so a cursor reused with another sort is a 400, not wrong data. |
 | Querydsl / jOOQ for the filters | an extra code generator for what the JPA Criteria API + Spring Data `Specification` already do. jOOQ stays the answer if catalog queries ever outgrow JPA. |
 | `JOIN FETCH` sections **and** lectures | Hibernate refuses two `List` ("bag") fetches in one query (`MultipleBagFetchException`); switching to `Set` "works" but returns sections × lectures rows (a cartesian product). Entity graph for one level + batch fetching for the next = 2 statements, no product. |
@@ -270,10 +271,23 @@ sequenceDiagram
 tree. Only primary keys, unique constraints and foreign keys: **no secondary indexes yet**.
 
 `V8__catalog_indexes.sql` (task 5.9; `V7` went to the idempotency `Location` fix found in 5.6):
-every secondary index arrives in its own migration, after
-measuring each list query with `EXPLAIN ANALYZE` on 10,000 seeded courses. Two migrations on
-purpose: the "before" number is then a real point in this schema's history. Evidence:
+every secondary index arrived in its own migration, after measuring each list query with
+`EXPLAIN ANALYZE` on 10,000 seeded courses. Two migrations on purpose: the "before" number is a
+real point in this schema's history. Evidence, rejected candidates and lessons:
 [`docs/db/indexes.md`](../db/indexes.md).
+
+| Index (V8) | Serves | Before → after |
+|---|---|---|
+| `course_published_newest_idx` `(published_at DESC, id DESC) WHERE status='PUBLISHED'` | default list, keyset pages, category browse, common-word search | 8.5 → **0.14 ms** |
+| `course_published_rating_idx` (partial) | HIGHEST_RATED | 9.4 → 0.19 ms |
+| `course_published_price_idx` `(price_minor, id)` (partial) | PRICE_LOW forwards, PRICE_HIGH backwards | 9.0 → 0.18 ms |
+| `course_instructor_updated_idx` | the instructor's list; the `instructor_id` FK | 2.4 → 0.16 ms |
+| `course_title_trgm_idx` (GIN, `pg_trgm`) | rare / no-match title search | 4.9 → 0.12 ms |
+
+**The keyset bound.** Spring Data's "after (key, id)" predicate is an OR chain, which Postgres
+can't start an index scan from (page 250: 2.35 ms). `CourseSpecifications.keysetBound` adds the
+redundant `published_at <= :key` (or `>=` for ascending sorts): **0.155 ms**, the same as a
+hand-written row comparison.
 
 | Table | Keys / constraints | Notes |
 |---|---|---|
@@ -301,8 +315,34 @@ flushing). The duplicate is one read-write transaction: load, copy, `save`, comm
 | ⭐ HTTP + Postgres | `CourseDuplicationIT` | 201 + `Location`; the copy is a non-public draft with every lecture persisted; **the same `Idempotency-Key` twice → one copy**, replay carries `Location`; key required; another instructor 404, learner 403, admin allowed (copy stays the instructor's) |
 | frontend (Vitest) | `catalog-api.spec`, `catalog.spec`, `course-detail.spec`, `curriculum.spec`, `course-card.spec`, `money-pipe.spec`, `duration-pipe.spec` | URL → request (and bad URL values dropped); controls write the URL (merge); search debounced into one navigation; the next page uses the cursor; **a filter change cancels the in-flight page**; error + retry; `rxResource` re-loads on a new slug; 404 → "not found"; `@defer` curriculum |
 | ⭐ e2e (Playwright, seeded) | `e2e/tests/catalog.spec.ts` | reload and Back keep the filters; scrolling the virtual viewport fetches with `cursor=` (40 loaded, < 20 in the DOM); the deferred curriculum loads when scrolled into view; a friendly 404 |
+| ⭐ integration (Postgres) | `CatalogIndexesIT` | the plan SHAPES: each public sort walks its partial index with no Sort; price DESC reads the price index backwards; the instructor list and the trigram search have their indexes; **the OR chain alone is a filter, with `keysetBound` it's an `Index Cond`** |
+| measurement (dev DB, 10,000 courses) | `docs/db/measure_catalog.py` → `docs/db/indexes.md` | before/after medians for every list query |
 | ⭐ integration (Postgres) | `CourseQueryCountIT` (Hibernate statistics) | the course page is **2 statements** whatever the curriculum size (11 / 13 without `@BatchSize`, measured); a lazy to-one in a list costs 1 + distinct targets; two bags can't be join-fetched |
 
 ## 11. Interview notes — 60-second recall
 
-*(written last, in 5.9)*
+- **What:** the catalog is the most-read surface: a `Course → Section → Lecture` aggregate,
+  browsed with free-combining filters, paged while courses are being published, and duplicated by
+  instructors.
+- **Aggregate in JPA:** one repository (no `SectionRepository`); children created only through the
+  root, so the rollups (`lectureCount`, total duration) can't go stale; every association LAZY;
+  `Money` an `@Embeddable` record in the kernel, `LectureDuration` an auto-applied converter.
+- **Filters = Specifications:** 9 leaves composed with `allOf`; adding a facet is one leaf + one
+  line. **Visibility is written once** and pushed into SQL (`visibleTo(viewer)`); its in-memory twin
+  (`Viewer.canSee`, sealed `Anonymous | Member | Admin`) is proven equal by an agreement test. A
+  draft is a **404, not a 403**, for strangers.
+- **Pagination = keyset** (ADR-0009): Spring Data `Window` + our typed, sort-bound cursor. 55 rows
+  with one sort key page as 20/20/15 with no duplicates; a course published mid-scroll doesn't
+  shift page 2.
+- **N+1 measured:** course page **13 → 2 statements** (entity graph + `@BatchSize`); a list page
+  is **1** (a fetch-join Specification, because `project()` is ignored by `scroll()`).
+- **Indexes measured:** default list **8.5 → 0.14 ms** on 10,000 courses; four **partial**
+  indexes (35 % smaller, same speed) + a trigram GIN. The finding: Spring Data's keyset OR chain
+  **can't seek** (2.35 ms at page 250); one redundant `published_at <= :key` makes it **0.155 ms**.
+  OFFSET stays at 15.7 ms with every index: the reason for keyset.
+- **Prototype:** `duplicateAsDraft` via copy constructors: deep (curriculum, new ids), reset
+  (DRAFT, no ratings), shared (`Money`, category, **media asset ids**: gigabytes, immutable); one
+  transaction; an `Idempotency-Key` makes the button double-click-safe (and found a platform bug:
+  replays lost their `Location`).
+- **Angular:** filters live in the URL (query params → inputs), infinite scroll is one RxJS
+  pipeline (`switchMap` per query, `exhaustMap` per page), CDK virtual scroll, `@defer` curriculum.

@@ -31,6 +31,10 @@ public enum CourseSort {
     return property;
   }
 
+  public boolean isDescending() {
+    return direction.isDescending();
+  }
+
   public boolean isPublic() {
     return publicSort;
   }

@@ -2,6 +2,7 @@ package com.masternova.api.catalog.domain;
 
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import jakarta.persistence.criteria.Path;
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.Locale;
@@ -100,6 +101,35 @@ public final class CourseSpecifications {
       case Viewer.Admin _ -> Specification.unrestricted();
       case Viewer.Member(UUID id) -> published().or(byInstructor(id));
       case Viewer.Anonymous _ -> published();
+    };
+  }
+
+  /**
+   * ⭐ A REDUNDANT bound for keyset pages: {@code published_at <= :key} (DESC sorts) or {@code >=}
+   * (ASC). It changes no result — every row after the cursor already satisfies it — but it is the
+   * condition Postgres can START an index scan from.
+   *
+   * <p>Why it's needed: Spring Data writes "after (key, id)" as {@code key < :k OR (key = :k AND id
+   * < :id)}. An OR can't be an index start condition, so the scan began at the top of the index and
+   * filtered its way down: page 250 of 20 cost 2.26 ms. With this bound the scan seeks straight to
+   * the cursor: 0.18 ms, the same as a hand-written row comparison {@code (key, id) < (:k, :id)}
+   * that JPA can't express (docs/db/indexes.md §3).
+   */
+  @SuppressWarnings({
+    "unchecked",
+    "rawtypes"
+  }) // the key's type varies per sort (Instant, BigDecimal, Long)
+  public static Specification<Course> keysetBound(CourseSort sort, Comparable<?> key) {
+    Objects.requireNonNull(key, "key");
+    return (root, query, cb) -> {
+      Path path = root;
+      for (String part : sort.property().split("\\.")) { // price.amountMinor → two steps
+        path = path.get(part);
+      }
+      Comparable bound = key;
+      return sort.isDescending()
+          ? cb.lessThanOrEqualTo(path, bound)
+          : cb.greaterThanOrEqualTo(path, bound);
     };
   }
 

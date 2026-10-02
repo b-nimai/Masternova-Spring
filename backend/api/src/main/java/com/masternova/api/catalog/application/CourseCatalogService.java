@@ -1,6 +1,7 @@
 package com.masternova.api.catalog.application;
 
 import static com.masternova.api.catalog.domain.CourseSpecifications.byInstructor;
+import static com.masternova.api.catalog.domain.CourseSpecifications.keysetBound;
 
 import com.masternova.api.catalog.domain.Category;
 import com.masternova.api.catalog.domain.CategoryRepository;
@@ -92,17 +93,19 @@ public class CourseCatalogService {
   // ------------------------------------------------------------------ keyset paging
 
   private CoursePage page(Specification<Course> spec, CourseSort sort, String cursor, int limit) {
-    ScrollPosition position =
-        cursor == null
-            ? ScrollPosition.keyset() // the first page
-            : CourseCursor.decode(cursor, sort).toScrollPosition();
+    Specification<Course> query = spec.and(fetchingCategory());
+    ScrollPosition position = ScrollPosition.keyset(); // the first page
+    if (cursor != null) {
+      CourseCursor after = CourseCursor.decode(cursor, sort);
+      position = after.toScrollPosition();
+      query = query.and(keysetBound(sort, after.key())); // ⭐ lets Postgres SEEK to the cursor
+    }
 
-    // ⭐ ONE statement: WHERE spec AND (key, id) after the cursor, ORDER BY key, id, LIMIT limit+1
-    //    (the extra row tells hasNext), with the category fetched by the same join.
+    // ⭐ ONE statement: WHERE spec AND key <= :k AND (key, id) after the cursor, ORDER BY key, id,
+    //    LIMIT limit+1 (the extra row tells hasNext), with the category fetched by the same join.
+    ScrollPosition from = position;
     Window<Course> window =
-        courses.findBy(
-            spec.and(fetchingCategory()),
-            q -> q.sortBy(sort.toSort()).limit(limit).scroll(position));
+        courses.findBy(query, q -> q.sortBy(sort.toSort()).limit(limit).scroll(from));
 
     List<Course> items = window.getContent();
     String next = window.hasNext() ? CourseCursor.after(sort, items.getLast()).encode() : null;
