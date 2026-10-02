@@ -62,7 +62,7 @@ jobs:
         run: ./mvnw -B verify
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco
           path: backend/*/target/site/jacoco/
