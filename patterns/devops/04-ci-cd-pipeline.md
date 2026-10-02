@@ -6,7 +6,7 @@
 > checks.
 
 **Roadmap:** D2.1–D2.6 · **Last updated:** 2026-10-02
-**Real files:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/release.yml`](../../.github/workflows/release.yml), [`Makefile`](../../Makefile) (`make release`)
+**Real files:** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/release.yml`](../../.github/workflows/release.yml), [`.github/workflows/codeql.yml`](../../.github/workflows/codeql.yml), [`backend/pom.xml`](../../backend/pom.xml) (JaCoCo gate), [`Makefile`](../../Makefile) (`make release`)
 **Decisions for this repo** (2026-10-02):
 - **Releases are tag-driven:** a `vX.Y.Z` tag pushed by the owner, never a bot commit.
 - **No Dependabot auto-merge:** updates are re-applied as the owner's commit.
@@ -21,6 +21,7 @@
 | 2 | [Publishing images: registry, tags, permissions](#2-publishing-images-registry-tags-permissions-) | ⭐⭐⭐ | D2.1 |
 | 3 | [Releases: tag-driven, promote don't rebuild](#3-releases-tag-driven-promote-dont-rebuild-) | ⭐⭐⭐ | D2.2 |
 | 4 | [Supply chain: SBOMs, provenance, keyless signing](#4-supply-chain-sboms-provenance-keyless-signing-) | ⭐⭐⭐ | D2.3 |
+| 5 | [Quality gates: coverage, CodeQL, actionlint, dependency policy](#5-quality-gates-coverage-codeql-actionlint-dependency-policy-) | ⭐⭐ | D2.4 |
 
 ---
 
@@ -310,4 +311,93 @@ got subjects [keyless@distroless.iam.gserviceaccount.com]                → exi
 **Where verification gets enforced:** a Kubernetes admission controller (Sigstore
 policy-controller or Kyverno, D4/D5) can refuse to run any image without a valid signature from
 this workflow. That closes the loop: only images our CI built, scanned and signed can run.
+
+---
+
+## 5. Quality gates: coverage, CodeQL, actionlint, dependency policy ⭐⭐
+
+A **gate** is a check that **fails the build**. A report nobody reads isn't a gate.
+
+### Coverage: merge first, then gate ⭐
+
+Our tests come in two kinds, each with its own JaCoCo data file:
+
+| Data file | Written by | api line coverage |
+|---|---|---|
+| `jacoco.exec` | Surefire (unit tests, `*Test`) | **27.5 %** (235 / 853 lines) |
+| `jacoco-it.exec` | Failsafe (Testcontainers ITs, `*IT`) | — |
+| ⭐ `jacoco-merged.exec` | the `merge` goal at `verify` | **91 %** lines, 69 % branches |
+
+Before D2.4, the report read **only** `jacoco.exec`. A gate on that number would have said "27 %"
+about a codebase whose security chain, outbox and idempotency are proven end to end by ITs. You'd
+either set a meaningless floor, or write mock-heavy unit tests just to move a number. So the
+parent POM now:
+
+```text
+verify:  merge (jacoco.exec + jacoco-it.exec → jacoco-merged.exec)
+         → report (from the merge)   → target/site/jacoco/, uploaded by CI
+         → check  (from the merge)   → fails the build below the module's floor
+```
+
+Floors are **per module**, set a few points under what was measured (a **ratchet**):
+
+| Module | Measured (merged) | Floor (`coverage.line` / `coverage.branch`) |
+|---|---|---|
+| api | 91 % / 69 % | 0.88 / 0.65 |
+| kernel | 51 % / 81 % | 0.45 / 0.75 (mostly annotation and enum declarations) |
+| worker | a 3-line skeleton | 0 (raised in Phase 4) |
+
+It fails as intended. With the floor forced up to 95 %:
+
+```text
+[WARNING] Rule violated for bundle api: lines covered ratio is 0.90, but expected minimum is 0.95
+[ERROR] BUILD FAILURE … Coverage checks have not been met.
+```
+
+**Rules for the floor:** raise it when coverage grows, **never lower it to get a build through**,
+and treat coverage as a smoke alarm, not a goal. 100 % coverage with weak assertions proves
+nothing; the concurrency ITs prove more with fewer lines.
+
+### CodeQL: semantic static analysis
+
+`codeql.yml` analyses **Java** and **TypeScript** with the `security-and-quality` query suite:
+
+- injection (SQL, log, path)
+- unsafe deserialisation
+- hard-coded credentials
+- missing authorization patterns
+- resource leaks
+- …
+
+It runs on every PR, on `main`, and **weekly**: new queries find old bugs. `build-mode: none`
+analyses the sources without compiling, so there's no Maven or pnpm build in this workflow.
+Results go to *Security → Code scanning*, and a PR that **introduces** a high-severity alert gets
+a failing check.
+
+CodeQL vs Trivy: **CodeQL reads *our* code** for bugs. **Trivy reads *other people's* code** (the
+packages in the image) for known CVEs. You need both.
+
+### actionlint: lint the pipeline itself
+
+A typo in `release.yml` only shows up when someone pushes a tag, which is the worst moment. The
+`workflows` job runs **actionlint** on every change under `.github/`:
+
+- expression syntax and types
+- unknown action inputs
+- shellcheck on `run:` blocks
+- invalid `needs`/`if` references
+
+Run it locally:
+
+```bash
+docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest
+```
+
+### Dependency policy: Dependabot, no auto-merge
+
+Dependabot opens grouped weekly PRs: Maven, npm, Docker base images, and GitHub Actions. Many teams
+auto-merge green patch updates. **This repo deliberately doesn't**: its history must show only the
+owner. A green Dependabot PR is re-applied as the owner's own commit (same diff, CI proves it
+again), and the bot's PR is closed. The trade-off is a few minutes of manual work per week,
+against a clean, single-author history.
 

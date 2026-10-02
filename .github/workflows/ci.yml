@@ -1,7 +1,8 @@
 # CI: every push and PR runs only the jobs whose files changed.
-#   backend      → mvn verify (unit + Spring Modulith + Testcontainers ITs + Spotless + JaCoCo)
+#   backend      → mvn verify (unit + Spring Modulith + Testcontainers ITs + Spotless + JaCoCo gate)
 #   patterns-lab → mvn test
 #   frontend     → lint, unit tests (Vitest), production build
+#   workflows    → actionlint on every workflow file
 #   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL);
 #                  on main, push the scanned images to GHCR as :sha-<commit> and :main, with SBOM +
 #                  provenance attestations, and sign them keylessly with cosign
@@ -29,6 +30,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       lab: ${{ steps.filter.outputs.lab }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      workflows: ${{ steps.filter.outputs.workflows }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -45,6 +47,8 @@ jobs:
             frontend:
               - 'frontend/**'
               - '.github/workflows/ci.yml'
+            workflows:
+              - '.github/**'
 
   backend:
     needs: changes
@@ -75,6 +79,16 @@ jobs:
           name: sbom-maven
           path: backend/*/target/classes/META-INF/sbom/application.cdx.json
           if-no-files-found: error
+
+  workflows:
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      # a typo in a workflow otherwise surfaces only when that path runs (often on main, or at release)
+      - name: actionlint
+        run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest -color
 
   patterns-lab:
     needs: changes
