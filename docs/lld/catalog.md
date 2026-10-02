@@ -283,6 +283,8 @@ flushing). The duplicate is one read-write transaction: load, copy, `save`, comm
 | unit (no Spring) | `MoneyTest` (kernel), `LectureDurationConverterTest` | value semantics, overflow, mixed currencies refused, a corrupt row fails on load |
 | unit (no Spring) | `CourseTest` | the aggregate's rules: rollups move with `addLecture`, a foreign section is refused, the curriculum can't be edited behind the root, `publishedAt` stamped once, slug/language shapes, rating summary consistency |
 | integration (Postgres) | `CatalogPersistenceIT` | the aggregate round-trips with its value objects and section/lecture order; the DB refuses a duplicate slug and a published course without `published_at`; the seeded category tree |
+| unit (no DB) | `ViewerTest` | visibility in memory: published for all; a draft only for its owner and admins |
+| ⭐ integration (Postgres) | `CourseSpecificationsIT` | every leaf selects exactly its rows on the real schema; `%` and `_` in search text are literals; and/or/not compose; **the SQL and in-memory visibility rules agree** for 5 kinds of viewer; a search composes only the facets it has |
 | ⭐ integration (Postgres) | `CourseQueryCountIT` (Hibernate statistics) | the course page is **2 statements** whatever the curriculum size (11 / 13 without `@BatchSize`, measured); a lazy to-one in a list costs 1 + distinct targets; two bags can't be join-fetched |
 
 ## 11. Interview notes — 60-second recall
