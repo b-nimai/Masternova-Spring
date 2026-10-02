@@ -8,6 +8,17 @@
 **Module:** `backend/api/src/main/java/com/masternova/api/platform` (+ `backend/kernel` for event contracts) · **Status:** built (Phase 2 complete)
 **Last updated:** 2026-10-02 · **Angular:** — (no screens; the error model shapes every client error message)
 
+> **Since Phase 4 ([ADR-0008](../adr/0008-shared-messaging-module.md)):**
+>
+> - **Moved:** the outbox writer, repository and relay, plus `OutboxHandler` / `OutboxMessage` /
+>   `OutboxProperties`, now live in the shared **`backend/messaging`** module
+>   (`com.masternova.messaging`), wired by Boot auto-configuration.
+> - **Stays here:** `EventPublisher` / `TransactionalEventPublisher`, which write through
+>   `messaging`'s `OutboxWriter`.
+> - **The relay runs only in the worker** (`masternova.outbox.relay-enabled=true`).
+>
+> The design below is unchanged; only the module boundaries moved.
+
 ## 1. Problem
 
 Every module from Phase 3 on needs the same three things:
@@ -98,9 +109,9 @@ classDiagram
 ```
 
 **Module API** (top-level `com.masternova.api.platform`, usable by every other module):
-`DomainException` and its subtypes, `EventPublisher`, `OutboxHandler`, `OutboxMessage`,
-`IdempotencyKeyRequired`, `MasternovaProperties`. Everything in sub-packages (`web`, `outbox`,
-`idempotency`, `security`) is internal.
+`DomainException` and its subtypes, `EventPublisher`, `IdempotencyKeyRequired`,
+`MasternovaProperties` (`OutboxHandler` / `OutboxMessage` moved to `com.masternova.messaging` in
+Phase 4). Everything in sub-packages (`web`, `events`, `idempotency`) is internal.
 
 ## 5. Main flows
 

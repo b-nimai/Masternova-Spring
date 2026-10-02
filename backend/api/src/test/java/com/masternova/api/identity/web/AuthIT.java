@@ -32,7 +32,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Login, deny-by-default, refresh rotation, reuse detection and logout — ADR-0006. */
-@SpringBootTest(properties = "masternova.outbox.relay-enabled=false")
+@SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class AuthIT {

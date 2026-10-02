@@ -8,7 +8,7 @@
 
 **Type:** Enterprise (Fowler, *PoEAA*) · **Status:** ✅ in real code · **Last updated:** 2026-10-02
 **Real code:**
-- **Repositories:** [`OutboxRepository`](../../backend/api/src/main/java/com/masternova/api/platform/outbox/OutboxRepository.java) → [`JdbcOutboxRepository`](../../backend/api/src/main/java/com/masternova/api/platform/outbox/JdbcOutboxRepository.java), and [`IdempotencyStore`](../../backend/api/src/main/java/com/masternova/api/platform/idempotency/IdempotencyStore.java) → [`JdbcIdempotencyStore`](../../backend/api/src/main/java/com/masternova/api/platform/idempotency/JdbcIdempotencyStore.java).
+- **Repositories:** [`OutboxRepository`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/OutboxRepository.java) → [`JdbcOutboxRepository`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/JdbcOutboxRepository.java), and [`IdempotencyStore`](../../backend/api/src/main/java/com/masternova/api/platform/idempotency/IdempotencyStore.java) → [`JdbcIdempotencyStore`](../../backend/api/src/main/java/com/masternova/api/platform/idempotency/JdbcIdempotencyStore.java).
 - **Unit of Work:** every `@Transactional` service method; `TransactionalEventPublisher` *requires* one (`MANDATORY`).
 
 **Lab:** [`lab/.../patterns/repository/`](../lab/src/main/java/com/masternova/patterns/repository/): a hand-built `UnitOfWork` with an identity map · **Spring/JPA deep-dive:** [Java note 10](../java/10-request-lifecycle-and-jpa.md)

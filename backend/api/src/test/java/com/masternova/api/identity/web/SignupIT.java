@@ -18,7 +18,7 @@ import org.springframework.test.web.servlet.assertj.MockMvcTester;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Signup → outbox event → verify, through the real HTTP layer and Postgres. */
-@SpringBootTest(properties = "masternova.outbox.relay-enabled=false")
+@SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class SignupIT {

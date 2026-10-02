@@ -1,8 +1,8 @@
-package com.masternova.api.platform.outbox;
+package com.masternova.messaging.outbox;
 
-import com.masternova.api.platform.OutboxMessage;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import com.masternova.messaging.OutboxMessage;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
@@ -12,14 +12,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.stereotype.Repository;
 
 /**
  * The outbox in plain SQL (JdbcClient, not JPA): the claim query needs Postgres-specific {@code FOR
  * UPDATE SKIP LOCKED}, and outbox rows are not domain entities. Time comes from the injected {@link
  * Clock}, so tests control "now".
  */
-@Repository
 @DesignPattern(
     value = Pattern.REPOSITORY,
     role = "ConcreteRepository",

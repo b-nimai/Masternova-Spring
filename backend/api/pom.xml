@@ -25,6 +25,11 @@
 			<groupId>com.masternova</groupId>
 			<artifactId>kernel</artifactId>
 		</dependency>
+		<!-- the outbox WRITER (auto-configured); the relay stays off here: the worker relays (ADR-0008) -->
+		<dependency>
+			<groupId>com.masternova</groupId>
+			<artifactId>messaging</artifactId>
+		</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

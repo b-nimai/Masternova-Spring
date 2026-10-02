@@ -24,7 +24,7 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Role-based access: who may change roles, and how a new role reaches the token. */
-@SpringBootTest(properties = "masternova.outbox.relay-enabled=false")
+@SpringBootTest
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration.class)
 class RbacIT {

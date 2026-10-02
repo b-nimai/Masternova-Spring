@@ -1,13 +1,14 @@
-package com.masternova.api.platform.outbox;
+package com.masternova.messaging.outbox;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.masternova.api.TestcontainersConfiguration;
-import com.masternova.api.platform.EventPublisher;
-import com.masternova.api.platform.OutboxHandler;
-import com.masternova.api.platform.OutboxMessage;
 import com.masternova.kernel.event.DomainEvent;
+import com.masternova.messaging.OutboxHandler;
+import com.masternova.messaging.OutboxMessage;
+import com.masternova.messaging.OutboxProperties;
+import com.masternova.messaging.OutboxWriter;
+import com.masternova.messaging.TestcontainersConfiguration;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -34,13 +35,13 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * The transactional outbox against a real Postgres. The scheduled relay is switched off; the test
- * drives relayOnce() itself and moves a controllable clock. Design: docs/lld/platform-kernel.md.
+ * The transactional outbox against a real Postgres. No scheduled relay runs (relay-enabled stays
+ * false); the test builds its own relay, drives relayOnce() itself and moves a controllable clock.
+ * Design: docs/lld/platform-kernel.md, ADR-0008.
  */
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
     properties = {
-      "masternova.outbox.relay-enabled=false",
       "masternova.outbox.max-attempts=3",
       "masternova.outbox.base-backoff=10s",
       "masternova.outbox.lease=60s"
@@ -104,23 +105,23 @@ class TransactionalOutboxIT {
     }
   }
 
-  /** A business service: changes state and publishes, in ONE transaction. */
+  /** A business service: changes state and appends its event, in ONE transaction. */
   static class CourseService {
-    private final EventPublisher events;
+    private final OutboxWriter outbox;
 
-    CourseService(EventPublisher events) {
-      this.events = events;
+    CourseService(OutboxWriter outbox) {
+      this.outbox = outbox;
     }
 
     @Transactional
     public void draft(String id) {
       // (the real module would INSERT the course row here, in the same transaction)
-      events.publish(new CourseDrafted(id, "Course " + id));
+      outbox.append(new CourseDrafted(id, "Course " + id));
     }
 
     @Transactional
     public void draftThenFail(String id) {
-      events.publish(new CourseDrafted(id, "Course " + id));
+      outbox.append(new CourseDrafted(id, "Course " + id));
       throw new IllegalStateException("validation failed after publishing");
     }
   }
@@ -139,8 +140,18 @@ class TransactionalOutboxIT {
     }
 
     @Bean
-    CourseService courseService(EventPublisher events) {
-      return new CourseService(events);
+    CourseService courseService(OutboxWriter outbox) {
+      return new CourseService(outbox);
+    }
+
+    /** The relay the worker would run — built by hand, so no schedule competes with the test. */
+    @Bean
+    OutboxRelay testRelay(
+        OutboxRepository repository,
+        FlakyHandler handler,
+        OutboxProperties settings,
+        MutableClock clock) {
+      return new OutboxRelay(repository, List.of(handler), settings, clock);
     }
   }
 

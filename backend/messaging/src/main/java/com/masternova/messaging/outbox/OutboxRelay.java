@@ -1,10 +1,10 @@
-package com.masternova.api.platform.outbox;
+package com.masternova.messaging.outbox;
 
-import com.masternova.api.platform.MasternovaProperties;
-import com.masternova.api.platform.OutboxHandler;
-import com.masternova.api.platform.OutboxMessage;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import com.masternova.messaging.OutboxHandler;
+import com.masternova.messaging.OutboxMessage;
+import com.masternova.messaging.OutboxProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 /**
  * Delivers outbox messages to their {@link OutboxHandler}s: claim a batch → dispatch each message →
@@ -21,11 +20,14 @@ import org.springframework.stereotype.Component;
  * <p>Deliberately NOT @Transactional: handlers may be slow (email, HTTP). Each repository call is
  * its own short statement, so no database connection is held while a handler runs.
  */
-@Component
 @DesignPattern(
     value = Pattern.TRANSACTIONAL_OUTBOX,
     role = "Relay",
     note = "patterns/docs/17-transactional-outbox.md")
+@DesignPattern(
+    value = Pattern.FACTORY_METHOD,
+    role = "Registry",
+    note = "patterns/docs/09-factory-method-registry.md")
 public class OutboxRelay {
 
   private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
@@ -40,17 +42,17 @@ public class OutboxRelay {
 
   private final OutboxRepository repository;
   private final Map<String, OutboxHandler> handlersByType;
-  private final MasternovaProperties.Outbox settings;
+  private final OutboxProperties settings;
   private final Clock clock;
 
   OutboxRelay(
       OutboxRepository repository,
       List<OutboxHandler> handlers,
-      MasternovaProperties properties,
+      OutboxProperties settings,
       Clock clock) {
     this.repository = repository;
     this.handlersByType = index(handlers);
-    this.settings = properties.outbox();
+    this.settings = settings;
     this.clock = clock;
   }
 

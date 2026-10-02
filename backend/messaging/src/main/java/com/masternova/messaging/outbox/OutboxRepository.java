@@ -1,8 +1,8 @@
-package com.masternova.api.platform.outbox;
+package com.masternova.messaging.outbox;
 
-import com.masternova.api.platform.OutboxMessage;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import com.masternova.messaging.OutboxMessage;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;

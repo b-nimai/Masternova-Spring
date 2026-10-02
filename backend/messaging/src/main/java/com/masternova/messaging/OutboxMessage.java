@@ -1,4 +1,4 @@
-package com.masternova.api.platform;
+package com.masternova.messaging;
 
 import java.time.Instant;
 import java.util.Objects;
