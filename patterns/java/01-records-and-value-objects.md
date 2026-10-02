@@ -700,4 +700,4 @@ jshell> /exit
   - `BigDecimal` from strings, compared with `compareTo`.
   - `Math.*Exact` against overflow.
   - Split with integer division and hand out the remainder.
-- **Next:** [02 — Sealed types & pattern matching](README.md) (task 1.2).
+- **Next:** [02 — Sealed types & pattern matching](02-sealed-types-and-pattern-matching.md) (task 1.2).

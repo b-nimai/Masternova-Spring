@@ -10,7 +10,7 @@ the lines worth remembering.
 | # | Topic | Note | Code | Roadmap | Status |
 |---|---|---|---|---|---|
 | 01 | Records & Value Objects: `equals`/`hashCode`, immutability, money done right | [01-records-and-value-objects.md](01-records-and-value-objects.md) | `java/valueobject/` (`Money`, `LectureDuration`) | 1.1 | ✅ |
-| 02 | Sealed types & pattern-matching `switch` | — | — | 1.2 | ☐ |
+| 02 | Sealed types & pattern-matching `switch`: exhaustiveness, record patterns, sealed vs Strategy vs Visitor | [02-sealed-types-and-pattern-matching.md](02-sealed-types-and-pattern-matching.md) | `java/sealed/` (`PaymentOutcome`, `CouponRule`, `LectureContent`, `Expr`) | 1.2 | ✅ |
 | 03 | Collections, Streams & Collectors | — | — | 1.3 | ☐ |
 | 04 | Generics: bounds, wildcards, PECS, erasure | — | — | 1.4 | ☐ |
 | 05 | Exceptions & `Optional` | — | — | 1.5 | ☐ |
