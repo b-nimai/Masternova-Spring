@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 next on `phase-6/catalog-authoring`.
+**Created:** 2026-10-02 · **Last updated:** 2026-10-03 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 🔨 on `phase-6/catalog-authoring`.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -120,7 +120,7 @@ Phases are listed **in the order you do them**.
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
-| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
+| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 1 | 22 h | ~1 h | 🔨 |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **67** | **~326 h** | ~113 h | |
+| | **Total** | **137** | **68** | **~326 h** | ~114 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -314,7 +314,7 @@ concurrent edits.
 
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
-| 6.1 | `docs/lld/catalog-authoring.md` + ADR (optimistic concurrency) | — | — | — | 1.5 h | ☐ | |
+| 6.1 | [`docs/lld/catalog-authoring.md`](docs/lld/catalog-authoring.md) (§1–§9: state diagram + who may move, coded publish gate, commands with stored inverses, "the root's version covers the aggregate", deferrable position constraints instead of NestJS's park-negative trick) + [ADR-0010](docs/adr/0010-optimistic-concurrency-with-version.md) (`@Version` + `expectedVersion`) | — | — | — | 1.5 h | ✅ | 2026-10-03 |
 | 6.2 | Course lifecycle Draft → InReview → Published → Archived | `sealed interface CourseState`, exhaustive `switch` | — | **State** | 3 h | ☐ | |
 | 6.3 | Publish gate: composed rules returning *coded problems* → 422 | composition of predicates | — | **Specification** | 2 h | ☐ | |
 | 6.4 | Curriculum edits as commands (add/move/rename/delete section/lecture) with apply + invert | sealed records, Jackson `@JsonTypeInfo` polymorphism | — | **Command** | 4 h | ☐ | |
