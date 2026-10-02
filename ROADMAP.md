@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress: 1.1–1.3 ✅. Next: 1.4 (generics).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 in progress: 1.1–1.4 ✅. Next: 1.5 (exceptions & `Optional`).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -110,7 +110,7 @@ Phases are listed **in the order you do them**.
 | # | Phase | Tasks | Done | Est | Spent | Status |
 |---|---|---|---|---|---|---|
 | 1 | [0 — Foundation](#phase-0--foundation) | 12 | 12 | 16 h | ~7 h | ✅ |
-| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 3 | 14 h | ~5 h | 🔨 |
+| 2 | [1 — Java + Spring warm-up](#phase-1--java--spring-warm-up) | 11 | 4 | 14 h | ~6.5 h | 🔨 |
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 0 | 16 h | — | ☐ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 0 | 26 h | — | ☐ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 0 | 6 h | — | ☐ |
@@ -127,7 +127,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **15** | **~326 h** | ~12 h | |
+| | **Total** | **137** | **16** | **~326 h** | ~13.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -190,7 +190,7 @@ a code walkthrough, common mistakes, interview Q&A and a 30-second recall. Sprin
 | 1.1 | `Money` and `LectureDuration` value objects ([study note](patterns/java/01-records-and-value-objects.md)) | records, compact constructors, immutability, `equals`/`hashCode` contract, `BigDecimal`, `Math.*Exact`, regex, `reduce` | — | **Value Object**: catalog row 18 | 1 h | ✅ | 2026-10-02 |
 | 1.2 | `PaymentOutcome`, `CouponRule`, `LectureContent`, `Expr` ([study note](patterns/java/02-sealed-types-and-pattern-matching.md)) | `sealed` / `permits` / `non-sealed`, switch expressions, type/record/nested patterns, guards, `_`, exhaustiveness, dominance | — | sealed+switch vs Strategy vs Visitor | 1 h | ✅ | 2026-10-02 |
 | 1.3 | Catalog dataset kata: top courses, revenue by category, instructors by rating ([study note](patterns/java/03-collections-and-streams.md)) | Collections + Map API, HashMap internals, CME, `Comparator` chains, lazy streams, `groupingBy`/`partitioningBy`/`toMap`/`teeing`, gatherers | — | — | 1.5 h | ✅ | 2026-10-02 |
-| 1.4 | `Result<T>` / `Page<T>` generics | generics, bounded types, wildcards (PECS), type erasure | — | — | 1 h | ☐ | |
+| 1.4 | `Result<T>`, `Page<T>`, `Registry<K, V>`, `Ranking`, `TypedSettings` ([study note](patterns/java/04-generics.md)) | generics, invariance, bounded types, wildcards (PECS), type erasure, raw types, type tokens | — | generic Strategy registry | 1 h | ✅ | 2026-10-02 |
 | 1.5 | Exceptions + resources | checked vs unchecked, custom hierarchies, try-with-resources, `Optional` done right | — | — | 1 h | ☐ | |
 | 1.6 | OOP drills: refactor an inheritance mess to composition | interfaces vs abstract classes, composition over inheritance, encapsulation (package-private) | — | Strategy vs Template Method | 1.5 h | ☐ | |
 | 1.7 | Concurrency lab: race condition → `AtomicLong` / `synchronized` / lock; 10k virtual threads | threads, `ExecutorService`, `CompletableFuture`, virtual threads, structured concurrency | — | — | 2 h | ☐ | |
@@ -477,7 +477,7 @@ Tick these as they're used *for real* in the project, not just read about.
 ### 3.1 Java
 
 - [x] records, compact constructors · [x] sealed interfaces + pattern-matching `switch` · [x] annotations + reflection
-- [ ] generics (bounded, wildcards) · [x] Streams + Collectors · [ ] `Optional` · [ ] exception hierarchies
+- [x] generics (bounded, wildcards) · [x] Streams + Collectors · [ ] `Optional` · [ ] exception hierarchies
 - [x] `equals`/`hashCode`/immutability · [ ] interfaces vs abstract classes · [ ] package-private encapsulation
 - [ ] threads, executors, `CompletableFuture` · [x] virtual threads (config) · [ ] locks / atomics · [ ] `ProcessBuilder`
 

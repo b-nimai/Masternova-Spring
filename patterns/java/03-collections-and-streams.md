@@ -600,4 +600,4 @@ jshell> new java.util.HashMap<>(java.util.Map.of("b", 2, "a", 1, "c", 3))   // o
   - `partitioningBy` always has both keys.
   - `toMap` throws on duplicates and nulls.
 - **In Spring:** map entities to DTOs with streams, but aggregate big data in SQL.
-- **Next:** [04 — Generics](README.md) (task 1.4).
+- **Next:** [04 — Generics](04-generics.md) (task 1.4).
