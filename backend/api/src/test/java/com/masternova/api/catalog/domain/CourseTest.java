@@ -1,9 +1,9 @@
 package com.masternova.api.catalog.domain;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.masternova.kernel.money.Money;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -15,17 +15,15 @@ class CourseTest {
   static final Instant NOW = Instant.parse("2026-10-02T10:15:30.123456789Z");
   static final Instructor ASHA = new Instructor(UUID.randomUUID(), "Asha Rao");
 
+  /** Through the builder: only the two values these tests vary are named. */
   private static Course draft(String slug, String language) {
-    return Course.draft(
-        slug,
-        "Kubernetes from zero",
-        "  Pods and services.  ",
-        CourseLevel.BEGINNER,
-        language,
-        Money.of(149900, "INR"),
-        new Category(), // reference data; its fields don't matter to these rules
-        ASHA,
-        NOW);
+    return aCourse()
+        .slug(slug)
+        .language(language)
+        .by(ASHA)
+        .description("  Pods and services.  ")
+        .createdAt(NOW)
+        .build();
   }
 
   @Test

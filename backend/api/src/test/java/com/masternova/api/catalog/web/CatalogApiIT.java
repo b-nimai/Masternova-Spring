@@ -1,21 +1,18 @@
 package com.masternova.api.catalog.web;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
+import static com.masternova.api.catalog.domain.CourseBuilder.aLecture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.api.catalog.domain.CategoryRepository;
 import com.masternova.api.catalog.domain.Course;
-import com.masternova.api.catalog.domain.CourseLevel;
 import com.masternova.api.catalog.domain.CourseRepository;
 import com.masternova.api.catalog.domain.Instructor;
-import com.masternova.api.catalog.domain.LectureDuration;
-import com.masternova.api.catalog.domain.LectureKind;
-import com.masternova.api.catalog.domain.Section;
+import com.masternova.api.catalog.domain.TestInstructors;
 import com.masternova.api.identity.Role;
-import com.masternova.kernel.money.Money;
 import jakarta.persistence.EntityManagerFactory;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,6 +20,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.AfterEach;
@@ -33,7 +31,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
@@ -54,61 +51,42 @@ class CatalogApiIT {
   static final Instant T0 = Instant.parse("2026-09-01T00:00:00Z");
 
   @Autowired MockMvcTester mvc;
-  @Autowired JdbcClient jdbc;
   @Autowired CourseRepository courses;
   @Autowired CategoryRepository categories;
   @Autowired JsonMapper json;
   @Autowired EntityManagerFactory emf;
 
-  UUID asha;
-  UUID ravi;
+  @Autowired DataSource dataSource;
+
+  Instructor asha;
+  Instructor ravi;
 
   @BeforeEach
   void seedInstructors() {
     clean();
-    asha = user("Asha Rao");
-    ravi = user("Ravi Kumar");
+    TestInstructors instructors = new TestInstructors(dataSource);
+    asha = instructors.create("Asha Rao");
+    ravi = instructors.create("Ravi Kumar");
   }
 
   /** Courses reference users (ON DELETE RESTRICT): leave nothing behind for other test classes. */
   @AfterEach
   void clean() {
-    jdbc.sql("DELETE FROM course").update();
-    jdbc.sql("DELETE FROM app_user WHERE email LIKE '%@catalog.test'").update();
+    new TestInstructors(dataSource).deleteAll();
   }
 
   // ------------------------------------------------------------------ helpers
 
-  private UUID user(String name) {
-    UUID id = UUID.randomUUID();
-    jdbc.sql(
-            "INSERT INTO app_user (id, email, display_name, password_hash, created_at, version)"
-                + " VALUES (:id, :email, :name, '{noop}x', now(), 0)")
-        .param("id", id)
-        .param("email", id + "@catalog.test")
-        .param("name", name)
-        .update();
-    return id;
-  }
-
   /** A course in {@code category}; {@code publishedAt == null} keeps it a draft. */
   private Course course(
-      String slug, UUID instructor, String category, long price, Instant publishedAt) {
-    Course course =
-        Course.draft(
-            slug,
-            "Course " + slug,
-            "About " + slug,
-            CourseLevel.BEGINNER,
-            "en",
-            Money.of(price, "INR"),
-            categories.findBySlug(category).orElseThrow(),
-            new Instructor(instructor, instructor.equals(asha) ? "Asha Rao" : "Ravi Kumar"),
-            T0);
-    if (publishedAt != null) {
-      course.publish(publishedAt);
-    }
-    return course;
+      String slug, Instructor instructor, String category, long price, Instant publishedAt) {
+    return aCourse()
+        .slug(slug)
+        .by(instructor)
+        .in(categories.findBySlug(category).orElseThrow())
+        .priced(price)
+        .published(publishedAt)
+        .build();
   }
 
   private void save(Course... all) {
@@ -215,11 +193,11 @@ class CatalogApiIT {
 
   @Test
   void highestRatedComesFirst() throws Exception {
-    Course good = course("good", asha, "ci-cd", 0, T0);
-    good.updateRatingSummary(new BigDecimal("4.20"), 5);
-    Course best = course("best", asha, "ci-cd", 0, T0);
-    best.updateRatingSummary(new BigDecimal("4.90"), 9);
-    save(good, best, course("unrated", asha, "ci-cd", 0, T0));
+    var cicd = categories.findBySlug("ci-cd").orElseThrow();
+    save(
+        aCourse().slug("good").by(asha).in(cicd).rated("4.20", 5).published(T0).build(),
+        aCourse().slug("best").by(asha).in(cicd).rated("4.90", 9).published(T0).build(),
+        course("unrated", asha, "ci-cd", 0, T0));
 
     assertThat(slugs(get("/api/v1/courses?sort=HIGHEST_RATED")))
         .containsExactly("best", "good", "unrated");
@@ -308,13 +286,16 @@ class CatalogApiIT {
 
   @Test
   void theCoursePageShowsTheCurriculumInOrderWithMoneyInMinorUnits() throws Exception {
-    Course k8s = course("k8s", asha, "containers-kubernetes", 149900, T0);
-    Section intro = k8s.addSection("Intro");
-    Section core = k8s.addSection("Core");
-    k8s.addLecture(intro, "Welcome", LectureKind.VIDEO, true, LectureDuration.ofSeconds(90), null);
-    k8s.addLecture(core, "Pods", LectureKind.VIDEO, false, LectureDuration.ofSeconds(600), null);
-    k8s.addLecture(core, "Services", LectureKind.ARTICLE, false, LectureDuration.ZERO, null);
-    save(k8s);
+    save(
+        aCourse()
+            .slug("k8s")
+            .by(asha)
+            .in(categories.findBySlug("containers-kubernetes").orElseThrow())
+            .priced(149900)
+            .withSection("Intro", aLecture("Welcome").preview().seconds(90))
+            .withSection("Core", aLecture("Pods").seconds(600), aLecture("Services").article())
+            .published(T0)
+            .build());
 
     assertThat(mvc.get().uri("/api/v1/courses/k8s"))
         .hasStatusOk()
@@ -341,8 +322,9 @@ class CatalogApiIT {
         .bodyJson()
         .extractingPath("$.code")
         .isEqualTo("NOT_FOUND");
-    assertThat(mvc.get().uri(uri).with(as(ravi, Role.INSTRUCTOR))).hasStatus(HttpStatus.NOT_FOUND);
-    assertThat(mvc.get().uri(uri).with(as(asha, Role.INSTRUCTOR))).hasStatusOk();
+    assertThat(mvc.get().uri(uri).with(as(ravi.id(), Role.INSTRUCTOR)))
+        .hasStatus(HttpStatus.NOT_FOUND);
+    assertThat(mvc.get().uri(uri).with(as(asha.id(), Role.INSTRUCTOR))).hasStatusOk();
     assertThat(mvc.get().uri(uri).with(as(UUID.randomUUID(), Role.ADMIN))).hasStatusOk();
     assertThat(mvc.get().uri("/api/v1/courses/no-such-course")).hasStatus(HttpStatus.NOT_FOUND);
   }
@@ -352,7 +334,8 @@ class CatalogApiIT {
     save(course("live", asha, "ci-cd", 0, T0), course("draft", asha, "ci-cd", 0, null));
 
     // not even for their owner: the public list is the storefront; the owner has /instructor
-    assertThat(slugs(get("/api/v1/courses", as(asha, Role.INSTRUCTOR)))).containsExactly("live");
+    assertThat(slugs(get("/api/v1/courses", as(asha.id(), Role.INSTRUCTOR))))
+        .containsExactly("live");
   }
 
   @Test
@@ -374,13 +357,15 @@ class CatalogApiIT {
         course("mine-draft", asha, "ci-cd", 0, null),
         course("ravis", ravi, "ci-cd", 0, T0));
 
-    assertThat(slugs(get("/api/v1/instructor/courses", as(asha, Role.INSTRUCTOR))))
+    assertThat(slugs(get("/api/v1/instructor/courses", as(asha.id(), Role.INSTRUCTOR))))
         .containsExactlyInAnyOrder("mine-live", "mine-draft");
-    assertThat(mvc.get().uri("/api/v1/instructor/courses").with(as(asha, Role.LEARNER)))
+    assertThat(mvc.get().uri("/api/v1/instructor/courses").with(as(asha.id(), Role.LEARNER)))
         .hasStatus(HttpStatus.FORBIDDEN);
     assertThat(mvc.get().uri("/api/v1/instructor/courses")).hasStatus(HttpStatus.UNAUTHORIZED);
     assertThat(
-            mvc.get().uri("/api/v1/instructor/courses?limit=500").with(as(asha, Role.INSTRUCTOR)))
+            mvc.get()
+                .uri("/api/v1/instructor/courses?limit=500")
+                .with(as(asha.id(), Role.INSTRUCTOR)))
         .hasStatus(HttpStatus.BAD_REQUEST);
   }
 }

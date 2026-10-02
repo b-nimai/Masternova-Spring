@@ -1,9 +1,9 @@
 package com.masternova.api.catalog.domain;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
+import static com.masternova.api.catalog.domain.CourseBuilder.aLecture;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.masternova.kernel.money.Money;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,24 +24,18 @@ class CourseDuplicationTest {
   @BeforeEach
   void aPublishedRatedCourse() {
     source =
-        Course.draft(
-            "k8s",
-            "Kubernetes",
-            "Pods and services.",
-            CourseLevel.INTERMEDIATE,
-            "en",
-            Money.of(149900, "INR"),
-            new Category(),
-            new Instructor(UUID.randomUUID(), "Asha"),
-            CREATED);
-    source.changeSubtitle("Hands-on");
-    Section intro = source.addSection("Intro");
-    Section core = source.addSection("Core");
-    source.addLecture(
-        intro, "Welcome", LectureKind.VIDEO, true, LectureDuration.ofSeconds(90), VIDEO);
-    source.addLecture(core, "Pods", LectureKind.VIDEO, false, LectureDuration.ofSeconds(600), null);
-    source.publish(CREATED);
-    source.updateRatingSummary(new BigDecimal("4.70"), 31);
+        aCourse()
+            .slug("k8s")
+            .title("Kubernetes")
+            .subtitle("Hands-on")
+            .level(CourseLevel.INTERMEDIATE)
+            .priced(149900)
+            .createdAt(CREATED)
+            .withSection("Intro", aLecture("Welcome").preview().seconds(90).asset(VIDEO))
+            .withSection("Core", aLecture("Pods").seconds(600))
+            .published(CREATED)
+            .rated("4.70", 31)
+            .build();
   }
 
   @Test
@@ -122,17 +116,7 @@ class CourseDuplicationTest {
 
   @Test
   void aLongTitleStaysWithinTheLimit() {
-    Course longTitle =
-        Course.draft(
-            "long",
-            "x".repeat(120),
-            "…",
-            CourseLevel.BEGINNER,
-            "en",
-            Money.zero("INR"),
-            new Category(),
-            new Instructor(UUID.randomUUID(), "Asha"),
-            CREATED);
+    Course longTitle = aCourse().title("x".repeat(120)).build();
 
     assertThat(longTitle.duplicateAsDraft("long-copy", COPIED).title())
         .hasSize(120)

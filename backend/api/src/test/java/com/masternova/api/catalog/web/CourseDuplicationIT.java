@@ -1,22 +1,19 @@
 package com.masternova.api.catalog.web;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
+import static com.masternova.api.catalog.domain.CourseBuilder.aLecture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.api.catalog.domain.CategoryRepository;
-import com.masternova.api.catalog.domain.Course;
-import com.masternova.api.catalog.domain.CourseLevel;
 import com.masternova.api.catalog.domain.CourseRepository;
 import com.masternova.api.catalog.domain.Instructor;
-import com.masternova.api.catalog.domain.LectureDuration;
-import com.masternova.api.catalog.domain.LectureKind;
-import com.masternova.api.catalog.domain.Section;
+import com.masternova.api.catalog.domain.TestInstructors;
 import com.masternova.api.identity.Role;
-import com.masternova.kernel.money.Money;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,6 +42,8 @@ class CourseDuplicationIT {
   @Autowired CourseRepository courses;
   @Autowired CategoryRepository categories;
 
+  @Autowired DataSource dataSource;
+
   UUID asha;
   UUID ravi;
   UUID sourceId;
@@ -52,47 +51,31 @@ class CourseDuplicationIT {
   @BeforeEach
   void aPublishedCourseWithACurriculum() {
     clean();
-    asha = user();
-    ravi = user();
-    Course k8s =
-        Course.draft(
-            "k8s",
-            "Kubernetes",
-            "Pods and services.",
-            CourseLevel.BEGINNER,
-            "en",
-            Money.of(149900, "INR"),
-            categories.findBySlug("containers-kubernetes").orElseThrow(),
-            new Instructor(asha, "Asha Rao"),
-            Instant.parse("2026-09-01T10:00:00Z"));
-    Section intro = k8s.addSection("Intro");
-    k8s.addLecture(
-        intro,
-        "Welcome",
-        LectureKind.VIDEO,
-        true,
-        LectureDuration.ofSeconds(90),
-        UUID.randomUUID());
-    k8s.addLecture(intro, "Setup", LectureKind.ARTICLE, false, LectureDuration.ZERO, null);
-    k8s.publish(Instant.parse("2026-09-02T10:00:00Z"));
-    sourceId = courses.save(k8s).id();
+    TestInstructors instructors = new TestInstructors(dataSource);
+    Instructor ashaRao = instructors.create("Asha Rao");
+    asha = ashaRao.id();
+    ravi = instructors.create("Ravi Kumar").id();
+    sourceId =
+        courses
+            .save(
+                aCourse()
+                    .slug("k8s")
+                    .title("Kubernetes")
+                    .by(ashaRao)
+                    .in(categories.findBySlug("containers-kubernetes").orElseThrow())
+                    .priced(149900)
+                    .withSection(
+                        "Intro",
+                        aLecture("Welcome").preview().seconds(90).asset(UUID.randomUUID()),
+                        aLecture("Setup").article())
+                    .published()
+                    .build())
+            .id();
   }
 
   @AfterEach
   void clean() {
-    jdbc.sql("DELETE FROM course").update();
-    jdbc.sql("DELETE FROM app_user WHERE email LIKE '%@duplicate.test'").update();
-  }
-
-  private UUID user() {
-    UUID id = UUID.randomUUID();
-    jdbc.sql(
-            "INSERT INTO app_user (id, email, display_name, password_hash, created_at, version)"
-                + " VALUES (:id, :email, 'Someone', '{noop}x', now(), 0)")
-        .param("id", id)
-        .param("email", id + "@duplicate.test")
-        .update();
-    return id;
+    new TestInstructors(dataSource).deleteAll();
   }
 
   private static RequestPostProcessor as(UUID id, Role role) {

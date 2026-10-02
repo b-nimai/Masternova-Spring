@@ -212,7 +212,7 @@ sequenceDiagram
 | **Specification** | `CourseSpecifications` (leaves) composed with Spring Data's `Specification.allOf` / `and` / `or` / `not` | six facets that combine freely, and a visibility rule that must be in **every** query. Adding a facet = adding a leaf; `browse()` never changes. |
 | **Value Object** | `Money` (kernel, `@Embeddable`), `LectureDuration` (`AttributeConverter`) | money in minor units can't be represented wrong; a duration can't be negative. Equality by value. |
 | **Prototype** | `Course.duplicateAsDraft` → copy constructors of `Course` / `Section` / `Lecture` | the object that knows its own structure copies itself. Deep for the mutable metadata, shallow (shared) for the immutable media. |
-| **Builder** | test data builders (`CourseBuilder`, …) in the test sources | a `Course` needs ~12 values and a curriculum; tests should state only the ones that matter to them. |
+| **Builder** | `CourseBuilder` (+ `LectureBuilder`) in the test sources | `Course.draft` takes nine arguments plus a curriculum; tests should state only the ones that matter to them. Builds through the real factory, so every test course is a legal one. |
 | **Repository** | `CourseRepository`, `CategoryRepository` (Spring Data) | one per aggregate; no table-level repositories. |
 
 **Not used, on purpose:**
@@ -296,6 +296,7 @@ flushing). The duplicate is one read-write transaction: load, copy, `save`, comm
 | ⭐ integration (Postgres) | `CourseSpecificationsIT` | every leaf selects exactly its rows on the real schema; `%` and `_` in search text are literals; and/or/not compose; **the SQL and in-memory visibility rules agree** for 5 kinds of viewer; a search composes only the facets it has |
 | unit | `CourseCursorTest` | typed round trip per sort; URL-safe; a cursor from another sort and every kind of garbage → 400, never a 500 |
 | ⭐ HTTP + security + Postgres | `CatalogApiIT` | **55 rows sharing one sort key page as 20/20/15 with no duplicates**; a course published between two page loads doesn't shift page 2 (the OFFSET bug); price ties broken by id; **a page is 1 statement**; query-string binding + validation; a draft is 404 for strangers and 200 for its owner/admins; drafts never in the public list; the instructor list is role-gated (401/403) and shows every state |
+| unit (Builder) | `CourseBuilderTest` | the test data builder's defaults are valid and its slugs unique; a built curriculum keeps the aggregate's rollups (it builds through the real methods) |
 | ⭐ unit (Prototype) | `CourseDuplicationTest` | new ids, DRAFT, history reset; content + curriculum copied; children point at the NEW parent; **changing the copy never changes the source**; media asset ids **shared on purpose**; long titles stay ≤ 120 |
 | ⭐ HTTP + Postgres | `CourseDuplicationIT` | 201 + `Location`; the copy is a non-public draft with every lecture persisted; **the same `Idempotency-Key` twice → one copy**, replay carries `Location`; key required; another instructor 404, learner 403, admin allowed (copy stays the instructor's) |
 | ⭐ integration (Postgres) | `CourseQueryCountIT` (Hibernate statistics) | the course page is **2 statements** whatever the curriculum size (11 / 13 without `@BatchSize`, measured); a lazy to-one in a list costs 1 + distinct targets; two bags can't be join-fetched |

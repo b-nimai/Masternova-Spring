@@ -1,14 +1,14 @@
 package com.masternova.api.catalog.domain;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.masternova.api.TestcontainersConfiguration;
-import com.masternova.kernel.money.Money;
 import jakarta.persistence.EntityManagerFactory;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.hibernate.SessionFactory;
 import org.hibernate.loader.MultipleBagFetchException;
 import org.hibernate.stat.Statistics;
@@ -36,45 +36,26 @@ class CourseQueryCountIT {
   @Autowired CourseRepository courses;
   @Autowired CategoryRepository categories;
   @Autowired EntityManagerFactory emf;
+  @Autowired DataSource dataSource;
 
   private Statistics stats;
   private Instructor instructor;
 
   @BeforeEach
   void setUp() {
-    UUID id = UUID.randomUUID();
-    em.getEntityManager()
-        .createNativeQuery(
-            "INSERT INTO app_user (id, email, display_name, password_hash, created_at, version)"
-                + " VALUES (?1, ?2, 'Asha Rao', '{noop}x', now(), 0)")
-        .setParameter(1, id)
-        .setParameter(2, id + "@example.com")
-        .executeUpdate();
-    instructor = new Instructor(id, "Asha Rao");
+    instructor = new TestInstructors(dataSource).create("Asha Rao");
     stats = emf.unwrap(SessionFactory.class).getStatistics();
   }
 
   /** A course with {@code sections × lecturesPerSection} lectures, flushed and detached. */
   private String seedCourse(String slug, String category, int sections, int lecturesPerSection) {
-    Course course =
-        Course.draft(
-            slug,
-            "Course " + slug,
-            "About " + slug,
-            CourseLevel.BEGINNER,
-            "en",
-            Money.of(99900, "INR"),
-            categories.findBySlug(category).orElseThrow(),
-            instructor,
-            Instant.parse("2026-10-02T10:00:00Z"));
-    for (int s = 0; s < sections; s++) {
-      Section section = course.addSection("Section " + s);
-      for (int l = 0; l < lecturesPerSection; l++) {
-        course.addLecture(
-            section, "Lecture " + l, LectureKind.VIDEO, false, LectureDuration.ofSeconds(60), null);
-      }
-    }
-    courses.save(course);
+    courses.save(
+        aCourse()
+            .slug(slug)
+            .in(categories.findBySlug(category).orElseThrow())
+            .by(instructor)
+            .withCurriculum(sections, lecturesPerSection)
+            .build());
     em.flush();
     em.clear(); // ⭐ an empty persistence context: every load below really hits the database
     stats.clear();

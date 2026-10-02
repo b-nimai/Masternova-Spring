@@ -1,8 +1,8 @@
 package com.masternova.api.catalog.domain;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.masternova.kernel.money.Money;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -14,21 +14,8 @@ class ViewerTest {
   static final Instant NOW = Instant.parse("2026-10-02T10:00:00Z");
 
   private static Course course(boolean published) {
-    Course course =
-        Course.draft(
-            "k8s",
-            "Kubernetes",
-            "…",
-            CourseLevel.BEGINNER,
-            "en",
-            Money.zero("INR"),
-            new Category(),
-            new Instructor(OWNER, "Asha"),
-            NOW);
-    if (published) {
-      course.publish(NOW);
-    }
-    return course;
+    CourseBuilder course = aCourse().by(new Instructor(OWNER, "Asha"));
+    return (published ? course.published(NOW) : course).build();
   }
 
   @Test

@@ -1,5 +1,6 @@
 package com.masternova.api.catalog.domain;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
 import static com.masternova.api.catalog.domain.CourseSpecifications.atLevels;
 import static com.masternova.api.catalog.domain.CourseSpecifications.byInstructor;
 import static com.masternova.api.catalog.domain.CourseSpecifications.free;
@@ -15,12 +16,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.api.catalog.application.CourseSearch;
 import com.masternova.api.catalog.application.CourseSearch.PriceFilter;
-import com.masternova.kernel.money.Money;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,128 +46,91 @@ class CourseSpecificationsIT {
   @Autowired TestEntityManager em;
   @Autowired CourseRepository courses;
   @Autowired CategoryRepository categories;
+  @Autowired DataSource dataSource;
 
   UUID asha;
   UUID ravi;
 
-  private UUID instructor(String name) {
-    UUID id = UUID.randomUUID();
-    em.getEntityManager()
-        .createNativeQuery(
-            "INSERT INTO app_user (id, email, display_name, password_hash, created_at, version)"
-                + " VALUES (?1, ?2, ?3, '{noop}x', now(), 0)")
-        .setParameter(1, id)
-        .setParameter(2, id + "@example.com")
-        .setParameter(3, name)
-        .executeUpdate();
-    return id;
+  private Category category(String slug) {
+    return categories.findBySlug(slug).orElseThrow();
   }
 
-  private void course(
-      String slug,
-      String title,
-      String category,
-      CourseLevel level,
-      String language,
-      long priceMinor,
-      String rating,
-      CourseStatus status,
-      UUID instructor) {
-    Course course =
-        Course.draft(
-            slug,
-            title,
-            "About " + title,
-            level,
-            language,
-            Money.of(priceMinor, "INR"),
-            categories.findBySlug(category).orElseThrow(),
-            new Instructor(instructor, "Someone"),
-            NOW);
-    if (!rating.equals("0")) {
-      course.updateRatingSummary(new BigDecimal(rating), 10);
-    }
-    if (status == CourseStatus.PUBLISHED) {
-      course.publish(NOW);
-    } else if (status == CourseStatus.IN_REVIEW) {
-      em.persist(course);
-      em.flush();
-      em.getEntityManager()
-          .createNativeQuery("UPDATE course SET status = 'IN_REVIEW' WHERE id = ?1")
-          .setParameter(1, course.id())
-          .executeUpdate(); // Phase 6 adds the real submit transition
-      return;
-    }
-    em.persist(course);
-  }
-
+  /**
+   * ⭐ Read each line as a sentence: only what makes the row different is stated; the builder
+   * supplies the rest. (Before 5.7 this was nine positional arguments per course.)
+   */
   @BeforeEach
   void seed() {
-    asha = instructor("Asha");
-    ravi = instructor("Ravi");
-    // slug           title                   category                level   lang  price   rating
-    // status   by
-    course(
-        "k8s-basics",
-        "Kubernetes Basics",
-        "containers-kubernetes",
-        CourseLevel.BEGINNER,
-        "en",
-        0,
-        "4.6",
-        CourseStatus.PUBLISHED,
-        asha);
-    course(
-        "k8s-advanced",
-        "Advanced Kubernetes",
-        "containers-kubernetes",
-        CourseLevel.ADVANCED,
-        "en",
-        299900,
-        "4.8",
-        CourseStatus.PUBLISHED,
-        asha);
-    course(
-        "cicd-hindi",
-        "CI/CD in Hindi",
-        "ci-cd",
-        CourseLevel.BEGINNER,
-        "hi",
-        49900,
-        "4.1",
-        CourseStatus.PUBLISHED,
-        ravi);
-    course(
-        "aws-draft",
-        "AWS Draft",
-        "cloud-platforms",
-        CourseLevel.INTERMEDIATE,
-        "en",
-        99900,
-        "0",
-        CourseStatus.DRAFT,
-        asha);
-    course(
-        "react-100",
-        "React 100% Practical",
-        "web-development",
-        CourseLevel.BEGINNER,
-        "en",
-        0,
-        "3.9",
-        CourseStatus.PUBLISHED,
-        ravi);
-    course(
-        "figma-review",
-        "Figma for 100 days",
-        "ui-ux",
-        CourseLevel.ALL_LEVELS,
-        "en",
-        19900,
-        "0",
-        CourseStatus.IN_REVIEW,
-        ravi);
+    TestInstructors instructors = new TestInstructors(dataSource);
+    Instructor ashaRao = instructors.create("Asha");
+    Instructor raviKumar = instructors.create("Ravi");
+    asha = ashaRao.id();
+    ravi = raviKumar.id();
+
+    em.persist(
+        aCourse()
+            .slug("k8s-basics")
+            .title("Kubernetes Basics")
+            .in(category("containers-kubernetes"))
+            .by(ashaRao)
+            .rated("4.6", 10)
+            .published(NOW)
+            .build());
+    em.persist(
+        aCourse()
+            .slug("k8s-advanced")
+            .title("Advanced Kubernetes")
+            .in(category("containers-kubernetes"))
+            .level(CourseLevel.ADVANCED)
+            .priced(299900)
+            .by(ashaRao)
+            .rated("4.8", 10)
+            .published(NOW)
+            .build());
+    em.persist(
+        aCourse()
+            .slug("cicd-hindi")
+            .title("CI/CD in Hindi")
+            .in(category("ci-cd"))
+            .language("hi")
+            .priced(49900)
+            .by(raviKumar)
+            .rated("4.1", 10)
+            .published(NOW)
+            .build());
+    em.persist(
+        aCourse()
+            .slug("aws-draft")
+            .title("AWS Draft")
+            .in(category("cloud-platforms"))
+            .level(CourseLevel.INTERMEDIATE)
+            .priced(99900)
+            .by(ashaRao)
+            .build());
+    em.persist(
+        aCourse()
+            .slug("react-100")
+            .title("React 100% Practical")
+            .in(category("web-development"))
+            .by(raviKumar)
+            .rated("3.9", 10)
+            .published(NOW)
+            .build());
+    Course inReview =
+        aCourse()
+            .slug("figma-review")
+            .title("Figma for 100 days")
+            .in(category("ui-ux"))
+            .level(CourseLevel.ALL_LEVELS)
+            .priced(19900)
+            .by(raviKumar)
+            .build();
+    em.persist(inReview);
     em.flush();
+    em.getEntityManager()
+        .createNativeQuery("UPDATE course SET status = 'IN_REVIEW' WHERE id = ?1")
+        .setParameter(1, inReview.id())
+        .executeUpdate(); // Phase 6 adds the real submit transition
     em.clear();
   }
 

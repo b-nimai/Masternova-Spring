@@ -1,5 +1,7 @@
 package com.masternova.api.catalog.domain;
 
+import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
+import static com.masternova.api.catalog.domain.CourseBuilder.aLecture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -7,6 +9,7 @@ import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.kernel.money.Money;
 import java.time.Instant;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,32 +35,22 @@ class CatalogPersistenceIT {
   @Autowired CourseRepository courses;
   @Autowired CategoryRepository categories;
 
+  @Autowired DataSource dataSource;
+
   Instructor instructor;
 
   @BeforeEach
   void instructor() {
-    UUID id = UUID.randomUUID();
-    em.getEntityManager()
-        .createNativeQuery(
-            "INSERT INTO app_user (id, email, display_name, password_hash, created_at, version)"
-                + " VALUES (?1, ?2, 'Asha Rao', '{noop}x', now(), 0)")
-        .setParameter(1, id)
-        .setParameter(2, id + "@example.com")
-        .executeUpdate();
-    instructor = new Instructor(id, "Asha Rao");
+    instructor = new TestInstructors(dataSource).create("Asha Rao");
   }
 
-  private Course draft(String slug) {
-    return Course.draft(
-        slug,
-        "Kubernetes from zero",
-        "Pods, deployments, services.",
-        CourseLevel.BEGINNER,
-        "en",
-        Money.of(149900, "INR"),
-        categories.findBySlug("containers-kubernetes").orElseThrow(),
-        instructor,
-        NOW);
+  private CourseBuilder k8s(String slug) {
+    return aCourse()
+        .slug(slug)
+        .priced(149900)
+        .in(categories.findBySlug("containers-kubernetes").orElseThrow())
+        .by(instructor)
+        .createdAt(NOW);
   }
 
   @Test
@@ -73,18 +66,12 @@ class CatalogPersistenceIT {
 
   @Test
   void anAggregateRoundTripsWithItsValueObjectsAndOrder() {
-    Course course = draft("k8s-zero");
-    Section intro = course.addSection("Intro");
-    Section core = course.addSection("Core");
-    course.addLecture(
-        intro,
-        "Welcome",
-        LectureKind.VIDEO,
-        true,
-        LectureDuration.ofSeconds(90),
-        UUID.randomUUID());
-    course.addLecture(core, "Pods", LectureKind.VIDEO, false, LectureDuration.ofSeconds(600), null);
-    course.addLecture(core, "Cheat sheet", LectureKind.ARTICLE, false, LectureDuration.ZERO, null);
+    Course course =
+        k8s("k8s-zero")
+            .withSection(
+                "Intro", aLecture("Welcome").preview().seconds(90).asset(UUID.randomUUID()))
+            .withSection("Core", aLecture("Pods").seconds(600), aLecture("Cheat sheet").article())
+            .build();
     courses.saveAndFlush(course); // ⭐ one save: cascade = ALL persists 2 sections + 3 lectures
     em.clear();
 
@@ -104,19 +91,17 @@ class CatalogPersistenceIT {
 
   @Test
   void theDatabaseRefusesASecondCourseWithTheSameSlug() {
-    courses.saveAndFlush(draft("k8s-zero"));
+    courses.saveAndFlush(k8s("k8s-zero").build());
 
     // ⭐ the unique constraint is the real guard; Spring translates Hibernate's exception into
     //    its DataAccessException hierarchy
-    assertThatThrownBy(() -> courses.saveAndFlush(draft("k8s-zero")))
+    assertThatThrownBy(() -> courses.saveAndFlush(k8s("k8s-zero").build()))
         .isInstanceOf(DataIntegrityViolationException.class);
   }
 
   @Test
   void aPublishedCourseAlwaysHasItsSortKey() {
-    Course course = draft("k8s-zero");
-    course.publish(NOW);
-    courses.saveAndFlush(course);
+    courses.saveAndFlush(k8s("k8s-zero").published(NOW).build());
 
     // the CHECK constraint backs the aggregate: no row is PUBLISHED without published_at
     assertThatThrownBy(
