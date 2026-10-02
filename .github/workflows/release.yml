@@ -1,0 +1,152 @@
+# Release: pushing a tag vX.Y.Z (as the repo owner, on a commit that is on main) …
+#   1. promotes the images CI already built, scanned and pushed for that commit (:sha-<commit>)
+#      to :X.Y.Z and :X.Y — no rebuild, so the release is byte-for-byte what was tested; if CI
+#      never built that commit (e.g. a docs-only merge), it builds, scans and pushes it here;
+#   2. creates the GitHub Release with notes generated from the merged PRs.
+# No commit is ever written back to the repository (patterns/devops/04 §3).
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      short_sha: ${{ steps.v.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history, to check where the tag points
+      - name: The tag must point at a commit on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main. Release only reviewed, merged code."
+            exit 1
+          fi
+      - id: v
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+  images:
+    name: image (${{ matrix.name }})
+    needs: guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: api, context: backend, args: "APP=api" }
+          - { name: worker, context: backend, args: "APP=worker\nPORT=8090" }
+          - { name: web, context: frontend, args: "" }
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
+      VERSION: ${{ needs.guard.outputs.version }}
+      SHORT_SHA: ${{ needs.guard.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Did CI already publish this commit?
+        id: existing
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:sha-$SHORT_SHA" > /dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$IMAGE:sha-$SHORT_SHA not found; building it for the release"
+          fi
+
+      # ⭐ Path 1 — promote: add tags to the existing manifest (a registry-side operation)
+      - name: Promote :sha-${{ env.SHORT_SHA }} → :${{ env.VERSION }}
+        if: steps.existing.outputs.found == 'true'
+        run: |
+          MINOR="${VERSION%.*}"
+          docker buildx imagetools create \
+            --tag "$IMAGE:$VERSION" --tag "$IMAGE:$MINOR" \
+            "$IMAGE:sha-$SHORT_SHA"
+
+      # Path 2 — build, scan, push (same steps as CI)
+      - name: Image tags and labels
+        if: steps.existing.outputs.found == 'false'
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - name: Build
+        if: steps.existing.outputs.found == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          build-args: |
+            ${{ matrix.args }}
+            GIT_SHA=${{ github.sha }}
+          tags: masternova-spring/${{ matrix.name }}:release
+          labels: ${{ steps.meta.outputs.labels }}
+          load: true
+          cache-from: type=gha,scope=${{ matrix.name }}
+      - name: Trivy scan
+        if: steps.existing.outputs.found == 'false'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: masternova-spring/${{ matrix.name }}:release
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Push
+        if: steps.existing.outputs.found == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          build-args: |
+            ${{ matrix.args }}
+            GIT_SHA=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          cache-from: type=gha,scope=${{ matrix.name }}
+
+  github-release:
+    needs: [guard, images]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the Release object (not a commit)
+    steps:
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.guard.outputs.version }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          {
+            echo "## Images"
+            echo
+            for app in api worker web; do
+              echo "- \`ghcr.io/$OWNER/masternova-spring-$app:$VERSION\`"
+            done
+            echo
+            echo "Built from commit \`$GITHUB_SHA\` (also tagged \`:sha-${GITHUB_SHA::7}\`)."
+          } > images.md
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" --verify-tag --generate-notes --notes-file images.md

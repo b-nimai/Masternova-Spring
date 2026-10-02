@@ -51,4 +51,12 @@ scan: images ## Scan images for HIGH/CRITICAL CVEs with Trivy (runs in Docker)
 	    --severity HIGH,CRITICAL --ignore-unfixed masternova-spring/$$img:local; \
 	done
 
-.PHONY: help up down nuke secrets stack api worker web test format images scan
+release: ## Tag and push a release from an up-to-date, clean main: make release VERSION=1.2.3
+	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "usage: make release VERSION=X.Y.Z"; exit 1; }
+	@[ "$$(git rev-parse --abbrev-ref HEAD)" = main ] && git diff --quiet && git diff --cached --quiet \
+	  || { echo "release from a clean main"; exit 1; }
+	git pull --ff-only
+	git tag -a "v$(VERSION)" -m "v$(VERSION)"
+	git push origin "v$(VERSION)"
+
+.PHONY: help up down nuke secrets stack api worker web test format images scan release

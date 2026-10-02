@@ -45,6 +45,10 @@ RUN java -XX:AOTCacheOutput=app.aot \
       -Dspring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false \
       -Dspring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect \
       -jar app.jar
+# The commit this image was built from, reported at /actuator/info. Declared AFTER the training
+# run: a changed build arg invalidates the cache of every RUN that follows it.
+ARG GIT_SHA=local
+ENV GIT_SHA=${GIT_SHA}
 USER app
 EXPOSE ${PORT}
 HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=12 CMD ["healthcheck"]
