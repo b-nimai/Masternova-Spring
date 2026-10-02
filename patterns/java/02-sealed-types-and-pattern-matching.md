@@ -556,4 +556,4 @@ jshell> String go(Light l) { return switch (l) { case Red _ -> "stop"; }; }   //
   - Open set: Strategy.
   - Sealed + switch replaces Visitor.
   - Same shape: enum. Different shapes: sealed + records.
-- **Next:** [03 — Collections, Streams & Collectors](README.md) (task 1.3).
+- **Next:** [03 — Collections, Streams & Collectors](03-collections-and-streams.md) (task 1.3).
