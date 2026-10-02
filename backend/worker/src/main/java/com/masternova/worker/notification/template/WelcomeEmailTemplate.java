@@ -21,8 +21,8 @@ public class WelcomeEmailTemplate extends EmailTemplate<WelcomeEmailTemplate.Pay
 
   public record Payload(String displayName, URI browseUrl) {}
 
-  public WelcomeEmailTemplate(ITemplateEngine emailTemplateEngine) {
-    super(emailTemplateEngine);
+  public WelcomeEmailTemplate(ITemplateEngine engine) {
+    super(engine);
   }
 
   @Override

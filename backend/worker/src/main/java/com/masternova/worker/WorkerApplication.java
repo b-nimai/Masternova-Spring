@@ -2,6 +2,7 @@ package com.masternova.worker;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 /**
  * Masternova worker — a separate deployable from the api because its resource profile differs:
@@ -10,6 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * <p>Grows into: outbox relay (Phase 2), email delivery (Phase 4), transcode pipeline (Phase 7).
  */
 @SpringBootApplication
+@ConfigurationPropertiesScan
 public class WorkerApplication {
 
   public static void main(String[] args) {

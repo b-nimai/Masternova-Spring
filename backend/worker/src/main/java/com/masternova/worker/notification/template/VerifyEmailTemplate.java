@@ -19,8 +19,8 @@ public class VerifyEmailTemplate extends EmailTemplate<VerifyEmailTemplate.Paylo
   /** What this email needs to know. */
   public record Payload(String displayName, URI verifyUrl) {}
 
-  public VerifyEmailTemplate(ITemplateEngine emailTemplateEngine) {
-    super(emailTemplateEngine);
+  public VerifyEmailTemplate(ITemplateEngine engine) {
+    super(engine);
   }
 
   @Override

@@ -22,6 +22,12 @@ spring:
     port: ${SMTP_PORT:1026}
 
 masternova:
+  notification: # → NotificationProperties
+    web-url: ${WEB_URL:http://localhost:4200} # every link in an email starts here
+    from: ${MAIL_FROM:Masternova <no-reply@masternova.dev>}
+    provider: ${MAIL_PROVIDER:smtp} # smtp (Mailpit in dev) | resend
+    resend:
+      api-key: ${RESEND_API_KEY:}
   outbox: # → messaging's OutboxProperties
     relay-enabled: true # ⭐ the ONLY process that consumes the outbox (ADR-0008)
     poll-interval: 1s

@@ -171,6 +171,7 @@ services:
       <<: *app-env
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
+      WEB_URL: http://localhost:8081 # links in emails open the containerised web app
     ports:
       - '8090:8090'
     depends_on:

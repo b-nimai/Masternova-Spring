@@ -17,7 +17,7 @@ import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 public class EmailTemplateEngine {
 
   @Bean
-  SpringTemplateEngine emailTemplateEngine() {
+  SpringTemplateEngine emailEngine() {
     return create();
   }
 
