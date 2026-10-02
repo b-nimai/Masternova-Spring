@@ -108,6 +108,7 @@ jobs:
       - run: pnpm build
 
   images:
+    name: image (${{ matrix.name }})
     needs: [changes, backend, frontend]
     # run when either side changed and neither side failed (a skipped job is fine)
     if: >-
@@ -134,7 +135,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
       - name: Trivy scan
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: masternova-spring/${{ matrix.name }}:ci
           severity: HIGH,CRITICAL
