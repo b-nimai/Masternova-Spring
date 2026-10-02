@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ on `phase-d2/cicd` (PR pending) · Next: Phase 4 (notification + worker).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 in progress on `phase-4/notification`.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -118,7 +118,7 @@ Phases are listed **in the order you do them**.
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
-| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
+| 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 1 | 14 h | ~1 h | 🔨 |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **50** | **~326 h** | ~78.5 h | |
+| | **Total** | **137** | **51** | **~326 h** | ~79.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -278,9 +278,9 @@ versioned, scanned artifacts.
 
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
-| 4.1 | `docs/lld/notification.md` | — | — | — | 1 h | ☐ | |
-| 4.2 | Worker outbox relay: claim batches with `SKIP LOCKED`, dispatch to a handler registry | `@Scheduled`, `Map<String, Handler>` from injected `List` | — | **Observer** + **Factory Method / Registry** | 3 h | ☐ | |
-| 4.3 | Consumer idempotency: `processed_event` table; handlers safe to run twice | unique constraints as locks | — | — | 1.5 h | ☐ | |
+| 4.1 | [`docs/lld/notification.md`](docs/lld/notification.md) (send side in the worker, consent side in the api, per-email delivery state machine, categories, HMAC unsubscribe) + [ADR-0008](docs/adr/0008-shared-messaging-module.md) (shared `messaging` module) | — | — | — | 1 h | ✅ | 2026-10-02 |
+| 4.2 | Shared `messaging` module (ADR-0008): outbox writer + `SKIP LOCKED` relay + handler registry move out of the api, with Boot auto-configuration; the relay runs only in the worker | `@AutoConfiguration`, `@ConditionalOn…`, `@Scheduled`, `Map<String, Handler>` from injected `List` | — | **Observer** + **Factory Method / Registry** | 3 h | ☐ | |
+| 4.3 | Consumer idempotency for email: the `email_delivery` claim (unique `(event, template, recipient)`) + state machine (`SENDING → SENT / FAILED → re-claim / BOUNCED / SUPPRESSED`); handlers safe to run twice. *(A generic `processed_event` table is deferred to the first DB-effect consumer, Phase 9: LLD §6)* | unique constraints as locks, `INSERT … ON CONFLICT` | — | — | 1.5 h | ☐ | |
 | 4.4 | Email templates (Thymeleaf): one base class, one subclass per email | Thymeleaf, abstract classes | — | **Template Method** | 2 h | ☐ | |
 | 4.5 | `MailProvider`: SMTP (Mailpit) adapter, Resend adapter behind a property | `@ConditionalOnProperty`, `JavaMailSender` | — | **Adapter** | 2 h | ☐ | |
 | 4.6 | Suppression list, preferences, HMAC unsubscribe link | `Mac` / HMAC-SHA256 | — | — | 1.5 h | ☐ | |
@@ -537,6 +537,7 @@ Each line is a sentence you can say *and* a file or test you can show.
 |---|---|
 | One `backend/Dockerfile` with `--build-arg APP=api\|worker` instead of one Dockerfile per app | Both apps build identically; one file can't drift from the other |
 | `spring-modulith-starter-jpa` removed from the Initializr selection | Its event-publication table would need a hand-written migration now. Phase 2 hand-rolls the outbox first, then compares (2.5). |
+| No generic `processed_event` table in Phase 4 | email is an external effect; it needs the per-email claim + state machine. A generic table arrives with the first DB-effect consumer (Phase 9). Notification LLD §6. |
 | MinIO moved to an opt-in compose profile (`media`) | its images are no longer published (2026-10-02); nothing uses S3 before Phase 7, which chooses a replacement |
 | google-java-format pinned to 1.35.0 | 1.36+ pulls in a commonmark dependency that Spotless 3.10 fails to load |
 | Healthcheck via BusyBox `wget` (was bash `/dev/tcp`) | Never install curl/wget just for a healthcheck (they add CVEs). Since D1.2 the runtime is the Alpine JRE ([ADR-0007](docs/adr/0007-alpine-jre-runtime-image.md)), whose BusyBox already has `wget` and has no bash |

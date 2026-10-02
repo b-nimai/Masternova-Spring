@@ -18,3 +18,4 @@ re-derived rather than copied.
 | [0005](0005-hand-rolled-outbox-over-modulith-registry.md) | Hand-rolled transactional outbox over Spring Modulith's event publication registry | accepted |
 | [0006](0006-rotating-refresh-tokens-over-stateless-jwt.md) | Short-lived JWT + rotating refresh tokens with reuse detection | accepted |
 | [0007](0007-alpine-jre-runtime-image.md) | Alpine Temurin JRE as the runtime base for the Spring Boot images | accepted |
+| [0008](0008-shared-messaging-module.md) | A shared `messaging` module owns the outbox protocol (writer in the api, relay in the worker) | accepted |
