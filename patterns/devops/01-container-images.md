@@ -72,7 +72,7 @@ COPY . .
 RUN --mount=type=cache,target=/root/.m2 \        # ⭐ BuildKit cache mount: ~/.m2 survives between builds,
     ./mvnw -B -q -pl ${APP} -am package -DskipTests …   #    but never ends up in a layer
 RUN cp ${APP}/target/${APP}-*.jar app.jar \
- && java -Djarmode=tools -jar app.jar extract --layers --launcher --destination extracted
+ && java -Djarmode=tools -jar app.jar extract --layers --destination extracted
                                                  # ⭐ split the fat jar into 4 folders (below)
 
 # ---- stage 2: runtime ----
@@ -86,8 +86,8 @@ COPY --from=build /src/extracted/snapshot-dependencies/ ./   # usually empty
 COPY --from=build /src/extracted/application/ ./             # 0.65 MB, changes on EVERY commit
 USER app                                                     # ⭐ never run as root
 HEALTHCHECK … CMD ["healthcheck"]
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"   # note 02 (D1.3)
-ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"   # note 02 §2, §4
+ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-jar", "app.jar"]      # note 02 §5 (D1.3 added the AOT cache)
 ```
 
 **Why each choice:**
@@ -97,7 +97,7 @@ ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher"]
 | **Multi-stage** | the JDK, Maven, `~/.m2` and the sources stay in the build stage. The runtime image gets only what runs: smaller, and less to attack. |
 | **Cache mount** for `~/.m2` | dependencies download once per machine, not on every build. Unlike `COPY`ing `~/.m2`, it never bloats a layer. |
 | **`jarmode=tools extract --layers`** | a fat jar is one 80 MB file: change one class and the whole 80 MB layer changes. Extracted, the 78 MB of libraries become their own layer, which stays cached. |
-| **`--launcher`** + `JarLauncher` | keeps Boot's classpath ordering from the jar, so the extracted app behaves exactly like `java -jar`. |
+| **No `--launcher`**, `java -jar app.jar` | the extract writes `app.jar` + `lib/*.jar` with a manifest classpath, so the JDK's own class loader loads everything. That's what lets the Java 25 AOT cache work ([note 02 §5](02-jvm-in-containers.md#5-startup-the-java-25-aot-cache-)). Until D1.3 we used `--launcher` + Boot's `JarLauncher`. |
 | **Non-root `USER`** | a container escape or app RCE lands as an unprivileged user. Kubernetes `runAsNonRoot` (D4) refuses root images anyway. |
 | **Nothing installed for the healthcheck** | every extra package brings its own CVEs. On Ubuntu it was a bash `/dev/tcp` script; on Alpine it's BusyBox `wget`, already in the base (§7). |
 | **Exec-form `ENTRYPOINT`** `["java", …]` | Java is PID 1 and receives `SIGTERM` directly, so graceful shutdown works. The shell form `ENTRYPOINT java …` wraps it in `/bin/sh -c`, which doesn't forward signals. |
