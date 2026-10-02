@@ -33,6 +33,7 @@ seam: use a concrete class until a second implementation is real or planned.
 make up          # infra: postgres :5433, redis :6380, mailpit :8026 (S3/MinIO: opt-in `media` profile, see ROADMAP Phase 7)
 make api         # run the api from source (Boot reuses the compose infra)
 make web         # Angular dev server :4200, proxies /api → :8080
+make seed        # dev catalog data (200 courses; COURSES=10000 for measurements)
 make test        # backend verify (incl. Testcontainers) + pattern lab + frontend lint/test
 make format      # Spotless (google-java-format) + Prettier
 make secrets     # generate the gitignored secret files the container stack mounts

@@ -1,0 +1,25 @@
+@let c = course();
+<article class="card" [attr.data-testid]="'course-' + c.slug">
+  <div class="body">
+    <a class="title" [routerLink]="['/courses', c.slug]">{{ c.title }}</a>
+    @if (c.subtitle) {
+      <p class="subtitle">{{ c.subtitle }}</p>
+    }
+    <p class="meta">
+      {{ c.instructorName }} · {{ c.category.name }} · {{ levelLabels[c.level] }}
+      @if (c.language !== 'en') {
+        · {{ c.language.toUpperCase() }}
+      }
+    </p>
+    <p class="meta">
+      @if (c.ratingCount > 0) {
+        <span class="rating"
+          ><mat-icon inline>star</mat-icon> {{ c.ratingAverage | number: '1.1-2' }}</span
+        >
+        ({{ c.ratingCount }}) ·
+      }
+      {{ c.lectureCount }} lectures · {{ c.totalDurationSeconds | duration }}
+    </p>
+  </div>
+  <strong class="price" data-testid="price">{{ c.priceMinor | money: c.currency }}</strong>
+</article>

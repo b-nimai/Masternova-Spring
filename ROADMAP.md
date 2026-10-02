@@ -119,7 +119,7 @@ Phases are listed **in the order you do them**.
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
-| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 7 | 20 h | ~13.5 h | 🔨 |
+| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 8 | 20 h | ~18 h | 🔨 |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **65** | **~326 h** | ~106 h | |
+| | **Total** | **137** | **66** | **~326 h** | ~110.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -302,7 +302,7 @@ versioned, scanned artifacts.
 | 5.5 | Keyset pagination with an opaque cursor + the read API: `GET /courses` (query string bound to a validated record), `GET /courses/{slug}` (public, optional viewer: identity's resolver learns `Optional<CurrentUser>`), `GET /categories`, `GET /instructor/courses` (`@PreAuthorize`). Spring Data `Window` + `ScrollPosition.keyset()`; our typed, sort-bound `CourseCursor`; every sort ends in the id. **Finding:** `project()` is ignored by `scroll()` (Spring Data JPA 4.1) → fetch-join Specification. `CatalogApiIT`: 55 tied rows → 20/20/15 no dupes; publish-mid-scroll doesn't shift pages; **1 statement per page**; 404-not-403 drafts. API conventions §2 + §5 ✅ | `Window`, `KeysetScrollPosition`, record query binding, built-in method validation, `HandlerMethodArgumentResolver` + `Optional` | — | — | 2 h | ✅ | 2026-10-02 |
 | 5.6 | Course duplication: `Course.duplicateAsDraft` → private copy constructor + package-private `Section`/`Lecture` copy constructors (deep: new ids, children re-parented; reset: DRAFT, no history; shared: `Money`, category, **media asset ids**); `CourseDuplicationService` (owner or admin, random `-copy-xxxxxx` slug, one transaction); `POST /instructor/courses/{id}/duplicate` with `@IdempotencyKeyRequired`. **Bug found + fixed in platform:** a replayed 201 lost its `Location` header → stored since `V7__platform_idempotency_location.sql`. [Pattern note 11](patterns/docs/11-prototype.md) + lab (`clone()` shallow trap vs copy constructors, prototype manager) | copy constructors vs `clone()` (Effective Java 13), cascade persist of a new tree | — | **Prototype**: catalog row 11 | 2 h | ✅ | 2026-10-02 |
 | 5.7 | Test data builder for the catalog's aggregate: `CourseBuilder.aCourse()` + nested `aLecture()` (unique default slugs, `withSection` / `withCurriculum`, builds through `Course.draft` / `addLecture` / `publish`, so every built course is legal) + `TestInstructors` (FK rows via `JdbcClient` that joins the test transaction). All 8 catalog test classes refactored onto it (the 9-positional-argument seed is gone). `CourseBuilderTest`. [Pattern note 10](patterns/docs/10-builder.md) + lab (Bloch builder: required entry point, cross-field `build()` validation, defensive copies, `toBuilder`) | fluent APIs, nested static builders, varargs, static imports | — | **Builder**: catalog row 10 | 1.5 h | ✅ | 2026-10-02 |
-| 5.8 | Angular: catalog page (filters ↔ URL query params, infinite scroll with cursor) + course detail page | — | router query params, `withComponentInputBinding`, `@defer`, `CdkVirtualScrollViewport` | — | 5 h | ☐ | |
+| 5.8 | Angular `/courses`: every filter (search debounced, category tree, level chips, price, sort) lives in the URL, bound to inputs; infinite scroll in a `CdkVirtualScrollViewport` through one pipeline (`switchMap` per query cancels stale pages, `exhaustMap` per page, `scan`) + an a11y "Load more". `/courses/:slug`: `rxResource` by slug, 404 → "not found", curriculum `@defer (on viewport)` (own 23.5 kB chunk). `CatalogApi`, `money` + `duration` pipes, nav item. `docs/db/seed-catalog.sql` + `make seed` (deterministic; CI seeds before e2e). Playwright `catalog.spec.ts`: reload/Back keep filters, scrolling sends `cursor=`, `@defer` loads, friendly 404. Fixed `make api`/`make worker` (double `cd`). [Angular note 04](patterns/angular/04-url-state-infinite-scroll-defer.md) | — | router query params, `withComponentInputBinding`, `@defer`, `CdkVirtualScrollViewport`, `rxResource`, `exhaustMap` | — | 5 h | ✅ | 2026-10-02 |
 | 5.9 | `docs/db/indexes.md` with `EXPLAIN ANALYZE` evidence for every list query | — | — | — | 1.5 h | ☐ | |
 
 ---
@@ -502,8 +502,8 @@ Tick these as they're used *for real* in the project, not just read about.
 
 - [x] standalone components · [x] `@Service()` + `inject()` · [x] `toSignal` · [x] `@switch` / `@let` control flow · [x] lazy routes
 - [x] `signal` / `computed` / `effect` · [x] `input()` / `output()` · [ ] typed reactive forms · [x] interceptors · [x] guards
-- [x] RxJS operators in anger · [ ] Material (stepper, dialog, table) · [ ] CDK drag-drop / virtual scroll · [ ] `@defer`
-- [x] Vitest + `HttpTestingController` · [ ] Playwright e2e
+- [x] RxJS operators in anger · [ ] Material (stepper, dialog, table) · [ ] CDK drag-drop · [x] CDK virtual scroll · [x] `@defer`
+- [x] Vitest + `HttpTestingController` · [x] Playwright e2e
 
 ### 3.4 DevOps
 

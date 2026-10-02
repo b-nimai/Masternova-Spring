@@ -54,6 +54,7 @@ jobs:
             e2e:
               - 'e2e/**'
               - 'compose.yaml'
+              - 'docs/db/seed-catalog.sql'
               - '.github/workflows/ci.yml'
 
   backend:
@@ -273,6 +274,8 @@ jobs:
         run: |
           make secrets
           docker compose --profile app up -d --wait postgres redis mailpit api worker web
+      - name: Seed the catalog (the api has applied its migrations by now)
+        run: make seed COURSES=60
       - uses: pnpm/action-setup@v6
         with:
           package_json_file: e2e/package.json

@@ -1,0 +1,38 @@
+.course-detail {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.category {
+  margin: 16px 0 0;
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-label-large);
+}
+
+h1 {
+  margin: 4px 0;
+}
+
+.subtitle {
+  font: var(--mat-sys-title-medium);
+}
+
+.meta {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.price {
+  font: var(--mat-sys-headline-small);
+}
+
+.draft {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}
+
+.curriculum {
+  min-height: 120px; // gives the deferred block a box to scroll into view
+}

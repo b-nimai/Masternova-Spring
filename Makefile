@@ -25,10 +25,13 @@ stack: secrets ## Build images and run the whole app in containers (web on :8081
 	docker compose --profile app up -d --build --wait postgres redis mailpit api worker web
 
 api: ## Run the api from source (:8080)
-	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && cd backend && ./mvnw -pl api spring-boot:run
+	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && ./mvnw -pl api spring-boot:run
 
 worker: ## Run the worker from source (:8090)
-	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && cd backend && ./mvnw -pl worker spring-boot:run
+	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && ./mvnw -pl worker spring-boot:run
+
+seed: ## Seed dev catalog data into the compose postgres (dev/measurement only): make seed COURSES=10000
+	docker compose exec -T postgres psql -q -U masternova -d masternova -v courses=$(or $(COURSES),200) < docs/db/seed-catalog.sql
 
 web: ## Run Angular dev server (:4200, proxies /api to :8080)
 	cd frontend && pnpm start
@@ -54,6 +57,7 @@ scan: images ## Scan images for HIGH/CRITICAL CVEs with Trivy (runs in Docker)
 	done
 
 e2e: ## Browser e2e tests (Playwright) against the running stack: make stack && make e2e
+	$(MAKE) seed COURSES=60
 	cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
 
 release: ## Tag and push a release from an up-to-date, clean main: make release VERSION=1.2.3

@@ -14,6 +14,7 @@ export interface NavItem {
 /** The single source of truth for navigation — filtered per user by the shell (role-based UI). */
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Home', icon: 'home', link: '/', roles: [] },
+  { label: 'Courses', icon: 'school', link: '/courses', roles: [] },
   { label: 'Playground', icon: 'science', link: '/playground', roles: [] },
   { label: 'My account', icon: 'person', link: '/account', roles: [], requiresAuth: true },
   {

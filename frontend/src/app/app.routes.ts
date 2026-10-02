@@ -13,6 +13,15 @@ export const routes: Routes = [
       import('./features/playground/playground/playground').then((m) => m.Playground),
   },
   {
+    path: 'courses', // the public catalog: filters live in the query string (Phase 5.8)
+    loadComponent: () => import('./features/catalog/catalog').then((m) => m.Catalog),
+  },
+  {
+    path: 'courses/:slug', // :slug → the component's `slug` input (withComponentInputBinding)
+    loadComponent: () =>
+      import('./features/catalog/course-detail/course-detail').then((m) => m.CourseDetail),
+  },
+  {
     path: 'login',
     canMatch: [guestGuard],
     loadComponent: () => import('./features/auth/login/login').then((m) => m.Login),
