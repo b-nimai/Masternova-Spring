@@ -3,7 +3,8 @@
 #   patterns-lab → mvn test
 #   frontend     → lint, unit tests (Vitest), production build
 #   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL);
-#                  on main, push the scanned images to GHCR as :sha-<commit> and :main
+#                  on main, push the scanned images to GHCR as :sha-<commit> and :main, with SBOM +
+#                  provenance attestations, and sign them keylessly with cosign
 # Versioned releases (vX.Y.Z tags) live in release.yml; deploying comes in Phase D4.
 name: CI
 
@@ -68,6 +69,12 @@ jobs:
           name: jacoco
           path: backend/*/target/site/jacoco/
           if-no-files-found: ignore
+      - name: Upload SBOMs (CycloneDX, one per app; also inside each jar)
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-maven
+          path: backend/*/target/classes/META-INF/sbom/application.cdx.json
+          if-no-files-found: error
 
   patterns-lab:
     needs: changes
@@ -119,6 +126,7 @@ jobs:
     permissions:
       contents: read
       packages: write # push to ghcr.io with the workflow's own GITHUB_TOKEN (no stored secret)
+      id-token: write # an OIDC token for keyless cosign signing (no signing key to store or leak)
     env:
       # Only main publishes. PRs build and scan the same images but never push them.
       PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
@@ -170,6 +178,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push ${{ matrix.name }}
         if: env.PUBLISH == 'true'
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -180,3 +189,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           push: true
           cache-from: type=gha,scope=${{ matrix.name }}
+          # attestations stored next to the image: an SBOM of everything in it, and how it was built
+          sbom: true
+          provenance: mode=max
+      - uses: sigstore/cosign-installer@v4
+        if: env.PUBLISH == 'true'
+      # ⭐ Keyless: GitHub's OIDC token proves "this workflow, this repo, this ref" to Sigstore,
+      #    which issues a 10-minute certificate; the signature lands in the public Rekor log.
+      #    Signing the DIGEST covers every tag that points at it, including later release tags.
+      - name: Sign ${{ matrix.name }}
+        if: env.PUBLISH == 'true'
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"

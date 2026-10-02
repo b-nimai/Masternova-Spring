@@ -117,7 +117,7 @@ Phases are listed **in the order you do them**.
 | 3 | [2 — Platform kernel](#phase-2--platform-kernel) | 8 | 8 | 16 h | ~15 h | ✅ |
 | 4 | [3 — Identity + Angular shell](#phase-3--identity--angular-shell) | 10 | 9 | 26 h | ~24 h | ✅ |
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
-| 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 2 | 10 h | ~2.5 h | 🔨 |
+| 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 3 | 10 h | ~4.5 h | 🔨 |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 0 | 14 h | — | ☐ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 0 | 20 h | — | ☐ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **46** | **~326 h** | ~72.5 h | |
+| | **Total** | **137** | **47** | **~326 h** | ~74.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -265,7 +265,7 @@ versioned, scanned artifacts.
 |---|---|---|---|---|---|
 | D2.1 | Publish images to **GHCR** on `main` as `:sha-<commit>` (immutable) + `:main`, pushed only after the Trivy scan passes, with a job-scoped `packages: write` `GITHUB_TOKEN`; OCI labels; actionlint-clean. [DevOps note 04](patterns/devops/04-ci-cd-pipeline.md) | registries, immutable tags, least privilege | 1 h | ✅ | 2026-10-02 |
 | D2.2 | Releases, **tag-driven** (owner's decision: no bot commits, so no release-please): `make release VERSION=X.Y.Z` pushes an annotated tag; `release.yml` guards that it's on `main`, **promotes** CI's scanned `:sha-` image to `:X.Y.Z`/`:X.Y` with `imagetools` (builds only if missing), and creates a GitHub Release with generated notes. Images report their commit at `/actuator/info` (`GIT_SHA` arg after the AOT layer) | semantic versioning, promote-don't-rebuild, release automation without bot commits | 1.5 h | ✅ | 2026-10-02 |
-| D2.3 | Supply chain: CycloneDX SBOM (Maven plugin + image SBOM), keyless **cosign** signing | SBOM, provenance, signing | 2 h | ☐ | |
+| D2.3 | Supply chain: CycloneDX SBOM inside each jar (Boot-managed plugin, jars stay byte-reproducible), BuildKit SBOM + SLSA provenance attestations on pushed images, Syft SBOMs as release assets, **keyless cosign** signing of the digest via GitHub OIDC (verification demonstrated) | SBOM, provenance, signing, Sigstore (Fulcio/Rekor) | 2 h | ✅ | 2026-10-02 |
 | D2.4 | Quality gates: JaCoCo coverage threshold, CodeQL (Java + TS), Dependabot auto-merge for patches | static analysis, gates | 1.5 h | ☐ | |
 | D2.5 | Branch protection, required checks, PR template, CODEOWNERS | trunk-based workflow | 0.5 h | ☐ | |
 | D2.6 | Playwright e2e smoke against the compose stack in CI (sign up → log in → see dashboard) | e2e in CI, service containers | 2.5 h | ☐ | |

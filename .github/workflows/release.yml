@@ -2,7 +2,9 @@
 #   1. promotes the images CI already built, scanned and pushed for that commit (:sha-<commit>)
 #      to :X.Y.Z and :X.Y — no rebuild, so the release is byte-for-byte what was tested; if CI
 #      never built that commit (e.g. a docs-only merge), it builds, scans and pushes it here;
-#   2. creates the GitHub Release with notes generated from the merged PRs.
+#   2. attaches a CycloneDX SBOM of each released image (CI already signed the digest; a fresh
+#      build here is signed here);
+#   3. creates the GitHub Release with notes generated from the merged PRs.
 # No commit is ever written back to the repository (patterns/devops/04 §3).
 name: Release
 
@@ -45,6 +47,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write # keyless signing when this workflow has to build the image itself
     strategy:
       fail-fast: false
       matrix:
@@ -116,6 +119,7 @@ jobs:
           exit-code: '1'
       - name: Push
         if: steps.existing.outputs.found == 'false'
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -126,6 +130,28 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           push: true
           cache-from: type=gha,scope=${{ matrix.name }}
+          sbom: true
+          provenance: mode=max
+      - uses: sigstore/cosign-installer@v4
+        if: steps.existing.outputs.found == 'false'
+      - name: Sign
+        if: steps.existing.outputs.found == 'false'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+
+      # The SBOM as a release asset: what's inside the image (OS packages + every JAR / npm package)
+      - name: SBOM of ${{ env.IMAGE }}:${{ env.VERSION }}
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}:${{ env.VERSION }}
+          format: cyclonedx-json
+          output-file: sbom-${{ matrix.name }}.cdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom-${{ matrix.name }}.cdx.json
 
   github-release:
     needs: [guard, images]
@@ -133,6 +159,11 @@ jobs:
     permissions:
       contents: write # create the Release object (not a commit)
     steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: sbom-*
+          merge-multiple: true
+          path: sboms
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -147,6 +178,15 @@ jobs:
             done
             echo
             echo "Built from commit \`$GITHUB_SHA\` (also tagged \`:sha-${GITHUB_SHA::7}\`)."
+            echo
+            echo "Verify a signature:"
+            echo
+            echo '```bash'
+            echo "cosign verify ghcr.io/$OWNER/masternova-spring-api:$VERSION \\"
+            echo "  --certificate-identity-regexp '^https://github.com/$GITHUB_REPOSITORY/\.github/workflows/' \\"
+            echo "  --certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            echo '```'
           } > images.md
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-            --title "$GITHUB_REF_NAME" --verify-tag --generate-notes --notes-file images.md
+            --title "$GITHUB_REF_NAME" --verify-tag --generate-notes --notes-file images.md \
+            sboms/*.cdx.json

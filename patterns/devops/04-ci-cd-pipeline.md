@@ -20,6 +20,7 @@
 | 1 | [The pipeline at a glance](#1-the-pipeline-at-a-glance-) | ⭐⭐⭐ | — |
 | 2 | [Publishing images: registry, tags, permissions](#2-publishing-images-registry-tags-permissions-) | ⭐⭐⭐ | D2.1 |
 | 3 | [Releases: tag-driven, promote don't rebuild](#3-releases-tag-driven-promote-dont-rebuild-) | ⭐⭐⭐ | D2.2 |
+| 4 | [Supply chain: SBOMs, provenance, keyless signing](#4-supply-chain-sboms-provenance-keyless-signing-) | ⭐⭐⭐ | D2.3 |
 
 ---
 
@@ -33,7 +34,7 @@ flowchart LR
   F --> W["frontend: format, lint, test, build"]
   B & W --> I["images: build → Trivy scan<br/>(HIGH/CRITICAL fixable = fail)"]
   I -- "PR: stop here" --> X(("✔"))
-  I -- "main: push" --> G[("ghcr.io<br/>:sha-abc1234<br/>:main")]
+  I -- "main: push + SBOM/provenance + cosign sign" --> G[("ghcr.io<br/>:sha-abc1234<br/>:main")]
 ```
 
 | Trigger | What runs | What it produces |
@@ -190,4 +191,123 @@ A tag-driven flow keeps every commit human, and still generates notes:
 
 **What *is* created by automation:** the Release object and the image tags. Neither is a commit;
 `git log` is untouched.
+
+---
+
+## 4. Supply chain: SBOMs, provenance, keyless signing ⭐⭐⭐
+
+Three questions an auditor (or an incident) asks about a running image:
+
+| Question | Answer in this repo |
+|---|---|
+| **What's inside it?** "Are we affected by the new CVE in library X?" | **SBOMs**, at three levels (below) |
+| **How and from what was it built?** | a **provenance** attestation (SLSA): commit, workflow, build args, base images |
+| **Did *our* pipeline build it, unmodified?** | a **cosign** signature on the digest, keyless, recorded in a public transparency log |
+
+### SBOM: the ingredient list
+
+**1. Inside every jar (Maven, CycloneDX).** Spring Boot's parent already configures
+`cyclonedx-maven-plugin`; declaring it in `api/pom.xml` and `worker/pom.xml` is enough. Each build
+writes `META-INF/sbom/application.cdx.json` into the jar:
+
+```text
+CycloneDX 1.6 · 143 components · spring-core 7.0.9 · jackson-databind 3.1.7 · hibernate-core 7.4.5.Final
+· tomcat-embed-core 11.0.26 · postgresql 42.7.13 …
+```
+
+- **Still reproducible:** two clean builds produced **byte-identical jars**. The plugin derives the
+  serial number from the content (a name-based UUID) and omits the timestamp, so note 01's
+  "identical code → identical layers" survives.
+- **Spring Boot's Actuator has an `sbom` endpoint** that serves this file. We **don't expose
+  it**: a public list of exact library versions is a gift to attackers.
+- CI uploads the jar SBOMs as the `sbom-maven` artifact.
+
+**2. Attached to the image in the registry (BuildKit).** `sbom: true` on the push makes BuildKit
+scan the final image (OS packages + JARs + npm packages) and store an SPDX SBOM **next to** the
+image, as an attestation in the same image index:
+
+```bash
+docker buildx imagetools inspect ghcr.io/b-nimai/masternova-spring-api:main --format '{{ json .SBOM }}'
+```
+
+**3. As a release asset (Syft, CycloneDX).** `release.yml` runs `anchore/sbom-action` on each
+released image and attaches `sbom-api.cdx.json`, `sbom-worker.cdx.json` and `sbom-web.cdx.json`
+to the GitHub Release. Anyone can download and scan them without pulling the images:
+
+```bash
+trivy sbom sbom-api.cdx.json        # CVE scan from the SBOM alone
+```
+
+### Provenance: the build receipt
+
+`provenance: mode=max` attaches a **SLSA provenance** attestation: the source repo and commit, the
+workflow that ran, the build arguments (including `GIT_SHA`), and the exact base-image digests.
+`mode=max` includes the full build details. Never pass secrets as build args, because they would
+end up here (we don't; secrets are runtime files, note 03 §6).
+
+```bash
+docker buildx imagetools inspect ghcr.io/b-nimai/masternova-spring-api:main --format '{{ json .Provenance }}'
+```
+
+### Signing: keyless cosign ⭐
+
+```mermaid
+sequenceDiagram
+  participant W as CI job (images)
+  participant O as GitHub OIDC
+  participant F as Sigstore Fulcio (CA)
+  participant R as Rekor (transparency log)
+  participant REG as ghcr.io
+  W->>O: request an ID token (permissions: id-token: write)
+  O-->>W: JWT: repo=b-nimai/Masternova-Spring, workflow=ci.yml, ref=refs/heads/main
+  W->>F: ephemeral key pair + the ID token
+  F-->>W: a 10-minute certificate binding the key to that workflow identity
+  W->>REG: signature of the image DIGEST (stored as an OCI artifact next to the image)
+  W->>R: the signature + certificate, appended to the public log
+  Note over W: the private key is thrown away: nothing to store, rotate or leak
+```
+
+```yaml
+permissions:
+  id-token: write                         # lets the job ask GitHub for an OIDC token
+steps:
+  - uses: sigstore/cosign-installer@v4
+  - run: cosign sign --yes "$IMAGE@$DIGEST"   # DIGEST = the push step's output
+```
+
+- **Sign the digest, not a tag.** Tags move; a digest names exactly one image. The release tags
+  `:1.2.0` point at the same digest, so the signature CI made at merge time also covers the
+  release. Promotion keeps signatures valid for free.
+- **Keyless means no secret.** There's no `COSIGN_PRIVATE_KEY` to store in GitHub, and none to
+  leak. Trust is in the **identity** in the certificate (this repo's workflow, this ref), and
+  Rekor makes every signature publicly auditable.
+
+**Verifying:** you state *who* you trust, not which key:
+
+```bash
+cosign verify ghcr.io/b-nimai/masternova-spring-api:main \
+  --certificate-identity-regexp '^https://github.com/b-nimai/Masternova-Spring/\.github/workflows/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+We tried the same mechanism on an image that's already keylessly signed (Google's distroless):
+
+```text
+$ cosign verify gcr.io/distroless/static-debian13:nonroot \
+    --certificate-oidc-issuer https://accounts.google.com \
+    --certificate-identity keyless@distroless.iam.gserviceaccount.com
+Verification for gcr.io/distroless/static-debian13:nonroot --
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The code-signing certificate was verified using trusted certificate authority certificates
+                                                                        → exit 0
+
+$ cosign verify … --certificate-identity someone-else@example.com
+Error: no matching signatures: none of the expected identities matched what was in the certificate,
+got subjects [keyless@distroless.iam.gserviceaccount.com]                → exit 1
+```
+
+**Where verification gets enforced:** a Kubernetes admission controller (Sigstore
+policy-controller or Kyverno, D4/D5) can refuse to run any image without a valid signature from
+this workflow. That closes the loop: only images our CI built, scanned and signed can run.
 

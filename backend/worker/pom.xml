@@ -110,6 +110,12 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- CycloneDX SBOM of every dependency, written into the jar at META-INF/sbom/application.cdx.json
+			     (version and configuration come from spring-boot-starter-parent). patterns/devops/04 §4 -->
+			<plugin>
+				<groupId>org.cyclonedx</groupId>
+				<artifactId>cyclonedx-maven-plugin</artifactId>
+			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
