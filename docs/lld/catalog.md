@@ -123,6 +123,11 @@ classDiagram
 yet. Entitlement (Phase 8) will need "does this lecture exist, is it a free preview, which course
 is it in?"; that's when `CatalogApi` appears, shaped by its first real caller.
 
+**List fetch plan.** A list page joins the category with a small "fetch plan" Specification
+(`fetchingCategory()`), not Spring Data's `project("category")`: in Spring Data JPA 4.1,
+`project()` applies its fetch graph to `all()` / `page()` / `stream()` but **not** to `scroll()`
+(found by `CatalogApiIT`).
+
 **Repositories:** Spring Data interfaces live **directly in `domain/`** (the identity module's
 choice too). They are interfaces; Spring generates the implementation, so `infrastructure/` has
 nothing to add.
@@ -147,10 +152,10 @@ sequenceDiagram
   participant PG as Postgres
   V->>C: GET /api/v1/courses?category=devops&level=BEGINNER&sort=NEWEST&cursor=…
   C->>S: browse(search, cursor, limit)
-  S->>S: decode cursor (400 INVALID_CURSOR if tampered or from another sort)
+  S->>S: decode cursor (400 if tampered or from another sort)
   S->>SP: published() AND inCategories(devops + children) AND atLevels(BEGINNER)
   SP-->>S: one composed Specification<Course>
-  S->>R: findBy(spec, q → sortBy(publishedAt DESC, id DESC).limit(20).project("category").scroll(position))
+  S->>R: findBy(spec AND fetchingCategory, q → sortBy(publishedAt DESC, id DESC).limit(20).scroll(position))
   R->>PG: SELECT … JOIN category … WHERE … AND (published_at < ? OR (published_at = ? AND id < ?)) ORDER BY … LIMIT 21
   PG-->>R: up to 21 rows
   R-->>S: Window (20 items, hasNext)
@@ -244,11 +249,12 @@ sequenceDiagram
 | Failure | Detected by | Behaviour | Recovery |
 |---|---|---|---|
 | stranger asks for a draft | `visibleTo(viewer)` | **404** (`NOT_FOUND`), never 403 | — |
-| cursor tampered, truncated, or from another sort | `CourseCursor.decode` | 400 `INVALID_CURSOR` | the client restarts from page 1 |
+| cursor tampered, truncated, or from another sort | `CourseCursor.decode` | 400 `VALIDATION_FAILED`, `errors[0] = {field: cursor, code: INVALID_CURSOR}` | the client restarts from page 1 |
+| `sort=RECENTLY_UPDATED` on the public list | `CourseSort.isPublic()` | 400, `errors[0].code = UNSUPPORTED_SORT` (no index serves it for published courses) | — |
 | a course is published between two page loads | keyset anchors on the last row's key | no row repeats or vanishes | — |
 | many courses share one sort key (same price) | `id` is always the last sort key | a total order; pages never overlap | — |
 | unknown category slug | — | an empty list, not a 404 (a stale bookmark shouldn't error) | — |
-| `limit` out of range | Bean Validation | 400 `VALIDATION_FAILED` | — |
+| `limit` / `minRating` out of range, unknown enum | Bean Validation / binding on `BrowseCoursesRequest` | 400 `VALIDATION_FAILED`, one entry per field | — |
 | double-clicked "Duplicate" | `Idempotency-Key` (platform) | the stored 201 is replayed; **one** copy | — |
 | duplicate fails half-way | one transaction | no course, no sections | retry with the same key |
 | learner calls an instructor endpoint | `@PreAuthorize` | 403 `FORBIDDEN` | — |
@@ -285,6 +291,8 @@ flushing). The duplicate is one read-write transaction: load, copy, `save`, comm
 | integration (Postgres) | `CatalogPersistenceIT` | the aggregate round-trips with its value objects and section/lecture order; the DB refuses a duplicate slug and a published course without `published_at`; the seeded category tree |
 | unit (no DB) | `ViewerTest` | visibility in memory: published for all; a draft only for its owner and admins |
 | ⭐ integration (Postgres) | `CourseSpecificationsIT` | every leaf selects exactly its rows on the real schema; `%` and `_` in search text are literals; and/or/not compose; **the SQL and in-memory visibility rules agree** for 5 kinds of viewer; a search composes only the facets it has |
+| unit | `CourseCursorTest` | typed round trip per sort; URL-safe; a cursor from another sort and every kind of garbage → 400, never a 500 |
+| ⭐ HTTP + security + Postgres | `CatalogApiIT` | **55 rows sharing one sort key page as 20/20/15 with no duplicates**; a course published between two page loads doesn't shift page 2 (the OFFSET bug); price ties broken by id; **a page is 1 statement**; query-string binding + validation; a draft is 404 for strangers and 200 for its owner/admins; drafts never in the public list; the instructor list is role-gated (401/403) and shows every state |
 | ⭐ integration (Postgres) | `CourseQueryCountIT` (Hibernate statistics) | the course page is **2 statements** whatever the curriculum size (11 / 13 without `@BatchSize`, measured); a lazy to-one in a list costs 1 + distinct targets; two bags can't be join-fetched |
 
 ## 11. Interview notes — 60-second recall

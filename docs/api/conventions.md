@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-02 · **Status:** §1 (2.2), §4 (2.6) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-02 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §4 (2.6) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -11,10 +11,10 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | # | Rule | Enforced from |
 |---|---|---|
 | 1 | Error envelope = RFC 9457 Problem Details | ✅ Phase 2.2 |
-| 2 | Cursor (keyset) pagination, no `total` | Phase 5 |
+| 2 | Cursor (keyset) pagination, no `total` | ✅ Phase 5 |
 | 3 | Optimistic concurrency on content writes | Phase 6 |
 | 4 | `Idempotency-Key` on unsafe, unversioned writes | ✅ Phase 2.6 |
-| 5 | Money in minor units + currency | Phase 5 |
+| 5 | Money in minor units + currency | ✅ Phase 5 |
 | 6 | Commands as request bodies (sealed union) | Phase 6 |
 | 7 | 64-bit integers as strings | Phase 7 |
 | 8 | Client-driven uploads return a plan, not a stream | Phase 7 |
@@ -87,6 +87,15 @@ sort changes.
 GET /api/v1/courses?sort=NEWEST&limit=20&cursor=<opaque>
 ```
 
+**Implemented in Phase 5** ([ADR-0009](../adr/0009-keyset-pagination-over-offset.md),
+`CourseCursor`, `CatalogApiIT`):
+
+- `limit` is 1–50 (default 20). Every sort ends in the id, so pages never overlap.
+- The cursor is base64url of `SORT|key|id`. It's bound to its sort: reusing it with another
+  `sort`, or sending anything we didn't issue, is 400 `VALIDATION_FAILED` with
+  `errors[0] = {"field": "cursor", "code": "INVALID_CURSOR"}`. The client restarts from page 1.
+- The envelope is `CursorPage<T>`; it moves to `platform` when a second module pages a list.
+
 ## 3. Optimistic concurrency
 
 Content writes take `expectedVersion` in the body, and responses carry the current `version`.
@@ -117,8 +126,9 @@ is 409. Keys are scoped **per caller**, never global.
 ## 5. Money
 
 Money is an integer in **minor units** plus a currency: `{ "priceMinor": 149900, "currency": "INR" }`.
-In Java it's a `record Money(long minor, Currency currency)`, never `double`.
-Formatting belongs to the client.
+In Java it's the kernel's `record Money(long amountMinor, Currency currency)`, never `double`,
+stored as an `@Embeddable` (two columns). Formatting belongs to the client. **Implemented in
+Phase 5** (`CourseSummary`, `CourseDetailResponse`).
 
 ## 6. Commands as request bodies
 

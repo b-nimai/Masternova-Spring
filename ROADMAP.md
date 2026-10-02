@@ -119,7 +119,7 @@ Phases are listed **in the order you do them**.
 | 5 | [D1 — Containerization deep-dive](#phase-d1--containerization-deep-dive) | 4 | 4 | 6 h | ~7 h | ✅ |
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
-| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 4 | 20 h | ~7.5 h | 🔨 |
+| 8 | [5 — Catalog](#phase-5--catalog) | 9 | 5 | 20 h | ~10 h | 🔨 |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 0 | 22 h | — | ☐ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **62** | **~326 h** | ~100 h | |
+| | **Total** | **137** | **63** | **~326 h** | ~102.5 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -299,7 +299,7 @@ versioned, scanned artifacts.
 | 5.2 | JPA model (`V6__catalog.sql`, no secondary indexes yet): `Course` aggregate root (rollups kept by `addLecture`, `publishedAt` stamped once + DB `CHECK`, micros-truncated times) → `Section` → `Lecture` (owning sides, `@OrderBy`, cascade + orphanRemoval), seeded two-level `Category`, instructor as id + name snapshot; one repository per aggregate. `CourseQueryCountIT` counts statements: course page **2** (entity graph `{category, sections}` + `@BatchSize` lectures; 11 / 13 without it), naive 4, lazy to-one in a list 1 + distinct, `MultipleBagFetchException` proven. `CatalogPersistenceIT`: round trip, constraints. Java note [12 JPA mapping & fetching](patterns/java/12-jpa-mapping-and-fetching.md) | associations, owning side, `@EntityGraph`, `@BatchSize`, bags, Hibernate statistics | — | Repository (one per aggregate) | 3 h | ✅ | 2026-10-02 |
 | 5.3 | *(done before 5.2: the entities need it)* `Money` moves to the **kernel** as a JPA `@Embeddable` record (compile-only, optional `jakarta.persistence-api`; the compact constructor also guards rows Hibernate loads); `LectureDuration` is one column, so an auto-applied `AttributeConverter` in `infrastructure/` (the entity never names it). Kernel catalog check now covers kernel classes. Catalog row 18 ✅ | `@Embeddable` records, `AttributeConverter` + `autoApply`, optional Maven deps | — | **Value Object**: catalog row 18 | 1 h | ✅ | 2026-10-02 |
 | 5.4 | Composable search filters: `CourseSpecifications` (9 leaves over the Criteria API: embedded-path `price.amountMinor`, FK id without a join, escaped case-insensitive `LIKE`), `CourseSearch` record composes the facets present with `allOf`; visibility as a sealed `Viewer` (`Anonymous \| Member \| Admin`) with SQL `visibleTo` + in-memory `canSee`. `CourseSpecificationsIT` runs every leaf on Postgres and proves the two visibility forms agree for 5 viewers. [Pattern note 08](patterns/docs/08-specification.md) + lab (full Evans form: `isSatisfiedBy` + `toWhere`, identities, nesting) | JPA Criteria API, Spring Data JPA 4 `Specification` (`allOf`, `unrestricted`), sealed types + record patterns | — | **Specification**: catalog row 8 | 2.5 h | ✅ | 2026-10-02 |
-| 5.5 | Keyset pagination with an opaque cursor | `Window` / `ScrollPosition` or hand-rolled | — | — | 2 h | ☐ | |
+| 5.5 | Keyset pagination with an opaque cursor + the read API: `GET /courses` (query string bound to a validated record), `GET /courses/{slug}` (public, optional viewer: identity's resolver learns `Optional<CurrentUser>`), `GET /categories`, `GET /instructor/courses` (`@PreAuthorize`). Spring Data `Window` + `ScrollPosition.keyset()`; our typed, sort-bound `CourseCursor`; every sort ends in the id. **Finding:** `project()` is ignored by `scroll()` (Spring Data JPA 4.1) → fetch-join Specification. `CatalogApiIT`: 55 tied rows → 20/20/15 no dupes; publish-mid-scroll doesn't shift pages; **1 statement per page**; 404-not-403 drafts. API conventions §2 + §5 ✅ | `Window`, `KeysetScrollPosition`, record query binding, built-in method validation, `HandlerMethodArgumentResolver` + `Optional` | — | — | 2 h | ✅ | 2026-10-02 |
 | 5.6 | Course duplication (deep copy, new ids, draft state) | copy constructors vs `clone()` | — | **Prototype** | 2 h | ☐ | |
 | 5.7 | Test data builders for every aggregate | fluent APIs | — | **Builder** | 1.5 h | ☐ | |
 | 5.8 | Angular: catalog page (filters ↔ URL query params, infinite scroll with cursor) + course detail page | — | router query params, `withComponentInputBinding`, `@defer`, `CdkVirtualScrollViewport` | — | 5 h | ☐ | |

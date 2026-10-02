@@ -224,6 +224,7 @@ Numbers from `CourseQueryCountIT` (Hibernate's `prepareStatementCount`) on real 
 | entity graph `{category, sections}`, **no** `@BatchSize` | **11** | 1 join query · still 1 per section for lectures |
 | `findById` + lazy traversal, **with** `@BatchSize(64)` | **4** | course · category · sections · **1 batched** lecture query |
 | ⭐ entity graph `{category, sections}` **+** `@BatchSize(64)` | **2** | 1 join query · 1 batched lecture query |
+| browse page of 20 (keyset `scroll` + fetch-join spec) | **1** | category joined; see "a fetch plan as a Specification" below |
 | join fetch sections **and** lectures | 💥 | `MultipleBagFetchException` (§4) |
 
 The 11 and 13 rows were measured by temporarily commenting out `@BatchSize` (2026-10-02); the test
@@ -254,6 +255,30 @@ private List<Lecture> lectures = new ArrayList<>();
 | `@BatchSize` | 1 per batch | the **second** level, and to-ones in lists | the batch only covers what's in the persistence context |
 | `@Fetch(SUBSELECT)` | 1 | a collection of everything loaded by the previous query | re-runs the original query as a subselect |
 | DTO projection (`select new …`, interface projection) | 1 | read-only lists | no entity, no dirty checking: perfect for list pages (Phase 5's browse uses entities + a fetch graph instead, see 5.5) |
+
+**A fetch plan as a Specification.** The browse list is a keyset `scroll()` over a composed
+Specification. The obvious way to fetch the category with it, `q.project("category")`, works for
+`all()` / `page()` / `stream()` (Spring Data adds a `jakarta.persistence.fetchgraph` hint) but
+**`scroll()` ignores it** in Spring Data JPA 4.1: it builds its query through a separate scroll
+delegate. `CatalogApiIT` found it as a `LazyInitializationException` in the controller. The fix
+is a Specification that restricts nothing and only joins:
+
+```java
+private static Specification<Course> fetchingCategory() {
+  return (root, query, cb) -> {
+    Class<?> resultType = query.getResultType();
+    if (resultType != Long.class && resultType != long.class) {   // a COUNT query can't fetch
+      root.fetch("category");
+    }
+    return cb.conjunction();                                        // no restriction
+  };
+}
+// courses.findBy(spec.and(fetchingCategory()), q -> q.sortBy(…).limit(20).scroll(position))
+```
+
+A to-**one** join doesn't multiply rows, so `LIMIT` stays correct (a to-many fetch with `LIMIT`
+makes Hibernate page **in memory**: warning HHH90003004). `CatalogApiIT.aPageOfCoursesIsOneStatement`
+pins it: 20 courses over 5 categories = **1** statement.
 
 **The lazy to-one in a list** (`aLazyToOneInAListIsOneStatementPerDistinctTarget`): 4 courses in 3
 categories, touch each course's category → **1 + 3** statements. One per *distinct* category, not
@@ -326,6 +351,8 @@ It matters in 5.5: the cursor is built from the in-memory value and compared aga
 | `Money` as `double` or two loose columns | rounding bugs; currency mix-ups | an `@Embeddable` value object |
 | comparing an `Instant` you saved with the one you loaded | flaky equality (nanos vs micros) | truncate to micros when stamping |
 | asserting on SQL by reading logs | regressions slip through | assert `Statistics.getPrepareStatementCount()` |
+| trusting `project(...)` to fetch on `scroll()` | `LazyInitializationException` after the transaction | a fetch-join Specification (or `@EntityGraph` on a derived query) |
+| fetch-joining a **collection** with `LIMIT` | Hibernate pages in memory (HHH90003004) | fetch to-ones only in paged queries; collections by `@BatchSize` |
 
 ## 9. Interview Q&A ⭐⭐⭐
 
