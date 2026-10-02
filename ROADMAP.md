@@ -548,4 +548,5 @@ Each line is a sentence you can say *and* a file or test you can show.
 | `ProblemTypes` moved to the platform's public API | `ModularityTests` rejected identity using it from the internal `platform.web` package. |
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |
 | 5.3 done before 5.2 | the entities embed `Money` and `LectureDuration`, so the value objects came first |
+| Phase 5 review (`code-review` on the whole branch) found 2 bugs, both fixed with a regression test: the search box swallowed a repeated search after "Clear filters" (`distinctUntilChanged` → compare with the URL), and price sorts mixed currencies (→ one catalog currency, INR: `Course.CATALOG_CURRENCY` + `V9`) | review findings |
 | `V7` is a platform fix (idempotency `Location`), catalog indexes are `V8` | 5.6's duplicate IT found that a replayed 201 had no `Location`; a migration can't wait for 5.9 |

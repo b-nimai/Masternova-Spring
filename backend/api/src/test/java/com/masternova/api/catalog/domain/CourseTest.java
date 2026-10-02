@@ -4,6 +4,7 @@ import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.masternova.kernel.money.Money;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -57,6 +58,25 @@ class CourseTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("language");
     assertThatThrownBy(() -> draft("k8s-zero", null)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  /** Price sorts compare minor units in SQL: they only mean something within one currency. */
+  @Test
+  void everyCatalogPriceIsInTheCatalogCurrency() {
+    assertThatThrownBy(
+            () ->
+                Course.draft(
+                    "usd-course",
+                    "Priced in dollars",
+                    "…",
+                    CourseLevel.BEGINNER,
+                    "en",
+                    Money.of(1999, "USD"),
+                    new Category(),
+                    ASHA,
+                    NOW))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("INR");
   }
 
   @Test

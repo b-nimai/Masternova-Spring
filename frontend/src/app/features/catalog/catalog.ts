@@ -152,7 +152,10 @@ export class Catalog {
       .pipe(
         map((text) => text.trim()),
         debounceTime(300),
-        distinctUntilChanged(),
+        // ⭐ compare with the URL, not with the last value typed: distinctUntilChanged() would
+        //    remember "kubernetes" across a "Clear filters" (which resets the box without an
+        //    event), and typing "kubernetes" again would then be swallowed (found in review)
+        filter((text) => text !== (this.q() ?? '').trim()),
         takeUntilDestroyed(),
       )
       .subscribe((text) => this.setParams({ q: text || null }));

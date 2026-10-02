@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Currency;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -50,6 +51,14 @@ public class Course {
   private static final java.util.regex.Pattern LANGUAGE =
       java.util.regex.Pattern.compile("[a-z]{2}");
   private static final BigDecimal MAX_RATING = BigDecimal.valueOf(5);
+
+  /**
+   * ⭐ The storefront prices every course in ONE currency. The price sorts and the free/paid filter
+   * compare {@code price_minor} in SQL, and paise and cents aren't comparable (found in review: a
+   * $19.99 course sorted below a ₹499 one). Converting needs exchange rates, which isn't the
+   * catalog's job. {@code Money} itself stays multi-currency; the DB enforces this too (V9).
+   */
+  public static final Currency CATALOG_CURRENCY = Currency.getInstance("INR");
 
   @Id private UUID id;
 
@@ -185,7 +194,7 @@ public class Course {
     this.description = Objects.requireNonNull(description, "description").strip();
     this.level = Objects.requireNonNull(level, "level");
     this.language = requireLanguage(language);
-    this.price = Objects.requireNonNull(price, "price");
+    this.price = requireCatalogCurrency(price);
     this.category = Objects.requireNonNull(category, "category");
     this.instructorId = instructor.id();
     this.instructorName = instructor.name();
@@ -298,6 +307,15 @@ public class Course {
       throw new IllegalArgumentException("a slug is lower-case words joined by '-': " + slug);
     }
     return slug;
+  }
+
+  private static Money requireCatalogCurrency(Money price) {
+    Objects.requireNonNull(price, "price");
+    if (!price.currency().equals(CATALOG_CURRENCY)) {
+      throw new IllegalArgumentException(
+          "catalog prices are in " + CATALOG_CURRENCY + ", not " + price.currency());
+    }
+    return price;
   }
 
   private static String requireLanguage(String language) {

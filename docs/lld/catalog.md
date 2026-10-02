@@ -57,7 +57,7 @@ anemic, and it would let a caller add a lecture without updating the course's ro
 
 | Type | Kind | Invariant |
 |---|---|---|
-| `Course` | entity, aggregate root | `slug` is unique and never regenerated on rename (a changed URL is a broken link). `publishedAt` is set **iff** the status is `PUBLISHED` or later, and never moves (DB `CHECK` too). `lectureCount` / `totalDuration` always equal the sum over its lectures (recomputed by the aggregate, never set from outside). |
+| `Course` | entity, aggregate root | every price is in the **catalog currency, INR** (`Course.CATALOG_CURRENCY` + DB `CHECK`, V9): the price sorts compare minor units in SQL, which only means something within one currency. `slug` is unique and never regenerated on rename (a changed URL is a broken link). `publishedAt` is set **iff** the status is `PUBLISHED` or later, and never moves (DB `CHECK` too). `lectureCount` / `totalDuration` always equal the sum over its lectures (recomputed by the aggregate, never set from outside). |
 | `Section` | entity, inside `Course` | `(course, position)` unique (DB constraint). Positions are 0..n-1 in list order. |
 | `Lecture` | entity, inside `Section` | `(section, position)` unique. `assetId` points at media (Phase 7) and is **shared** by a duplicate. |
 | `Category` | entity, reference data | two levels only: a root has no parent; a child's parent is a root. Seeded by Flyway. |
@@ -238,6 +238,7 @@ sequenceDiagram
 | Querydsl / jOOQ for the filters | an extra code generator for what the JPA Criteria API + Spring Data `Specification` already do. jOOQ stays the answer if catalog queries ever outgrow JPA. |
 | `JOIN FETCH` sections **and** lectures | Hibernate refuses two `List` ("bag") fetches in one query (`MultipleBagFetchException`); switching to `Set` "works" but returns sections × lectures rows (a cartesian product). Entity graph for one level + batch fetching for the next = 2 statements, no product. |
 | `hibernate.default_batch_fetch_size` globally | hides every N+1 instead of fixing the ones that matter, and makes statement counts hard to reason about in tests. `@BatchSize` where it's needed. |
+| a multi-currency catalog sorted by `price_minor` | paise and cents aren't comparable: the review found a $19.99 course sorting below a ₹499 one. One catalog currency (V9); conversion for display is the client's job, and a real multi-currency store would need prices per currency (Phase 9 decides). |
 | `Money` as two plain columns on `Course` | every price comparison and display re-invents rounding and currency checks. |
 | `Money` with `double` or `BigDecimal` rupees | `double` can't represent 0.10; payment gateways take integer paise anyway (API conventions §5). |
 | `Money` duplicated per module (one in catalog, one in commerce) | two definitions of money drift. It lives in the **kernel** with a compile-only `jakarta.persistence-api` dependency: annotations are inert metadata, and the kernel stays free of Spring and Hibernate. |

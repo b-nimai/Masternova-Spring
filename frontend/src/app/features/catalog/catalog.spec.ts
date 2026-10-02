@@ -164,6 +164,42 @@ describe('Catalog', () => {
     }
   });
 
+  it('searches again for the same text after the filters were cleared', async () => {
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+    const fixture = await open();
+    browse().flush(page(1, 0, null));
+    const input = query<HTMLInputElement>(fixture, '[data-testid="search"]');
+
+    vi.useFakeTimers();
+    try {
+      const typeAndWait = (text: string) => {
+        input.value = text;
+        input.dispatchEvent(new Event('input'));
+        vi.advanceTimersByTime(300);
+      };
+      typeAndWait('kube'); // 1. the user searches…
+      fixture.componentRef.setInput('q', 'kube'); //    …and the router applies ?q=kube
+      TestBed.tick();
+      browse().flush(page(1, 0, null));
+
+      query<HTMLButtonElement>(fixture, '[data-testid="clear"]').click(); // 2. clears
+      fixture.componentRef.setInput('q', undefined);
+      TestBed.tick();
+      browse().flush(page(1, 0, null));
+      navigate.mockClear();
+
+      typeAndWait('kube'); // 3. and searches for the SAME text again
+
+      // ⭐ a distinctUntilChanged() would remember "kube" and swallow this one
+      expect(navigate).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({ queryParams: { q: 'kube' } }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('shows an error that can be retried', async () => {
     const fixture = await open();
     browse().flush({ status: 500 }, { status: 500, statusText: 'Server Error' });
