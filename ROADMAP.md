@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 🔨 on `phase-5/catalog`.
+**Created:** 2026-10-02 · **Last updated:** 2026-10-02 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 next on `phase-6/catalog-authoring`.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
