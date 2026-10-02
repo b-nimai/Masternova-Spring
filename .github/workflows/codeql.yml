@@ -26,7 +26,7 @@ jobs:
         # build-mode none: CodeQL reads the sources directly, no Maven/pnpm build needed
         language: [java-kotlin, javascript-typescript]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
