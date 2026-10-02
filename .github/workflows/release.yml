@@ -132,7 +132,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.name }}
           sbom: true
           provenance: mode=max
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.2 # this action publishes no moving major tag
         if: steps.existing.outputs.found == 'false'
       - name: Sign
         if: steps.existing.outputs.found == 'false'

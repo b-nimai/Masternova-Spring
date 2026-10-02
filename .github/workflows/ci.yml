@@ -95,6 +95,10 @@ jobs:
       # a typo in a workflow otherwise surfaces only when that path runs (often on main, or at release)
       - name: actionlint
         run: docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest -color
+      - name: Every action version exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/check-action-refs.sh
 
   patterns-lab:
     needs: changes
@@ -212,7 +216,7 @@ jobs:
           # attestations stored next to the image: an SBOM of everything in it, and how it was built
           sbom: true
           provenance: mode=max
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.2 # this action publishes no moving major tag
         if: env.PUBLISH == 'true'
       # ⭐ Keyless: GitHub's OIDC token proves "this workflow, this repo, this ref" to Sigstore,
       #    which issues a 10-minute certificate; the signature lands in the public Rekor log.

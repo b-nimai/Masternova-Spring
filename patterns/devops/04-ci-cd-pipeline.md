@@ -401,6 +401,12 @@ Run it locally:
 docker run --rm -v "$PWD":/repo -w /repo rhysd/actionlint:latest
 ```
 
+**actionlint can't see one thing: whether `owner/action@vX` exists.** Our first PR run failed in
+3 s on `sigstore/cosign-installer@v4`; that action publishes exact versions only (`v4.1.2`). So
+the same job also runs `.github/scripts/check-action-refs.sh`, which resolves every `uses:`
+against the GitHub API. The failure also proved the aggregate gate: `ci-ok` went red because
+`images` failed.
+
 ### Dependency policy: Dependabot, no auto-merge
 
 Dependabot opens grouped weekly PRs: Maven, npm, Docker base images, and GitHub Actions. Many teams
@@ -528,6 +534,7 @@ It feeds `ci-ok`, so a broken journey blocks the merge.
 | lowering the coverage floor to pass | raise it as coverage grows; never lower | 5 |
 | listing every job as a required check | one `ci-ok` aggregate with `if: always()` | 6 |
 | an aggregate job without `if: always()` | it gets *skipped* on failure, and a skipped required check passes | 6 |
+| assuming every action has a moving major tag (`@v4`) | check that refs resolve. actionlint doesn't: our first PR run failed on `sigstore/cosign-installer@v4`, which only publishes exact versions. The `workflows` job now runs `.github/scripts/check-action-refs.sh`. | 5 |
 | e2e with retries "for stability" | fix the flake; keep traces | 7 |
 | e2e for every rule | a few journeys; rules belong in unit tests and ITs | 7 |
 
