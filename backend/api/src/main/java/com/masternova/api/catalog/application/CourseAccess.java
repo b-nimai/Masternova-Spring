@@ -3,6 +3,7 @@ package com.masternova.api.catalog.application;
 import com.masternova.api.catalog.domain.Course;
 import com.masternova.api.catalog.domain.CourseRepository;
 import com.masternova.api.catalog.domain.Viewer;
+import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.NotFoundException;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,21 @@ class CourseAccess {
             .filter(c -> mayAuthor(actor, c))
             .orElseThrow(() -> new NotFoundException("Course", courseId));
     course.sections().forEach(section -> section.lectures().size()); // one batched query
+    return course;
+  }
+
+  /**
+   * ⭐ For a CONTENT write (details, pricing, curriculum): loaded, editable (not ARCHIVED), and at
+   * the version the client last saw — otherwise 409 {@code VERSION_CONFLICT} with both versions
+   * (ADR-0010). Two requests that pass this check together are still separated by {@code @Version}
+   * at flush.
+   */
+  Course forEditing(UUID courseId, Viewer actor, long expectedVersion) {
+    Course course = forAuthoring(courseId, actor);
+    course.requireEditable();
+    if (course.version() != expectedVersion) {
+      throw ConflictException.versionConflict(expectedVersion, course.version());
+    }
     return course;
   }
 

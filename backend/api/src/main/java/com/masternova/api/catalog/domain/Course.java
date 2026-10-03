@@ -309,16 +309,41 @@ public class Course {
   }
 
   /** Content writes go through this: an archived course is read-only. */
-  void requireEditable() {
+  public void requireEditable() {
     if (!state().acceptsEdits()) {
       throw new ConflictException("COURSE_ARCHIVED", "An archived course can't be changed.");
     }
+  }
+
+  // ------------------------------------------------------------------ details
+
+  /**
+   * The wizard's "details" step. The slug is NOT regenerated from a new title: a changed URL is a
+   * broken link (catalog.md §3).
+   */
+  public void changeDetails(
+      String newTitle,
+      String newSubtitle,
+      String newDescription,
+      CourseLevel newLevel,
+      String newLanguage,
+      Category newCategory,
+      Instant now) {
+    requireEditable();
+    title = Lecture.requireTitle(newTitle);
+    changeSubtitle(newSubtitle);
+    description = Objects.requireNonNull(newDescription, "description").strip();
+    level = Objects.requireNonNull(newLevel, "level");
+    language = requireLanguage(newLanguage);
+    category = Objects.requireNonNull(newCategory, "category");
+    touch(now);
   }
 
   // ------------------------------------------------------------------ pricing
 
   /** Confirms the price (free or paid): the decision the publish gate waits for. */
   public void confirmPrice(Money newPrice, Instant now) {
+    requireEditable();
     price = requireCatalogCurrency(newPrice);
     priceSetAt = micros(now);
     touch(now);

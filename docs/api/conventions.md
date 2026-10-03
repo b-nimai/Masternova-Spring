@@ -12,7 +12,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 |---|---|---|
 | 1 | Error envelope = RFC 9457 Problem Details | ✅ Phase 2.2 |
 | 2 | Cursor (keyset) pagination, no `total` | ✅ Phase 5 |
-| 3 | Optimistic concurrency on content writes | Phase 6 |
+| 3 | Optimistic concurrency on content writes | ✅ Phase 6 |
 | 4 | `Idempotency-Key` on unsafe, unversioned writes | ✅ Phase 2.6 |
 | 5 | Money in minor units + currency | ✅ Phase 5 |
 | 6 | Commands as request bodies (sealed union) | Phase 6 |
@@ -102,6 +102,12 @@ Content writes take `expectedVersion` in the body, and responses carry the curre
 The JPA entity uses `@Version`. A mismatch (`ObjectOptimisticLockingFailureException`) is 409
 with `expectedVersion` / `currentVersion` members. Lifecycle transitions take no version:
 they re-read the aggregate and re-run their guards.
+
+**Implemented in Phase 6** ([ADR-0010](../adr/0010-optimistic-concurrency-with-version.md)):
+`CourseAccess.forEditing` pre-checks `expectedVersion` (409 with both versions); `@Version` catches
+two requests that read the same version at once (409 without versions). The course's version
+covers the whole aggregate: every mutation through `Course` touches the root. Proven by
+`CourseAuthoringIT` (10 concurrent saves of one version → exactly 1 winner).
 
 ## 4. Idempotency
 

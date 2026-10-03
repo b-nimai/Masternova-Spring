@@ -120,7 +120,7 @@ Phases are listed **in the order you do them**.
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
-| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 3 | 22 h | ~5 h | 🔨 |
+| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 4 | 22 h | ~7 h | 🔨 |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **70** | **~326 h** | ~118 h | |
+| | **Total** | **137** | **71** | **~326 h** | ~120 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -319,7 +319,7 @@ concurrent edits.
 | 6.3 | *(done before 6.2: the state machine's gated edges need it)* Publish gate: `PublishGate` = AND of 6 coded `PublishRequirement`s (description, price decided, sections, no empty section, ≥ 3 lectures, a preview) that **collects** failures: `evaluate` → checklist, `problems` → 422. `course.price_set_at` (`V10`) tells free from undecided; `Course.touch()` makes the root's version cover the aggregate. `PublishGateTest`: every code must have a failing example. Pattern note 08 §3b | composition of predicates, `Predicate<T>`, parameterised tests | — | **Specification** (explainable) | 2 h | ✅ | 2026-10-03 |
 | 6.4 | Curriculum edits as commands (add/move/rename/delete section/lecture) with apply + invert | sealed records, Jackson `@JsonTypeInfo` polymorphism | — | **Command** | 4 h | ☐ | |
 | 6.5 | Undo/redo: snapshot stack vs inverse commands; build both, keep one, record why | deep copies, `Deque` | — | **Memento** | 2.5 h | ☐ | |
-| 6.6 | `@Version` optimistic locking → 409 Problem Detail with versions | JPA `@Version`, `OptimisticLockException` | — | — | 1.5 h | ☐ | |
+| 6.6 | *(done before 6.4: every write needs it)* The wizard's versioned content writes: `POST /instructor/courses` (`Idempotency-Key`; instructor name via identity's new public `IdentityApi`), `GET …/{id}`, `PUT …/{id}/details`, `PUT …/{id}/pricing` (all with `expectedVersion`). `CourseAccess.forEditing` pre-check → 409 `{expectedVersion, currentVersion}`; `@Version` catches the same-instant race; `Course.touch` makes the root's version cover the aggregate; `Slugs`. `CourseAuthoringIT`: **10 concurrent saves → exactly 1 winner**. API conventions §3 ✅. Java note [13 optimistic locking](patterns/java/13-optimistic-locking-and-lost-updates.md) | JPA `@Version`, `OptimisticLockException`, `ObjectOptimisticLockingFailureException`, latch-driven concurrency tests | — | — | 1.5 h | ✅ | 2026-10-03 |
 | 6.7 | Angular: instructor wizard (stepper, typed forms, debounced autosave) | — | `MatStepper`, `FormGroup<T>`, `debounceTime` + `switchMap` | — | 4 h | ☐ | |
 | 6.8 | Angular: curriculum editor (drag-drop, undo/redo, 409 conflict dialog) | — | CDK `DragDrop`, `MatDialog`, keyboard shortcuts | — | 3.5 h | ☐ | |
 
@@ -547,6 +547,7 @@ Each line is a sentence you can say *and* a file or test you can show.
 | Security config lives in **identity**, not platform (3.4); public routes come from each module's `PublicEndpoints` bean | identity owns authentication; platform must boot standalone (`PlatformModuleIT`) without a JWT decoder, and a central list of public URLs would couple identity to every module. |
 | `ProblemTypes` moved to the platform's public API | `ModularityTests` rejected identity using it from the internal `platform.web` package. |
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |
+| Phase 6 order: 6.1 → 6.3 → 6.2 → 6.6 → 6.4 → 6.5 → 6.7 → 6.8 | the state machine's gated edges need the gate (6.3); every content write and command needs the versioned access (6.6) |
 | 5.3 done before 5.2 | the entities embed `Money` and `LectureDuration`, so the value objects came first |
 | Phase 5 review (`code-review` on the whole branch) found 2 bugs, both fixed with a regression test: the search box swallowed a repeated search after "Clear filters" (`distinctUntilChanged` → compare with the URL), and price sorts mixed currencies (→ one catalog currency, INR: `Course.CATALOG_CURRENCY` + `V9`) | review findings |
 | `V7` is a platform fix (idempotency `Location`), catalog indexes are `V8` | 5.6's duplicate IT found that a replayed 201 had no `Location`; a migration can't wait for 5.9 |

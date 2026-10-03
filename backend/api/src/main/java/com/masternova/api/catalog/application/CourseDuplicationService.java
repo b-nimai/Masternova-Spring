@@ -2,11 +2,11 @@ package com.masternova.api.catalog.application;
 
 import com.masternova.api.catalog.domain.Course;
 import com.masternova.api.catalog.domain.CourseRepository;
+import com.masternova.api.catalog.domain.Slugs;
 import com.masternova.api.catalog.domain.Viewer;
 import com.masternova.api.platform.NotFoundException;
 import java.time.Clock;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,8 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class CourseDuplicationService {
-
-  private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
   private final CourseRepository courses;
   private final CourseAccess access;
@@ -47,24 +45,9 @@ public class CourseDuplicationService {
   public Course duplicate(UUID courseId, Viewer actor) {
     Course source = access.forAuthoring(courseId, actor);
 
-    Course copy = source.duplicateAsDraft(copySlug(source.slug()), clock.instant());
+    Course copy = source.duplicateAsDraft(Slugs.forCopyOf(source.slug()), clock.instant());
     // ⭐ one save: cascade = ALL inserts the course, its sections and their lectures, all in this
     //    transaction — a half-copied course is never visible
     return courses.save(copy);
-  }
-
-  /**
-   * {@code kubernetes-basics} → {@code kubernetes-basics-copy-x7k2q9}. Six random base-36
-   * characters are 2 billion possibilities per course; the slug's UNIQUE constraint still guards
-   * the rest.
-   */
-  private static String copySlug(String sourceSlug) {
-    StringBuilder suffix = new StringBuilder("-copy-");
-    for (int i = 0; i < 6; i++) {
-      suffix.append(ALPHABET.charAt(ThreadLocalRandom.current().nextInt(ALPHABET.length())));
-    }
-    String base = sourceSlug.replaceAll("(-copy-[a-z0-9]{6})+$", ""); // no "-copy-…-copy-…"
-    int room = 140 - suffix.length();
-    return (base.length() > room ? base.substring(0, room).replaceAll("-+$", "") : base) + suffix;
   }
 }
