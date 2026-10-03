@@ -21,6 +21,7 @@ the lines worth remembering.
 | 10 | Request lifecycle & JPA: filter/interceptor/advice order, validation, persistence context, entity states, lazy loading, N+1 measured, Spring Data | [10-request-lifecycle-and-jpa.md](10-request-lifecycle-and-jpa.md) | `backend/api/.../learning/web/` + `learning/jpa/` (Testcontainers) | 1.10 | ✅ |
 | 11 | HMAC & signed tokens: hash vs HMAC vs encryption vs signature, length extension, constant-time compare, `Mac` thread safety, stateless vs stored tokens | [11-hmac-and-signed-tokens.md](11-hmac-and-signed-tokens.md) | `backend/kernel/.../notification/UnsubscribeTokens` (+ test) | 4.6 | ✅ |
 | 12 | JPA mapping & fetching: aggregates → mappings, owning side, cascade/orphans, `@Embeddable` records vs `AttributeConverter`, bags & `MultipleBagFetchException`, N+1 **13 → 2** measured | [12-jpa-mapping-and-fetching.md](12-jpa-mapping-and-fetching.md) | `backend/api/.../catalog/domain/` + `CourseQueryCountIT` (Testcontainers) | 5.2–5.3 | ✅ |
+| 13 | Optimistic locking: the lost update, `@Version` mechanics, `expectedVersion` pre-check vs flush-time check, the root's version covering the aggregate, optimistic vs pessimistic, testing concurrency (10 → 1 winner) | [13-optimistic-locking-and-lost-updates.md](13-optimistic-locking-and-lost-updates.md) | `catalog/domain/Course` + `CourseAccess` + `CourseAuthoringIT` | 6.6 | ✅ |
 
 **Run all study code:** `cd patterns/lab && ./mvnw test`
 **Experiment:** `./mvnw -q compile && jshell --class-path target/classes` (see each note's jshell section)

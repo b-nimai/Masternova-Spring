@@ -11,6 +11,8 @@ const DETAIL: CourseDetailResponse = {
   ...K8S,
   description: 'Pods, deployments, services.',
   enrollmentCount: 42,
+  priceSet: true,
+  version: 2,
   sections: [
     {
       id: 's1',

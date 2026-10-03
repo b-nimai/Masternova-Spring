@@ -82,6 +82,7 @@ class CatalogPersistenceIT {
     assertThat(loaded.lectureCount()).isEqualTo(3);
     assertThat(loaded.createdAt()).isEqualTo(Instant.parse("2026-10-02T10:15:30.123456Z"));
     assertThat(loaded.version()).isZero();
+    assertThat(loaded.priceSetAt()).contains(Instant.parse("2026-10-02T10:15:30.123456Z"));
     assertThat(loaded.sections()).extracting(Section::title).containsExactly("Intro", "Core");
     assertThat(loaded.sections().get(1).lectures())
         .extracting(Lecture::title)

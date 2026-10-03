@@ -1,0 +1,89 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  .totals {
+    margin-left: auto;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section {
+  padding: 12px;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 12px;
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .section-title {
+    flex: 1;
+  }
+}
+
+.lectures {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  min-height: 40px; // an empty section is still a drop target
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    background: var(--mat-sys-surface);
+  }
+
+  .handle {
+    cursor: grab;
+  }
+
+  .lecture-title {
+    flex: 1;
+  }
+
+  .time {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .empty {
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.cdk-drag-preview {
+  box-shadow: var(--mat-sys-level3);
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.3;
+}
+
+.add-lecture,
+.add-section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+
+  .narrow {
+    width: 110px;
+  }
+}
+
+.add-section {
+  margin-top: 16px;
+}

@@ -1,0 +1,155 @@
+@let course = store.course();
+<div class="wizard">
+  <header class="top">
+    <a mat-button routerLink="/instructor"><mat-icon>arrow_back</mat-icon> My courses</a>
+    @if (course) {
+      <h1>{{ course.title }}</h1>
+      <span class="status" data-testid="status">{{ course.status }}</span>
+    }
+    <span class="save-state" data-testid="save-state" aria-live="polite">
+      @switch (store.saveState()) {
+        @case ('saving') {
+          Saving…
+        }
+        @case ('saved') {
+          All changes saved
+        }
+        @case ('conflict') {
+          Changed elsewhere
+        }
+        @case ('error') {
+          Couldn't save
+        }
+      }
+    </span>
+  </header>
+
+  @if (!course) {
+    <mat-spinner diameter="36" />
+  } @else {
+    <mat-stepper #stepper (selectionChange)="onStep($event)">
+      <mat-step label="Details">
+        <form [formGroup]="details" class="details">
+          <mat-form-field appearance="outline">
+            <mat-label>Title</mat-label>
+            <input matInput formControlName="title" data-testid="title" />
+            @if (details.controls.title.hasError('required')) {
+              <mat-error>A title is required.</mat-error>
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Subtitle</mat-label>
+            <input matInput formControlName="subtitle" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Description</mat-label>
+            <textarea
+              matInput
+              rows="6"
+              formControlName="description"
+              data-testid="description"
+            ></textarea>
+            <mat-hint
+              >{{ details.controls.description.value.length }} characters · at least 50 to
+              publish</mat-hint
+            >
+          </mat-form-field>
+          <div class="row">
+            <mat-form-field appearance="outline">
+              <mat-label>Category</mat-label>
+              <mat-select formControlName="categorySlug">
+                @for (root of categories(); track root.slug) {
+                  <mat-optgroup [label]="root.name">
+                    @for (child of root.children; track child.slug) {
+                      <mat-option [value]="child.slug">{{ child.name }}</mat-option>
+                    }
+                  </mat-optgroup>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Level</mat-label>
+              <mat-select formControlName="level">
+                @for (l of levels; track l) {
+                  <mat-option [value]="l">{{ levelLabels[l] }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Language</mat-label>
+              <input matInput formControlName="language" maxlength="2" />
+            </mat-form-field>
+          </div>
+        </form>
+        <button mat-flat-button matStepperNext>Next: pricing</button>
+      </mat-step>
+
+      <mat-step label="Pricing">
+        <form [formGroup]="pricing" class="pricing" (ngSubmit)="confirmPrice()">
+          <mat-button-toggle-group formControlName="free" aria-label="Free or paid">
+            <mat-button-toggle [value]="true" data-testid="free">Free</mat-button-toggle>
+            <mat-button-toggle [value]="false" data-testid="paid">Paid</mat-button-toggle>
+          </mat-button-toggle-group>
+          @if (!pricing.controls.free.value) {
+            <mat-form-field appearance="outline">
+              <mat-label>Price (₹)</mat-label>
+              <input matInput type="number" min="0" formControlName="rupees" data-testid="rupees" />
+            </mat-form-field>
+          }
+          <button mat-flat-button type="submit" data-testid="confirm-price">Confirm price</button>
+          <p class="current" data-testid="price-state">
+            @if (course.priceSet) {
+              Confirmed: {{ course.priceMinor | money: course.currency }}
+            } @else {
+              Not confirmed yet — free is a price too.
+            }
+          </p>
+        </form>
+        <button mat-button matStepperPrevious>Back</button>
+        <button mat-flat-button matStepperNext>Next: curriculum</button>
+      </mat-step>
+
+      <mat-step label="Curriculum">
+        <!-- ⭐ Ctrl+Z only on this step: elsewhere it would undo curriculum edits unseen (review) -->
+        <app-curriculum-editor [shortcutsEnabled]="stepper.selectedIndex === 2" />
+        <button mat-button matStepperPrevious>Back</button>
+        <button mat-flat-button matStepperNext>Next: review</button>
+      </mat-step>
+
+      <mat-step label="Review & submit">
+        @if (store.readiness(); as readiness) {
+          <ul class="checklist" data-testid="checklist">
+            @for (r of readiness.requirements; track r.code) {
+              <li [class.ok]="r.satisfied" [attr.data-testid]="'req-' + r.code">
+                <mat-icon>{{ r.satisfied ? 'check_circle' : 'radio_button_unchecked' }}</mat-icon>
+                {{ r.message }}
+              </li>
+            }
+          </ul>
+          @switch (course.status) {
+            @case ('DRAFT') {
+              <button
+                mat-flat-button
+                data-testid="submit"
+                [disabled]="!readiness.ready"
+                (click)="submit()"
+              >
+                Submit for review
+              </button>
+            }
+            @case ('IN_REVIEW') {
+              <p>Waiting for a reviewer.</p>
+              <button mat-stroked-button data-testid="withdraw" (click)="withdraw()">
+                Withdraw
+              </button>
+            }
+            @default {
+              <p>This course is {{ course.status.toLowerCase() }}.</p>
+            }
+          }
+        }
+        <button mat-button matStepperPrevious>Back</button>
+      </mat-step>
+    </mat-stepper>
+  }
+</div>

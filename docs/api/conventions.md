@@ -12,10 +12,10 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 |---|---|---|
 | 1 | Error envelope = RFC 9457 Problem Details | ✅ Phase 2.2 |
 | 2 | Cursor (keyset) pagination, no `total` | ✅ Phase 5 |
-| 3 | Optimistic concurrency on content writes | Phase 6 |
+| 3 | Optimistic concurrency on content writes | ✅ Phase 6 |
 | 4 | `Idempotency-Key` on unsafe, unversioned writes | ✅ Phase 2.6 |
 | 5 | Money in minor units + currency | ✅ Phase 5 |
-| 6 | Commands as request bodies (sealed union) | Phase 6 |
+| 6 | Commands as request bodies (sealed union) | ✅ Phase 6 |
 | 7 | 64-bit integers as strings | Phase 7 |
 | 8 | Client-driven uploads return a plan, not a stream | Phase 7 |
 | 9 | Long-running work streams over SSE | Phase 7 |
@@ -103,9 +103,15 @@ The JPA entity uses `@Version`. A mismatch (`ObjectOptimisticLockingFailureExcep
 with `expectedVersion` / `currentVersion` members. Lifecycle transitions take no version:
 they re-read the aggregate and re-run their guards.
 
+**Implemented in Phase 6** ([ADR-0010](../adr/0010-optimistic-concurrency-with-version.md)):
+`CourseAccess.forEditing` pre-checks `expectedVersion` (409 with both versions); `@Version` catches
+two requests that read the same version at once (409 without versions). The course's version
+covers the whole aggregate: every mutation through `Course` touches the root. Proven by
+`CourseAuthoringIT` (10 concurrent saves of one version → exactly 1 winner).
+
 ## 4. Idempotency
 
-Unsafe writes with no version to guard them (duplicate course, undo, complete upload, checkout)
+Unsafe writes with no version to guard them (create course, duplicate course, complete upload, checkout)
 **require** an `Idempotency-Key` header: annotate the controller method with
 `@IdempotencyKeyRequired`. **Implemented in Phase 2.6** (`IdempotencyFilter`, `IdempotencyIT`):
 
@@ -118,6 +124,9 @@ Unsafe writes with no version to guard them (duplicate course, undo, complete up
 | the first request ended in a 5xx | the key is released, so the retry really runs |
 | `@IdempotencyKeyRequired` endpoint without the header | 400 `VALIDATION_FAILED` (`errors[0].field = "Idempotency-Key"`) |
 | empty key or key longer than 200 chars | 400 `IDEMPOTENCY_KEY_INVALID` |
+
+Undo/redo are **versioned** instead (they carry `expectedVersion`, Phase 6.5): a double-tapped
+undo undoes once and the second press gets 409 `VERSION_CONFLICT`.
 
 Any POST/PUT/PATCH/DELETE that *carries* the header is handled this way, annotated or not. A repeat with the same key returns the stored
 response. The same key with a different body is 422. A request with the key still in flight
@@ -136,6 +145,13 @@ Curriculum edits are `POST …/curriculum` with a discriminated union on `kind`.
 a `sealed interface CurriculumCommand` with record implementations, and Jackson polymorphism
 uses `@JsonTypeInfo(property = "kind")`. Adding an edit type adds a record, not a route, and
 each command is storable and invertible, which is what makes undo possible.
+
+**Implemented in Phase 6** (`CurriculumCommand`, `POST /api/v1/instructor/courses/{id}/curriculum`):
+`{"expectedVersion": 7, "command": {"kind": "ADD_LECTURE", "sectionId": "…", "title": "…",
+"lectureKind": "ARTICLE"}}`. Kinds: `ADD_SECTION`, `RENAME_SECTION`, `REORDER_SECTIONS` (the whole
+order), `REMOVE_SECTION`, `ADD_LECTURE`, `UPDATE_LECTURE`, `MOVE_LECTURE`, `REMOVE_LECTURE`.
+`RESTORE_*` are server-only (400 `NOT_A_CLIENT_COMMAND`). Omitted ids are generated. A field is
+never named `kind` (that's the discriminator).
 
 ## 7. 64-bit integers as strings
 

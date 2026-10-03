@@ -67,7 +67,8 @@ class CourseDuplicationIT {
                     .withSection(
                         "Intro",
                         aLecture("Welcome").preview().seconds(90).asset(UUID.randomUUID()),
-                        aLecture("Setup").article())
+                        aLecture("Setup").article(),
+                        aLecture("Pods").seconds(600))
                     .published()
                     .build())
             .id();
@@ -105,15 +106,15 @@ class CourseDuplicationIT {
         .bodyJson()
         .isLenientlyEqualTo(
             """
-            {"title":"Kubernetes (copy)","status":"DRAFT","publishedAt":null,"lectureCount":2,
-             "instructorName":"Asha Rao","sections":[{"title":"Intro","lectures":[{"title":"Welcome"},{"title":"Setup"}]}]}
+            {"title":"Kubernetes (copy)","status":"DRAFT","publishedAt":null,"lectureCount":3,
+             "instructorName":"Asha Rao","sections":[{"title":"Intro","lectures":[{"title":"Welcome"},{"title":"Setup"},{"title":"Pods"}]}]}
             """);
     String location = result.getResponse().getHeader("Location");
     assertThat(location).matches("/api/v1/courses/k8s-copy-[a-z0-9]{6}");
 
     // persisted: a draft, its sections and lectures all in the database (one transaction)
     assertThat(courseCount()).isEqualTo(2);
-    assertThat(jdbc.sql("SELECT count(*) FROM lecture").query(Long.class).single()).isEqualTo(4);
+    assertThat(jdbc.sql("SELECT count(*) FROM lecture").query(Long.class).single()).isEqualTo(6);
     assertThat(mvc.get().uri(location).with(as(asha, Role.INSTRUCTOR))).hasStatusOk();
     assertThat(mvc.get().uri(location)).hasStatus(HttpStatus.NOT_FOUND); // a draft: not public
   }

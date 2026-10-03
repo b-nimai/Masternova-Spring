@@ -33,10 +33,12 @@ public record CourseDetailResponse(
     String instructorName,
     CategoryRef category,
     Instant publishedAt,
+    boolean priceSet,
+    long version,
     List<SectionResponse> sections) {
 
   public record SectionResponse(String id, String title, List<LectureResponse> lectures) {
-    static SectionResponse from(Section s) {
+    public static SectionResponse from(Section s) {
       return new SectionResponse(
           s.id().toString(), s.title(), s.lectures().stream().map(LectureResponse::from).toList());
     }
@@ -44,7 +46,7 @@ public record CourseDetailResponse(
 
   public record LectureResponse(
       String id, String title, LectureKind kind, boolean preview, int durationSeconds) {
-    static LectureResponse from(Lecture l) {
+    public static LectureResponse from(Lecture l) {
       return new LectureResponse(
           l.id().toString(), l.title(), l.kind(), l.isPreview(), l.duration().seconds());
     }
@@ -70,6 +72,8 @@ public record CourseDetailResponse(
         c.instructor().name(),
         CategoryRef.from(c.category()),
         c.publishedAt().orElse(null),
+        c.priceSetAt().isPresent(),
+        c.version() == null ? 0 : c.version(), // ⭐ editors send it back as expectedVersion
         c.sections().stream().map(SectionResponse::from).toList());
   }
 }

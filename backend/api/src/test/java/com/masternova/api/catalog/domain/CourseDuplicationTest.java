@@ -32,7 +32,7 @@ class CourseDuplicationTest {
             .priced(149900)
             .createdAt(CREATED)
             .withSection("Intro", aLecture("Welcome").preview().seconds(90).asset(VIDEO))
-            .withSection("Core", aLecture("Pods").seconds(600))
+            .withSection("Core", aLecture("Pods").seconds(600), aLecture("Services").seconds(300))
             .published(CREATED)
             .rated("4.70", 31)
             .build();
@@ -62,15 +62,17 @@ class CourseDuplicationTest {
     assertThat(copy.description()).isEqualTo(source.description());
     assertThat(copy.level()).isEqualTo(CourseLevel.INTERMEDIATE);
     assertThat(copy.price()).isEqualTo(source.price());
+    assertThat(copy.priceSetAt()).isEqualTo(source.priceSetAt()); // the pricing decision is content
     assertThat(copy.instructor()).isEqualTo(source.instructor());
     assertThat(copy.category()).isSameAs(source.category()); // another aggregate: referenced
     assertThat(copy.sections()).extracting(Section::title).containsExactly("Intro", "Core");
     assertThat(copy.sections().get(1).lectures())
         .extracting(Lecture::title, Lecture::duration, Lecture::position)
         .containsExactly(
-            org.assertj.core.groups.Tuple.tuple("Pods", LectureDuration.ofSeconds(600), 0));
-    assertThat(copy.lectureCount()).isEqualTo(2); // rollups recomputed from the copy
-    assertThat(copy.totalDuration()).isEqualTo(LectureDuration.ofSeconds(690));
+            org.assertj.core.groups.Tuple.tuple("Pods", LectureDuration.ofSeconds(600), 0),
+            org.assertj.core.groups.Tuple.tuple("Services", LectureDuration.ofSeconds(300), 1));
+    assertThat(copy.lectureCount()).isEqualTo(3); // rollups recomputed from the copy
+    assertThat(copy.totalDuration()).isEqualTo(LectureDuration.ofSeconds(990));
   }
 
   @Test
@@ -103,7 +105,7 @@ class CourseDuplicationTest {
 
     assertThat(source.sections()).hasSize(2);
     assertThat(source.sections().getFirst().lectures()).hasSize(1);
-    assertThat(source.lectureCount()).isEqualTo(2);
+    assertThat(source.lectureCount()).isEqualTo(3);
   }
 
   /** ⭐ The deliberate SHALLOW edge, asserted so nobody "fixes" it into copying gigabytes. */

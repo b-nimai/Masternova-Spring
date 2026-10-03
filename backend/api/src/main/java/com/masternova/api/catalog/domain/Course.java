@@ -1,5 +1,9 @@
 package com.masternova.api.catalog.domain;
 
+import com.masternova.api.platform.ConflictException;
+import com.masternova.api.platform.NotFoundException;
+import com.masternova.api.platform.RuleViolationException;
+import com.masternova.api.platform.ValidationException;
 import com.masternova.kernel.money.Money;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
@@ -17,6 +21,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -25,8 +30,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -97,6 +104,13 @@ public class Course {
       column = @Column(name = "currency", nullable = false, length = 3))
   private Money price;
 
+  /**
+   * When pricing was confirmed. ⭐ Separate from the price because {@code 0} can't tell "free" from
+   * "nobody has decided yet" — and the publish gate needs to know which (PRICE_NOT_SET).
+   */
+  @Column(name = "price_set_at")
+  private Instant priceSetAt;
+
   @Column(name = "instructor_id", nullable = false)
   private UUID instructorId; // an id, not a @ManyToOne User: identity's entity is not ours to map
 
@@ -138,6 +152,9 @@ public class Course {
   @OrderBy("position")
   private List<Section> sections = new ArrayList<>();
 
+  /** Lectures removed in this unit of work, deleted by {@link CurriculumCleanup} (see Section). */
+  @Transient private final List<Lecture> removedLectures = new ArrayList<>();
+
   protected Course() {} // for Hibernate
 
   /**
@@ -160,6 +177,7 @@ public class Course {
     this.language = source.language;
     this.level = source.level;
     this.price = source.price; // ⭐ immutable value object: sharing the reference IS a copy
+    this.priceSetAt = source.priceSetAt; // the pricing decision is content: it's copied too
     this.category = source.category; // another aggregate: referenced, never copied
     this.instructorId = source.instructorId; // the copy stays with the course's instructor
     this.instructorName = source.instructorName;
@@ -246,6 +264,155 @@ public class Course {
     return lecture;
   }
 
+  // ------------------------------------------------------------------ curriculum editing (6.4)
+  // The operations CurriculumCommands are made of. Each one returns what its INVERSE needs, and
+  // every one ends in recomputeRollups(): recomputing a few dozen rows can't drift, a delta can.
+
+  /**
+   * ⭐ Applies one curriculum command and returns the command that undoes it. The one entry point
+   * for edits, so none can skip the checks or the version bump.
+   */
+  public CurriculumCommand apply(CurriculumCommand command, Instant now) {
+    requireEditable();
+    CurriculumCommand inverse = command.applyTo(this);
+    recomputeRollups();
+    touch(now);
+    return inverse;
+  }
+
+  /** The lectures removed in this unit of work, for the repository to delete. */
+  public List<Lecture> removedLectures() {
+    return List.copyOf(removedLectures);
+  }
+
+  public void forgetRemovedLectures() {
+    removedLectures.clear();
+  }
+
+  Section section(UUID sectionId) {
+    return sections.stream()
+        .filter(s -> s.id().equals(sectionId))
+        .findFirst()
+        .orElseThrow(() -> new NotFoundException("Section", sectionId)); // never "someone else's"
+  }
+
+  Lecture lecture(UUID lectureId) {
+    return sections.stream()
+        .flatMap(s -> s.lecture(lectureId).stream())
+        .findFirst()
+        .orElseThrow(() -> new NotFoundException("Lecture", lectureId));
+  }
+
+  Section addSection(UUID sectionId, String title) {
+    if (sections.stream().anyMatch(s -> s.id().equals(sectionId))) {
+      throw new ConflictException("DUPLICATE_ID", "That section already exists.");
+    }
+    Section section = new Section(sectionId, this, title, sections.size());
+    sections.add(section);
+    return section;
+  }
+
+  void renameSection(UUID sectionId, String title) {
+    section(sectionId).rename(title);
+  }
+
+  List<UUID> sectionOrder() {
+    return sections.stream().map(Section::id).toList();
+  }
+
+  /** ⭐ The WHOLE new order, validated as a permutation: two tabs can't produce a half-order. */
+  void reorderSections(List<UUID> order) {
+    if (order.size() != sections.size() || !Set.copyOf(order).equals(Set.copyOf(sectionOrder()))) {
+      throw ValidationException.of(
+          "order", "NOT_A_PERMUTATION", "Send every section id of this course exactly once.");
+    }
+    sections.sort(java.util.Comparator.comparingInt(s -> order.indexOf(s.id())));
+    renumberSections();
+  }
+
+  SectionSnapshot removeSection(UUID sectionId) {
+    Section section = section(sectionId);
+    SectionSnapshot snapshot = section.snapshot(); // ⭐ the Memento, captured BEFORE the delete
+    sections.remove(section); // orphanRemoval deletes it; cascade deletes its lectures
+    renumberSections();
+    return snapshot;
+  }
+
+  void restoreSection(SectionSnapshot snapshot, int position) {
+    Section section = new Section(snapshot.id(), this, snapshot.title(), 0);
+    for (int i = 0; i < snapshot.lectures().size(); i++) {
+      section.insert(Lecture.restore(section, snapshot.lectures().get(i), i), i);
+    }
+    sections.add(Math.clamp(position, 0, sections.size()), section);
+    renumberSections();
+  }
+
+  int positionOf(UUID sectionId) {
+    return sections.indexOf(section(sectionId));
+  }
+
+  Lecture addLecture(
+      UUID lectureId,
+      UUID sectionId,
+      String title,
+      LectureKind kind,
+      boolean preview,
+      LectureDuration duration) {
+    if (sections.stream().anyMatch(s -> s.lecture(lectureId).isPresent())) {
+      throw new ConflictException("DUPLICATE_ID", "That lecture already exists.");
+    }
+    Section section = section(sectionId);
+    Lecture lecture =
+        new Lecture(
+            lectureId, section, title, kind, section.lectures().size(), preview, duration, null);
+    section.insert(lecture, section.lectures().size());
+    return lecture;
+  }
+
+  /** Where a lecture is: what MOVE and REMOVE need to put it back. */
+  record Place(UUID sectionId, int position) {}
+
+  Place placeOf(UUID lectureId) {
+    Lecture lecture = lecture(lectureId);
+    return new Place(lecture.section().id(), lecture.section().indexOf(lecture));
+  }
+
+  void updateLecture(UUID lectureId, String title, boolean preview) {
+    lecture(lectureId).update(title, preview);
+  }
+
+  void moveLecture(UUID lectureId, UUID toSectionId, int toPosition) {
+    Lecture lecture = lecture(lectureId);
+    Section target = section(toSectionId);
+    lecture.section().detach(lecture);
+    target.insert(lecture, toPosition); // re-parents it: the owning side changes section_id
+  }
+
+  LectureSnapshot removeLecture(UUID lectureId) {
+    Lecture lecture = lecture(lectureId);
+    LectureSnapshot snapshot = lecture.snapshot(); // the Memento, before the delete
+    lecture.section().detach(lecture);
+    removedLectures.add(lecture); // deleted explicitly by CurriculumCleanup (no orphanRemoval)
+    return snapshot;
+  }
+
+  void restoreLecture(LectureSnapshot snapshot, UUID sectionId, int position) {
+    Section section = section(sectionId);
+    section.insert(Lecture.restore(section, snapshot, position), position);
+  }
+
+  private void renumberSections() {
+    for (int i = 0; i < sections.size(); i++) {
+      sections.get(i).placeAt(i);
+    }
+  }
+
+  private void recomputeRollups() {
+    List<Lecture> all = sections.stream().flatMap(s -> s.lectures().stream()).toList();
+    lectureCount = all.size();
+    totalDuration = LectureDuration.total(all.stream().map(Lecture::duration).toList());
+  }
+
   // ------------------------------------------------------------------ duplication (Prototype)
 
   /**
@@ -263,19 +430,87 @@ public class Course {
         : title.substring(0, 120 - suffix.length()) + suffix;
   }
 
-  // ------------------------------------------------------------------ lifecycle (Phase 5 subset)
+  // ------------------------------------------------------------------ lifecycle (State)
+
+  /** The State object for the persisted status (docs/lld/catalog-authoring.md §3). */
+  public CourseState state() {
+    return CourseState.of(status);
+  }
 
   /**
-   * Publishes the course. Phase 5 needs published courses to browse (seed data, tests); Phase 6
-   * replaces this with the State pattern and the publish gate. Nothing can archive a course before
-   * then, so there's no transition to guard yet. The one rule kept now: {@code publishedAt} is
-   * stamped on the FIRST publish and never moves (it's the NEWEST sort key).
+   * Moves the course through its lifecycle.
+   *
+   * <ol>
+   *   <li>The STATE decides whether the action is legal from here ({@code ILLEGAL_TRANSITION}).
+   *   <li>Submit and publish re-run the PUBLISH GATE against the course AS IT IS NOW — a course
+   *       edited while waiting in review is checked again ({@code COURSE_NOT_READY}, 422).
+   *   <li>{@code publishedAt} is stamped on the first publish and never moves.
+   *   <li>{@code touch} bumps the version, so every open editor tab becomes stale.
+   * </ol>
    */
-  public void publish(Instant now) {
-    status = CourseStatus.PUBLISHED;
-    if (publishedAt == null) {
+  public void transition(CourseAction action, Instant now) {
+    CourseStatus next = state().on(action);
+    if (action.isGated()) {
+      List<PublishCheck> problems = PublishGate.problems(this);
+      if (!problems.isEmpty()) {
+        throw new RuleViolationException(
+            "COURSE_NOT_READY", "The course isn't ready yet.", Map.of("problems", problems));
+      }
+    }
+    status = next;
+    if (next == CourseStatus.PUBLISHED && publishedAt == null) {
       publishedAt = micros(now);
     }
+    touch(now);
+  }
+
+  /** Content writes go through this: an archived course is read-only. */
+  public void requireEditable() {
+    if (!state().acceptsEdits()) {
+      throw new ConflictException("COURSE_ARCHIVED", "An archived course can't be changed.");
+    }
+  }
+
+  // ------------------------------------------------------------------ details
+
+  /**
+   * The wizard's "details" step. The slug is NOT regenerated from a new title: a changed URL is a
+   * broken link (catalog.md §3).
+   */
+  public void changeDetails(
+      String newTitle,
+      String newSubtitle,
+      String newDescription,
+      CourseLevel newLevel,
+      String newLanguage,
+      Category newCategory,
+      Instant now) {
+    requireEditable();
+    title = Lecture.requireTitle(newTitle);
+    changeSubtitle(newSubtitle);
+    description = Objects.requireNonNull(newDescription, "description").strip();
+    level = Objects.requireNonNull(newLevel, "level");
+    language = requireLanguage(newLanguage);
+    category = Objects.requireNonNull(newCategory, "category");
+    touch(now);
+  }
+
+  // ------------------------------------------------------------------ pricing
+
+  /** Confirms the price (free or paid): the decision the publish gate waits for. */
+  public void confirmPrice(Money newPrice, Instant now) {
+    requireEditable();
+    price = requireCatalogCurrency(newPrice);
+    priceSetAt = micros(now);
+    touch(now);
+  }
+
+  /**
+   * ⭐ Marks the ROOT as changed. JPA bumps {@code @Version} only when the course row itself is
+   * updated; a lecture rename updates only the lecture row. Every mutation through the root calls
+   * this, so the course's version covers the whole aggregate (ADR-0010).
+   */
+  void touch(Instant now) {
     updatedAt = micros(now);
   }
 
@@ -377,6 +612,10 @@ public class Course {
 
   public Optional<Instant> publishedAt() {
     return Optional.ofNullable(publishedAt);
+  }
+
+  public Optional<Instant> priceSetAt() {
+    return Optional.ofNullable(priceSetAt);
   }
 
   public Money price() {

@@ -5,7 +5,7 @@
 > a rule like "who may see a draft" is written **once** and applied everywhere.
 
 **Type:** Enterprise (Evans / Fowler, DDD) · **Status:** built (Phase 5.4) · **Last updated:** 2026-10-02
-**Real code:** `com.masternova.api.catalog.domain.CourseSpecifications` (leaves) · `com.masternova.api.catalog.application.CourseSearch` (composes them) · `com.masternova.api.catalog.domain.Viewer` (the visibility rule's in-memory twin)
+**Real code:** `com.masternova.api.catalog.domain.CourseSpecifications` (leaves) · `com.masternova.api.catalog.domain.PublishGate` (explainable: coded requirements, Phase 6) · `com.masternova.api.catalog.application.CourseSearch` (composes them) · `com.masternova.api.catalog.domain.Viewer` (the visibility rule's in-memory twin)
 **Lab:** [`lab/.../patterns/specification/`](../lab/src/main/java/com/masternova/patterns/specification/): the full Evans form, both representations (`isSatisfiedBy` + `toWhere`), Spring-free.
 
 **Trigger phrase:** "filter by any combination of…", "only if all of these hold", "the same rule
@@ -149,6 +149,32 @@ graph), so visibility is checked in memory there: `viewer.canSee(course)`. Lists
 Two forms of one rule can drift, so `CourseSpecificationsIT.theSqlAndInMemoryVisibilityRulesAgree`
 runs both over the same rows for five kinds of viewer and compares the results. The lab shows the
 full Evans form, where every specification carries both (`isSatisfiedBy` and `toWhere`).
+
+### 3b. A specification that explains itself: the publish gate (Phase 6.3)
+
+A boolean specification can only say *no*. The publish gate must say **why**, in codes the API
+returns (422) and the wizard turns into a checklist. So each leaf is a named requirement:
+
+```java
+public record PublishRequirement(String code, String message, Predicate<Course> satisfiedBy) {}
+
+public static final List<PublishRequirement> REQUIREMENTS = List.of(
+    new PublishRequirement("DESCRIPTION_TOO_SHORT", "Describe the course in at least 50 characters.",
+        c -> c.description().length() >= 50),
+    new PublishRequirement("PRICE_NOT_SET", "Confirm a price (free is a price too).",
+        c -> c.priceSetAt().isPresent()),
+    new PublishRequirement("NO_SECTIONS", "Add at least one section.", c -> !c.sections().isEmpty()),
+    ...);
+
+public static List<PublishCheck> evaluate(Course c)   // every rule + its result → the checklist
+public static List<PublishCheck> problems(Course c)   // only the failures → the 422 (empty = ready)
+```
+
+The composite is an **AND that collects instead of short-circuiting**: it runs every leaf and
+keeps the failures. Same pattern, different composite.
+
+⭐ `PublishGateTest.everyRequirementHasAFailingExample` checks that a map of failing examples covers
+every code in `REQUIREMENTS`, so **a rule added without a test fails the build**.
 
 ## 4. Java features that make it nicer
 
