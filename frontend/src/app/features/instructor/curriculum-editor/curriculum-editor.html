@@ -1,0 +1,143 @@
+@let state = store.curriculum();
+<div class="toolbar">
+  <button
+    mat-stroked-button
+    type="button"
+    data-testid="undo"
+    [disabled]="!state?.canUndo"
+    (click)="store.undo()"
+    matTooltip="Undo (Ctrl+Z)"
+  >
+    <mat-icon>undo</mat-icon> Undo
+  </button>
+  <button
+    mat-stroked-button
+    type="button"
+    data-testid="redo"
+    [disabled]="!state?.canRedo"
+    (click)="store.redo()"
+    matTooltip="Redo (Ctrl+Shift+Z)"
+  >
+    <mat-icon>redo</mat-icon> Redo
+  </button>
+  @if (state) {
+    <span class="totals" data-testid="totals"
+      >{{ state.lectureCount }} lectures · {{ state.totalDurationSeconds | duration }}</span
+    >
+  }
+</div>
+
+<!-- ⭐ cdkDropListGroup: every lecture list inside is connected — a lecture can move across sections -->
+<div cdkDropListGroup class="sections">
+  @for (section of sections(); track section.id; let i = $index, first = $first, last = $last) {
+    <section class="section" [attr.data-testid]="'section-' + i">
+      <header>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="section-title">
+          <mat-label>Section {{ i + 1 }}</mat-label>
+          <input
+            #title
+            matInput
+            [value]="section.title"
+            (keydown.enter)="title.blur()"
+            (blur)="renameSection(section, title.value)"
+          />
+        </mat-form-field>
+        <button
+          mat-icon-button
+          type="button"
+          [disabled]="first"
+          (click)="moveSection(i, -1)"
+          aria-label="Move section up"
+        >
+          <mat-icon>arrow_upward</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [disabled]="last"
+          (click)="moveSection(i, 1)"
+          aria-label="Move section down"
+          [attr.data-testid]="'down-' + i"
+        >
+          <mat-icon>arrow_downward</mat-icon>
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          (click)="removeSection(section)"
+          aria-label="Remove section"
+          [attr.data-testid]="'remove-section-' + i"
+        >
+          <mat-icon>delete</mat-icon>
+        </button>
+      </header>
+
+      <ul
+        class="lectures"
+        cdkDropList
+        [cdkDropListData]="section"
+        (cdkDropListDropped)="dropLecture($event)"
+      >
+        @for (lecture of section.lectures; track lecture.id) {
+          <li cdkDrag [cdkDragData]="lecture" [attr.data-testid]="'lecture-' + lecture.title">
+            <mat-icon cdkDragHandle class="handle" aria-hidden="true">drag_indicator</mat-icon>
+            <mat-icon aria-hidden="true">{{
+              lecture.kind === 'VIDEO' ? 'play_circle' : 'article'
+            }}</mat-icon>
+            <span class="lecture-title">{{ lecture.title }}</span>
+            <span class="time">{{ lecture.durationSeconds | duration: 'clock' }}</span>
+            <mat-checkbox [checked]="lecture.preview" (change)="togglePreview(lecture)"
+              >Preview</mat-checkbox
+            >
+            <button
+              mat-icon-button
+              type="button"
+              (click)="removeLecture(lecture)"
+              aria-label="Remove lecture"
+            >
+              <mat-icon>close</mat-icon>
+            </button>
+          </li>
+        } @empty {
+          <li class="empty">No lectures yet — add one below, or drag one here.</li>
+        }
+      </ul>
+
+      @let d = draft(section.id);
+      <form class="add-lecture" (ngSubmit)="addLecture(section)">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>New lecture</mat-label>
+          <input
+            matInput
+            name="title"
+            [(ngModel)]="d.title"
+            [attr.data-testid]="'new-lecture-' + i"
+          />
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+          <mat-label>Type</mat-label>
+          <mat-select name="kind" [(ngModel)]="d.kind">
+            <mat-option value="VIDEO">Video</mat-option>
+            <mat-option value="ARTICLE">Article</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+          <mat-label>Minutes</mat-label>
+          <input matInput type="number" min="0" name="minutes" [(ngModel)]="d.minutes" />
+        </mat-form-field>
+        <mat-checkbox name="preview" [(ngModel)]="d.preview">Free preview</mat-checkbox>
+        <button mat-stroked-button type="submit" [attr.data-testid]="'add-lecture-' + i">
+          Add lecture
+        </button>
+      </form>
+    </section>
+  }
+</div>
+
+<form class="add-section" (ngSubmit)="addSection()">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-label>New section</mat-label>
+    <input matInput name="newSection" [(ngModel)]="newSectionTitle" data-testid="new-section" />
+  </mat-form-field>
+  <button mat-flat-button type="submit" data-testid="add-section">Add section</button>
+</form>

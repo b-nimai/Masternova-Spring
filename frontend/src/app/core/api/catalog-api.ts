@@ -82,6 +82,10 @@ export interface CourseDetailResponse extends Omit<CourseSummary, 'subtitle'> {
   subtitle: string | null;
   description: string;
   enrollmentCount: number;
+  /** Pricing was confirmed (free counts): the publish gate's PRICE_NOT_SET. */
+  priceSet: boolean;
+  /** ⭐ The optimistic-concurrency token: editors send it back as `expectedVersion`. */
+  version: number;
   sections: SectionResponse[];
 }
 
