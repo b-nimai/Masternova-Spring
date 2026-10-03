@@ -112,8 +112,30 @@ the server applied it and bumped the version. The client never learns the new ve
 | `exhaustMap` | ignore new triggers while busy (a submit button) | ❌ would drop the user's latest text |
 | `mergeMap` | independent parallel work | ❌ two PUTs with the same version → one 409 |
 
-`saveDetails` reads `this.version()` **when the request is made**, not when the value was typed, so a
-queued save uses the version its predecessor returned.
+**One queue for every write (found in review).** Autosave alone wasn't enough: a curriculum command,
+an undo and a details save could run *in parallel*, all sending version N; the second to land got a
+409 against its own tab's first. So the store has ONE write queue, and every write goes through it:
+
+```ts
+private readonly writes = new Subject<() => Observable<unknown>>();
+
+constructor() {
+  this.writes.pipe(
+    // ⭐ concatMap calls the thunk only when its turn comes → it reads the version the
+    //    previous answer set. After a conflict, queued writes are dropped until the reload.
+    concatMap((write) => this.saveState() === 'conflict' ? EMPTY : write().pipe(catchError((e) => this.fail(e)))),
+    takeUntilDestroyed(),
+  ).subscribe();
+}
+
+apply(command: CurriculumCommand): void {
+  this.enqueue(() => this.curriculumWrite(this.api.apply(this.courseId, this.version(), command)));
+}
+```
+
+The queue holds **thunks** (`() => Observable`), not observables: `this.version()` must be read when
+the write *runs*, not when it was queued. The wizard's autosave just hands each debounced value to
+`store.saveDetails`.
 
 ## 4. Filling a form without saving it ⭐⭐
 
@@ -122,16 +144,18 @@ Loading the course must fill the form **without** triggering an autosave, and ou
 
 ```ts
 effect(() => {
-  this.store.loads();                 // ⭐ the trigger: bumped on (re)load only, not on saves
-  const course = this.store.course();
+  this.store.loads();                 // ⭐ the ONLY trigger: bumped on (re)load, not on saves
+  const course = untracked(() => this.store.course());   // ⭐ read, but don't depend on it
   if (course) {
     this.details.setValue({ … }, { emitEvent: false });   // no valueChanges → no autosave
   }
 });
 ```
 
-The spec checks both halves: "fills the details form from the loaded course without saving" and,
-after a conflict, the form shows the *other* tab's title.
+**`untracked` matters (found in review).** Reading `this.store.course()` normally makes it a
+dependency, so the effect re-ran after **every save** and put the saved (older) text back over what
+the user had typed while the PUT was in flight. Inside `untracked(...)`, the read doesn't subscribe.
+The spec "keeps what the user typed while a save was in flight" fails without it.
 
 ## 5. 409: show, reload, never retry ⭐⭐⭐
 
@@ -231,16 +255,23 @@ onKeydown(event: KeyboardEvent): void {
 Found by a spec: an event dispatched on `document` has the `Document` as its target, which has no
 `closest()`; hence `instanceof Element`.
 
+**Only on the curriculum step (found in review).** The stepper keeps every step's component alive,
+so the editor's document listener also fired on the Details step: Ctrl+Z there silently undid a
+curriculum edit. The editor has `shortcutsEnabled = input(true)`; the wizard binds it to
+`stepper.selectedIndex === 2`.
+
 ## 9. Idempotent create ⭐⭐
 
 ```ts
-private readonly idempotencyKey = crypto.randomUUID();   // ⭐ ONE per form, not per click
-this.api.create(this.form.getRawValue(), this.idempotencyKey)…
+private idempotencyKey = crypto.randomUUID();   // ⭐ ONE per ATTEMPT, not per click
+…error: () => { this.idempotencyKey = crypto.randomUUID(); … }   // a refused attempt is over
 ```
 
-Creating has no version to guard it, so the API requires an `Idempotency-Key`. One key per form
+Creating has no version to guard it, so the API requires an `Idempotency-Key`. One key per attempt
 means a double-click or a retry after a timeout sends the **same** key, and the server replays the
-first 201 instead of creating a second course. A new key per click would defeat the point.
+first 201 instead of creating a second course. But the server also stores a **4xx** answer under the
+key: reusing it for the corrected form would get 422 `IDEMPOTENCY_KEY_REUSED` forever. After a
+refused attempt, the next submit is a new request with a new key (found in review).
 
 ## 10. Testing it ⭐⭐⭐
 
@@ -259,6 +290,10 @@ first 201 instead of creating a second course. A new key per click would defeat 
 |---|---|---|
 | `switchMap` for autosave | random 409s against your own saves | `concatMap` |
 | each step holding its own version | the second step's save 409s | one store, one `version` signal |
+| writes from different steps in parallel | false 409s against your own tab | one write queue of thunks (`concatMap`) |
+| an effect that reads the state it then overwrites | typed text reverts after each save | read it inside `untracked` |
+| the same Idempotency-Key after a 4xx | 422 `IDEMPOTENCY_KEY_REUSED` on every retry | a new key per attempt |
+| a document key listener on a hidden step | shortcuts act on screens you can't see | enable them only for the visible step |
 | auto-retrying a 409 with the newer version | silently overwrites the other tab | dialog + reload |
 | re-patching the form after every save | the cursor jumps / text reverts while typing | patch only on (re)load, `emitEvent: false` |
 | `catchError` on the OUTER autosave stream | the first error ends autosave for good | catch inside the inner (per-save) observable |

@@ -114,6 +114,15 @@ describe('CurriculumEditor', () => {
     expect(http.expectOne(`${url}/redo`).request.body).toEqual({ expectedVersion: 5 });
   });
 
+  it('ignores the shortcuts while another wizard step is shown', async () => {
+    fixture.componentRef.setInput('shortcutsEnabled', false);
+    await fixture.whenStable();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true }));
+
+    http.expectNone(`${url}/undo`);
+  });
+
   it('disables undo when there is nothing to undo', async () => {
     TestBed.inject(CourseEditorStore).showLocally(curriculum({ canUndo: false }));
     await fixture.whenStable();

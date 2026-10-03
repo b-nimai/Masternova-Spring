@@ -85,13 +85,13 @@ class CurriculumCommandTest {
   static Stream<Arguments> everyKind() {
     List<Function<Course, CurriculumCommand>> commands =
         List.of(
-            c -> new AddSection(null, "Bonus").withIds(),
+            c -> new AddSection(null, "Bonus").withServerIds(),
             c -> new RenameSection(section(c, 0), "Getting started"),
             c -> new ReorderSections(List.of(section(c, 1), section(c, 0))),
             c -> new RemoveSection(section(c, 1)),
             c ->
                 new AddLecture(null, section(c, 0), "Extra", LectureKind.ARTICLE, true, 30)
-                    .withIds(),
+                    .withServerIds(),
             c -> new UpdateLecture(lecture(c, 0, 1), "Install everything", true),
             c -> new MoveLecture(lecture(c, 1, 0), section(c, 0), 0), // across sections, to the top
             c -> new MoveLecture(lecture(c, 1, 0), section(c, 1), 2), // within a section
@@ -194,7 +194,7 @@ class CurriculumCommandTest {
     Course course = course();
     course.transition(CourseAction.ARCHIVE, NOW);
 
-    assertThatThrownBy(() -> course.apply(new AddSection(null, "Late").withIds(), NOW))
+    assertThatThrownBy(() -> course.apply(new AddSection(null, "Late").withServerIds(), NOW))
         .isInstanceOfSatisfying(
             ConflictException.class, e -> assertThat(e.code()).isEqualTo("COURSE_ARCHIVED"));
   }
@@ -208,13 +208,26 @@ class CurriculumCommandTest {
     assertThat(course.updatedAt()).isEqualTo(NOW.plusSeconds(9));
   }
 
+  /** ⭐ A client-chosen id (say, copied from another course) is replaced by a server id. */
+  @Test
+  void theServerAssignsTheIdsOfNewNodes() {
+    UUID chosen = UUID.randomUUID();
+
+    assertThat(new AddSection(chosen, "x").withServerIds())
+        .isInstanceOfSatisfying(
+            AddSection.class, a -> assertThat(a.sectionId()).isNotEqualTo(chosen));
+    assertThat(new AddLecture(chosen, UUID.randomUUID(), "x", null, null, null).withServerIds())
+        .isInstanceOfSatisfying(
+            AddLecture.class, a -> assertThat(a.lectureId()).isNotEqualTo(chosen));
+  }
+
   @Test
   void badInputFailsWhileBuildingTheCommand() {
     assertThatThrownBy(() -> new AddSection(null, " "))
         .isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> new AddLecture(null, UUID.randomUUID(), "x", null, false, -1))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThat(new AddSection(null, "x").withIds())
+    assertThat(new AddSection(null, "x").withServerIds())
         .isInstanceOfSatisfying(AddSection.class, a -> assertThat(a.sectionId()).isNotNull());
   }
 }

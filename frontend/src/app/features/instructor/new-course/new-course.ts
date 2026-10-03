@@ -38,10 +38,12 @@ export class NewCourse {
   protected readonly failed = signal(false);
 
   /**
-   * ⭐ ONE key per form: a double-click (or a retry after a timeout) sends the SAME key, so the
-   * server replays the first 201 instead of creating a second course (API conventions §4).
+   * ⭐ ONE key per ATTEMPT: a double-click (or a retry after a timeout) sends the SAME key, so the
+   * server replays the first 201 instead of creating a second course (API conventions §4). After a
+   * refused attempt (4xx — the server stored THAT answer under the key) a corrected form needs a
+   * new key, or the server would answer 422 IDEMPOTENCY_KEY_REUSED forever (found in review).
    */
-  private readonly idempotencyKey = crypto.randomUUID();
+  private idempotencyKey = crypto.randomUUID();
 
   protected readonly form = new FormGroup({
     title: new FormControl('', {
@@ -69,6 +71,7 @@ export class NewCourse {
       .subscribe({
         next: (course) => void this.router.navigate(['/instructor/courses', course.id, 'edit']),
         error: (error) => {
+          this.idempotencyKey = crypto.randomUUID(); // the next attempt is a NEW request
           if (!applyServerErrors(this.form, asProblem(error))) {
             this.failed.set(true);
           }

@@ -1,4 +1,4 @@
-import { Component, effect, inject, input, OnInit } from '@angular/core';
+import { Component, effect, inject, input, OnInit, untracked } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -11,7 +11,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatStepperModule } from '@angular/material/stepper';
 import { StepperSelectionEvent } from '@angular/cdk/stepper';
 import { RouterLink } from '@angular/router';
-import { concatMap, debounceTime, distinctUntilChanged, filter, map } from 'rxjs';
+import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs';
 import { CourseDetails } from '../../../core/api/authoring-api';
 import { CatalogApi, COURSE_LEVELS, CourseLevel } from '../../../core/api/catalog-api';
 import { MoneyPipe } from '../../../shared/money-pipe';
@@ -93,8 +93,10 @@ export class CourseWizard implements OnInit {
     // The course (re)loaded → fill the forms WITHOUT triggering an autosave. Only on loads, never
     // after our own saves: re-patching then would fight the user's typing.
     effect(() => {
-      this.store.loads(); // the trigger
-      const course = this.store.course();
+      this.store.loads(); // the ONLY trigger…
+      // …⭐ course() is read UNTRACKED: tracking it would re-run this after every save and put the
+      //    saved (older) text back over what the user typed meanwhile (found in review)
+      const course = untracked(() => this.store.course());
       if (course) {
         this.details.setValue(
           {
@@ -117,19 +119,19 @@ export class CourseWizard implements OnInit {
       }
     });
 
-    // ⭐ AUTOSAVE: debounce typing, skip invalid states and no-op changes, then save IN ORDER.
-    //    concatMap, not switchMap: cancelling an in-flight PUT cancels only the RESPONSE, the
-    //    server still applies it — the version moves without us knowing, and the next save 409s.
+    // ⭐ AUTOSAVE: debounce typing, skip invalid states and no-op changes, then hand the save to
+    //    the store's write QUEUE (concatMap there): saves apply in order, each with the version
+    //    the previous one produced. Never switchMap for writes: cancelling an in-flight PUT
+    //    cancels only the RESPONSE; the server still applies it and the version moves unseen.
     this.details.valueChanges
       .pipe(
         debounceTime(800),
         filter(() => this.details.valid),
         map(() => this.toDetails()),
         distinctUntilChanged((a, b) => JSON.stringify(a) === JSON.stringify(b)),
-        concatMap((details) => this.store.saveDetails(details)),
         takeUntilDestroyed(),
       )
-      .subscribe();
+      .subscribe((details) => this.store.saveDetails(details)); // the store's queue orders writes
   }
 
   ngOnInit(): void {
@@ -138,7 +140,7 @@ export class CourseWizard implements OnInit {
 
   protected confirmPrice(): void {
     const { free, rupees } = this.pricing.getRawValue();
-    this.store.confirmPrice(free ? 0 : Math.round(rupees * 100)).subscribe();
+    this.store.confirmPrice(free ? 0 : Math.round(rupees * 100));
   }
 
   protected onStep(event: StepperSelectionEvent): void {
@@ -148,11 +150,11 @@ export class CourseWizard implements OnInit {
   }
 
   protected submit(): void {
-    this.store.transition('submit').subscribe();
+    this.store.transition('submit');
   }
 
   protected withdraw(): void {
-    this.store.transition('withdraw').subscribe();
+    this.store.transition('withdraw');
   }
 
   private toDetails(): CourseDetails {

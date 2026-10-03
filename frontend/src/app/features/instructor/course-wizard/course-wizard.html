@@ -27,7 +27,7 @@
   @if (!course) {
     <mat-spinner diameter="36" />
   } @else {
-    <mat-stepper (selectionChange)="onStep($event)">
+    <mat-stepper #stepper (selectionChange)="onStep($event)">
       <mat-step label="Details">
         <form [formGroup]="details" class="details">
           <mat-form-field appearance="outline">
@@ -110,7 +110,8 @@
       </mat-step>
 
       <mat-step label="Curriculum">
-        <app-curriculum-editor />
+        <!-- ⭐ Ctrl+Z only on this step: elsewhere it would undo curriculum edits unseen (review) -->
+        <app-curriculum-editor [shortcutsEnabled]="stepper.selectedIndex === 2" />
         <button mat-button matStepperPrevious>Back</button>
         <button mat-flat-button matStepperNext>Next: review</button>
       </mat-step>

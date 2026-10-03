@@ -1,7 +1,8 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Service, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
-import { catchError, EMPTY, forkJoin, Observable, tap } from 'rxjs';
+import { catchError, concatMap, EMPTY, forkJoin, Observable, Subject, tap } from 'rxjs';
 import {
   AuthoringApi,
   AuthorAction,
@@ -23,6 +24,9 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
  *    get two stores. ⭐ It holds the ONE `version` every write sends back as `expectedVersion`: the
  *    details form, the pricing step and the curriculum editor all move the same course's version
  *    (the root's version covers the aggregate, ADR-0010), so they must share it.
+ * ⭐ ALL writes go through ONE queue (`concatMap`): a write starts only after the previous one has
+ *    answered, so it sends the version that answer produced. Without the queue, two quick edits
+ *    from one tab sent the same version and the second got a false 409 (found in review).
  */
 @Service({ autoProvided: false })
 export class CourseEditorStore {
@@ -34,9 +38,24 @@ export class CourseEditorStore {
   readonly readiness = signal<ReadinessResponse | null>(null);
   readonly version = signal(0);
   readonly saveState = signal<SaveState>('idle');
-  /** Bumped on every (re)load: forms re-read the course then, and ONLY then (not after autosaves). */
+  /** Bumped on every (re)load: forms re-read the course then, and ONLY then (not after saves). */
   readonly loads = signal(0);
   private courseId = '';
+
+  private readonly writes = new Subject<() => Observable<unknown>>();
+
+  constructor() {
+    this.writes
+      .pipe(
+        // ⭐ concatMap calls each write only when its turn comes, so the write reads the version
+        //    the previous answer set. After a conflict, queued writes are dropped until the reload.
+        concatMap((write) =>
+          this.saveState() === 'conflict' ? EMPTY : write().pipe(catchError((e) => this.fail(e))),
+        ),
+        takeUntilDestroyed(),
+      )
+      .subscribe();
+  }
 
   load(courseId: string): void {
     this.courseId = courseId;
@@ -55,36 +74,48 @@ export class CourseEditorStore {
     this.load(this.courseId);
   }
 
-  /** ⭐ Reads version() when the request is MADE, so queued autosaves use the newest one. */
-  saveDetails(details: CourseDetails): Observable<CourseDetailResponse> {
-    this.saveState.set('saving');
-    return this.api.updateDetails(this.courseId, this.version(), details).pipe(
-      tap((course) => this.acceptCourse(course)),
-      catchError((error) => this.fail(error)),
+  saveDetails(details: CourseDetails): void {
+    this.enqueue(() =>
+      this.api
+        .updateDetails(this.courseId, this.version(), details)
+        .pipe(tap((course) => this.acceptCourse(course))),
     );
   }
 
-  confirmPrice(priceMinor: number): Observable<CourseDetailResponse> {
-    this.saveState.set('saving');
-    return this.api.confirmPrice(this.courseId, this.version(), priceMinor).pipe(
-      tap((course) => this.acceptCourse(course)),
-      catchError((error) => this.fail(error)),
+  confirmPrice(priceMinor: number): void {
+    this.enqueue(() =>
+      this.api
+        .confirmPrice(this.courseId, this.version(), priceMinor)
+        .pipe(tap((course) => this.acceptCourse(course))),
+    );
+  }
+
+  transition(action: AuthorAction): void {
+    this.enqueue(() =>
+      this.api.transition(this.courseId, action).pipe(
+        tap((course) => {
+          this.acceptCourse(course);
+          this.loadReadiness();
+        }),
+      ),
     );
   }
 
   apply(command: CurriculumCommand): void {
-    this.track(this.api.apply(this.courseId, this.version(), command));
+    this.enqueue(() =>
+      this.curriculumWrite(this.api.apply(this.courseId, this.version(), command)),
+    );
   }
 
   undo(): void {
     if (this.curriculum()?.canUndo) {
-      this.track(this.api.undo(this.courseId, this.version()));
+      this.enqueue(() => this.curriculumWrite(this.api.undo(this.courseId, this.version())));
     }
   }
 
   redo(): void {
     if (this.curriculum()?.canRedo) {
-      this.track(this.api.redo(this.courseId, this.version()));
+      this.enqueue(() => this.curriculumWrite(this.api.redo(this.courseId, this.version())));
     }
   }
 
@@ -92,28 +123,24 @@ export class CourseEditorStore {
     this.api.readiness(this.courseId).subscribe((r) => this.readiness.set(r));
   }
 
-  transition(action: AuthorAction): Observable<CourseDetailResponse> {
-    return this.api.transition(this.courseId, action).pipe(
-      tap((course) => {
-        this.acceptCourse(course);
-        this.loadReadiness();
-      }),
-      catchError((error) => this.fail(error)),
-    );
-  }
-
   /** Optimistic local edit (a drag): shown now; the server's answer replaces it. */
   showLocally(curriculum: CurriculumResponse): void {
     this.curriculum.set(curriculum);
   }
 
-  private track(request: Observable<CurriculumResponse>): void {
+  private enqueue(write: () => Observable<unknown>): void {
     this.saveState.set('saving');
-    request.pipe(catchError((error) => this.fail(error))).subscribe((curriculum) => {
-      this.curriculum.set(curriculum);
-      this.version.set(curriculum.version);
-      this.saveState.set('saved');
-    });
+    this.writes.next(write);
+  }
+
+  private curriculumWrite(request: Observable<CurriculumResponse>): Observable<CurriculumResponse> {
+    return request.pipe(
+      tap((curriculum) => {
+        this.curriculum.set(curriculum);
+        this.version.set(curriculum.version);
+        this.saveState.set('saved');
+      }),
+    );
   }
 
   private acceptCourse(course: CourseDetailResponse): void {
@@ -137,6 +164,6 @@ export class CourseEditorStore {
       this.saveState.set('error');
       this.reload(); // an optimistic change the server refused must not stay on screen
     }
-    return EMPTY;
+    return EMPTY; // ⭐ the queue keeps running for the writes that follow
   }
 }

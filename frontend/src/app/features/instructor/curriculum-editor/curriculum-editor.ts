@@ -5,7 +5,7 @@ import {
   CdkDropList,
   CdkDropListGroup,
 } from '@angular/cdk/drag-drop';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -50,6 +50,8 @@ import { CourseEditorStore } from '../course-editor-store';
 })
 export class CurriculumEditor {
   protected readonly store = inject(CourseEditorStore);
+  /** Off while another wizard step is shown: Ctrl+Z there must not undo curriculum edits. */
+  readonly shortcutsEnabled = input(true);
   protected readonly sections = computed(() => this.store.curriculum()?.sections ?? []);
 
   protected newSectionTitle = '';
@@ -158,6 +160,9 @@ export class CurriculumEditor {
    * undo the TEXT, which is the browser's job.
    */
   onKeydown(event: KeyboardEvent): void {
+    if (!this.shortcutsEnabled()) {
+      return;
+    }
     const target = event.target; // may be the document itself, which isn't an Element
     if (target instanceof Element && target.closest('input, textarea, [contenteditable="true"]')) {
       return;

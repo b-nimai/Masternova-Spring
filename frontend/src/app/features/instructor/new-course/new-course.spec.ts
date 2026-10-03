@@ -37,7 +37,28 @@ describe('NewCourse', () => {
       language: 'en',
     });
     expect(req.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
-    req.flush(course({ id: 'new-id' }));
+    const firstKey = req.request.headers.get('Idempotency-Key');
+    // a refused attempt: the server stored THAT answer under the key…
+    req.flush(
+      {
+        status: 400,
+        code: 'VALIDATION_FAILED',
+        errors: [{ field: 'categorySlug', code: 'UNKNOWN_CATEGORY', message: 'No such category.' }],
+      },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    component.form.setValue({
+      title: 'Kubernetes',
+      categorySlug: 'containers-kubernetes',
+      level: 'BEGINNER',
+      language: 'en',
+    });
+    submit(fixture); // the corrected form
+
+    // …so the corrected attempt is a NEW request with a NEW key (no 422 IDEMPOTENCY_KEY_REUSED)
+    const retry = http.expectOne('/api/v1/instructor/courses');
+    expect(retry.request.headers.get('Idempotency-Key')).not.toBe(firstKey);
+    retry.flush(course({ id: 'new-id' }));
     expect(navigate).toHaveBeenCalledWith(['/instructor/courses', 'new-id', 'edit']);
     expect(query(fixture, '[data-testid="create"]')).toBeTruthy();
     http.verify();

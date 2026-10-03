@@ -51,16 +51,14 @@ describe('CourseEditorStore', () => {
       sections: [],
     });
 
-    store
-      .saveDetails({
-        title: 'T',
-        subtitle: null,
-        description: 'D',
-        categorySlug: 'ci-cd',
-        level: 'BEGINNER',
-        language: 'en',
-      })
-      .subscribe();
+    store.saveDetails({
+      title: 'T',
+      subtitle: null,
+      description: 'D',
+      categorySlug: 'ci-cd',
+      level: 'BEGINNER',
+      language: 'en',
+    });
     // ⭐ the details form uses the version the CURRICULUM edit produced
     expect(http.expectOne(`${base}/details`).request.body.expectedVersion).toBe(5);
   });
@@ -83,6 +81,57 @@ describe('CourseEditorStore', () => {
       sections: [],
     });
     expect(store.version()).toBe(6);
+  });
+
+  /** ⭐ Two quick edits from ONE tab: the second waits, then sends the version the first produced. */
+  it('queues writes so quick edits never conflict with each other', () => {
+    store.apply({ kind: 'ADD_SECTION', title: 'One' });
+    store.apply({ kind: 'ADD_SECTION', title: 'Two' });
+
+    const first = http.expectOne(`${base}/curriculum`); // only ONE request in flight
+    expect(first.request.body.expectedVersion).toBe(4);
+    first.flush({
+      version: 5,
+      canUndo: true,
+      canRedo: false,
+      lectureCount: 0,
+      totalDurationSeconds: 0,
+      sections: [],
+    });
+
+    const second = http.expectOne(`${base}/curriculum`);
+    expect(second.request.body).toEqual({
+      expectedVersion: 5,
+      command: { kind: 'ADD_SECTION', title: 'Two' },
+    });
+    second.flush({
+      version: 6,
+      canUndo: true,
+      canRedo: false,
+      lectureCount: 0,
+      totalDurationSeconds: 0,
+      sections: [],
+    });
+  });
+
+  it('drops queued writes after a conflict instead of 409-ing again', () => {
+    store.apply({ kind: 'ADD_SECTION', title: 'One' });
+    store.apply({ kind: 'ADD_SECTION', title: 'Two' });
+    http
+      .expectOne(`${base}/curriculum`)
+      .flush({ status: 409, code: 'VERSION_CONFLICT' }, { status: 409, statusText: 'Conflict' });
+
+    // the reload is what's sent next — not the queued "Two"
+    http.expectOne(base).flush(course({ version: 9 }));
+    http.expectOne(`${base}/curriculum`).flush({
+      version: 9,
+      canUndo: true,
+      canRedo: false,
+      lectureCount: 0,
+      totalDurationSeconds: 0,
+      sections: [],
+    });
+    expect(open).toHaveBeenCalledTimes(1);
   });
 
   it('does nothing when there is nothing to redo', () => {

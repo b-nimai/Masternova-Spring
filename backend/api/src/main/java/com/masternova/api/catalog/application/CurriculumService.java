@@ -56,7 +56,7 @@ public class CurriculumService {
     }
     Course course = access.forEditing(courseId, actor, expectedVersion);
     Instant now = clock.instant();
-    CurriculumCommand withIds = command.withIds(); // ⭐ stored WITH ids, so a redo recreates them
+    CurriculumCommand withIds = command.withServerIds(); // ⭐ stored WITH ids: a redo recreates them
     CurriculumCommand inverse = course.apply(withIds, now);
     courses.deleteRemovedLectures(course);
     history.discardRedo(courseId); // a new edit ends the redo branch

@@ -73,6 +73,27 @@ describe('CourseWizard', () => {
     expect(text(fixture, 'save-state')).toBe('All changes saved');
   });
 
+  /** ⭐ The answer to a save must not put older text back over what was typed meanwhile. */
+  it('keeps what the user typed while a save was in flight', async () => {
+    vi.useFakeTimers();
+    const title = query<HTMLInputElement>(fixture, '[data-testid="title"]');
+    title.value = 'Kube';
+    title.dispatchEvent(new Event('input'));
+    vi.advanceTimersByTime(800);
+    const save = http.expectOne(`${base}/details`); // "Kube" is on its way…
+
+    title.value = 'Kubernetes'; // …and the user keeps typing
+    title.dispatchEvent(new Event('input'));
+    save.flush(course({ title: 'Kube', version: 4 }));
+    TestBed.tick(); // effects + change detection, still under the fake clock
+
+    expect(title.value).toBe('Kubernetes'); // ⭐ not reverted to the saved "Kube"
+    vi.advanceTimersByTime(800);
+    expect(http.expectOne(`${base}/details`).request.body).toEqual(
+      expect.objectContaining({ expectedVersion: 4, title: 'Kubernetes' }),
+    );
+  });
+
   it('shows the conflict dialog when another tab saved first, then reloads', async () => {
     vi.useFakeTimers();
     const title = query<HTMLInputElement>(fixture, '[data-testid="title"]');

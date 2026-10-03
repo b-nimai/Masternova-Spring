@@ -56,8 +56,12 @@ public sealed interface CurriculumCommand {
     return true;
   }
 
-  /** The same command with any missing ids generated (so a redo recreates the same rows). */
-  default CurriculumCommand withIds() {
+  /**
+   * The same command with SERVER-assigned ids for anything it creates. ⭐ A client never chooses an
+   * id: one copied from another course would only fail on the primary key at commit (found in
+   * review). The ids are then stored with the command, so a redo recreates the same rows.
+   */
+  default CurriculumCommand withServerIds() {
     return this;
   }
 
@@ -69,8 +73,8 @@ public sealed interface CurriculumCommand {
     }
 
     @Override
-    public CurriculumCommand withIds() {
-      return sectionId != null ? this : new AddSection(UUID.randomUUID(), title);
+    public CurriculumCommand withServerIds() {
+      return new AddSection(UUID.randomUUID(), title);
     }
 
     @Override
@@ -161,11 +165,9 @@ public sealed interface CurriculumCommand {
     }
 
     @Override
-    public CurriculumCommand withIds() {
-      return lectureId != null
-          ? this
-          : new AddLecture(
-              UUID.randomUUID(), sectionId, title, lectureKind, preview, durationSeconds);
+    public CurriculumCommand withServerIds() {
+      return new AddLecture(
+          UUID.randomUUID(), sectionId, title, lectureKind, preview, durationSeconds);
     }
 
     @Override
