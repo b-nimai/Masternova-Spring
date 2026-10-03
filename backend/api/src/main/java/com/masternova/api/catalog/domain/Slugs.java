@@ -23,8 +23,8 @@ public final class Slugs {
         Normalizer.normalize(title, Normalizer.Form.NFD) // "é" → "e" + accent…
             .replaceAll("\\p{M}", "") // …drop the accent
             .toLowerCase(Locale.ROOT)
-            .replaceAll("[^a-z0-9]+", "-")
-            .replaceAll("(^-+|-+$)", "");
+            .replaceAll("[^a-z0-9]+", "-");
+    base = trimDashes(base);
     return withSuffix(base.isEmpty() ? "course" : base);
   }
 
@@ -39,7 +39,24 @@ public final class Slugs {
       suffix.append(ALPHABET.charAt(ThreadLocalRandom.current().nextInt(ALPHABET.length())));
     }
     int room = MAX - SUFFIX;
-    String trimmed = base.length() > room ? base.substring(0, room).replaceAll("-+$", "") : base;
+    String trimmed = base.length() > room ? trimDashes(base.substring(0, room)) : base;
     return trimmed + suffix;
+  }
+
+  /**
+   * Strips leading and trailing dashes with a linear scan. ⭐ Not {@code replaceAll("-+$", "")}: an
+   * anchored {@code -+$} on user input backtracks from every dash (polynomial ReDoS, flagged by
+   * CodeQL), so a title of many dashes would burn CPU. Two index walks are O(n).
+   */
+  static String trimDashes(String text) {
+    int start = 0;
+    int end = text.length();
+    while (start < end && text.charAt(start) == '-') {
+      start++;
+    }
+    while (end > start && text.charAt(end - 1) == '-') {
+      end--;
+    }
+    return text.substring(start, end);
   }
 }

@@ -11,6 +11,7 @@ public sealed interface Edit {
   Edit applyTo(Outline outline);
 
   record Add(int index, String title) implements Edit {
+    @Override
     public Edit applyTo(Outline o) {
       o.insert(index, title);
       return new Remove(index);
@@ -18,6 +19,7 @@ public sealed interface Edit {
   }
 
   record Remove(int index) implements Edit {
+    @Override
     public Edit applyTo(Outline o) {
       String removed = o.removeAt(index); // ⭐ captured now; gone after this line
       return new Add(index, removed);
@@ -25,6 +27,7 @@ public sealed interface Edit {
   }
 
   record Rename(int index, String title) implements Edit {
+    @Override
     public Edit applyTo(Outline o) {
       String before = o.titleAt(index);
       o.rename(index, title);

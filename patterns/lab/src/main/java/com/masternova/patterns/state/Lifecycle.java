@@ -149,6 +149,7 @@ public final class Lifecycle {
   }
 
   public record Draft() implements State {
+    @Override
     public Status status() {
       return Status.DRAFT;
     }
@@ -160,6 +161,7 @@ public final class Lifecycle {
   }
 
   public record InReview() implements State {
+    @Override
     public Status status() {
       return Status.IN_REVIEW;
     }
@@ -171,12 +173,14 @@ public final class Lifecycle {
   }
 
   public record Published() implements State {
+    @Override
     public Status status() {
       return Status.PUBLISHED;
     }
   }
 
   public record Archived() implements State {
+    @Override
     public Status status() {
       return Status.ARCHIVED;
     }
