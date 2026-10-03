@@ -116,7 +116,7 @@ class CourseSpecificationsIT {
             .rated("3.9", 10)
             .published(NOW)
             .build());
-    Course inReview =
+    em.persist(
         aCourse()
             .slug("figma-review")
             .title("Figma for 100 days")
@@ -124,13 +124,9 @@ class CourseSpecificationsIT {
             .level(CourseLevel.ALL_LEVELS)
             .priced(19900)
             .by(raviKumar)
-            .build();
-    em.persist(inReview);
+            .submitted() // the real DRAFT → IN_REVIEW transition (Phase 6.2)
+            .build());
     em.flush();
-    em.getEntityManager()
-        .createNativeQuery("UPDATE course SET status = 'IN_REVIEW' WHERE id = ?1")
-        .setParameter(1, inReview.id())
-        .executeUpdate(); // Phase 6 adds the real submit transition
     em.clear();
   }
 

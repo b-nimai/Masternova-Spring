@@ -122,10 +122,13 @@ class CourseTest {
   }
 
   @Test
-  void publishStampsTheSortKeyOnce() {
-    Course course = draft("k8s-zero", "en");
-    course.publish(NOW);
-    course.publish(NOW.plusSeconds(3600)); // a re-publish doesn't move the sort key
+  void publishStampsTheSortKeyOnceAndARepublishKeepsIt() {
+    Course course =
+        aCourse().createdAt(NOW).published(NOW).build(); // DRAFT → IN_REVIEW → PUBLISHED
+
+    course.transition(CourseAction.UNPUBLISH, NOW.plusSeconds(60));
+    course.transition(CourseAction.SUBMIT, NOW.plusSeconds(120));
+    course.transition(CourseAction.PUBLISH, NOW.plusSeconds(3600));
 
     assertThat(course.isPublished()).isTrue();
     assertThat(course.publishedAt()).contains(Instant.parse("2026-10-02T10:15:30.123456Z"));

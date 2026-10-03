@@ -24,10 +24,12 @@ public class CourseDuplicationService {
   private static final String ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 
   private final CourseRepository courses;
+  private final CourseAccess access;
   private final Clock clock;
 
-  CourseDuplicationService(CourseRepository courses, Clock clock) {
+  CourseDuplicationService(CourseRepository courses, CourseAccess access, Clock clock) {
     this.courses = courses;
+    this.access = access;
     this.clock = clock;
   }
 
@@ -43,24 +45,12 @@ public class CourseDuplicationService {
   @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
   @Transactional
   public Course duplicate(UUID courseId, Viewer actor) {
-    Course source =
-        courses
-            .findWithCurriculumById(courseId)
-            .filter(course -> mayDuplicate(actor, course))
-            .orElseThrow(() -> new NotFoundException("Course", courseId));
+    Course source = access.forAuthoring(courseId, actor);
 
     Course copy = source.duplicateAsDraft(copySlug(source.slug()), clock.instant());
     // ⭐ one save: cascade = ALL inserts the course, its sections and their lectures, all in this
     //    transaction — a half-copied course is never visible
     return courses.save(copy);
-  }
-
-  private static boolean mayDuplicate(Viewer actor, Course course) {
-    return switch (actor) {
-      case Viewer.Admin _ -> true;
-      case Viewer.Member(UUID id) -> course.isOwnedBy(id);
-      case Viewer.Anonymous _ -> false;
-    };
   }
 
   /**

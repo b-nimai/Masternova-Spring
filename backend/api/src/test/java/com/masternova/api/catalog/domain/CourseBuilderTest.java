@@ -29,7 +29,8 @@ class CourseBuilderTest {
   void aBuiltCurriculumKeepsTheAggregatesRollups() {
     Course course =
         aCourse()
-            .withSection("Intro", aLecture("Welcome").seconds(90), aLecture("Notes").article())
+            .withSection(
+                "Intro", aLecture("Welcome").preview().seconds(90), aLecture("Notes").article())
             .withCurriculum(2, 3)
             .published(Instant.parse("2026-10-02T10:00:00Z"))
             .build();

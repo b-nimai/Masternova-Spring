@@ -289,6 +289,8 @@ sequenceDiagram
 
 | Level | Test | Proves |
 |---|---|---|
+| unit (no Spring) | `CourseStateTest` | **every (state, action) pair** (20) legal or illegal exactly as drawn; no `DRAFT → PUBLISHED`; only ARCHIVED refuses edits; an incomplete submit lists every problem and moves nothing; archive needs no gate and is terminal; a transition touches the root |
+| ⭐ HTTP + Postgres | `CourseLifecycleIT` | readiness checklist; 422 `COURSE_NOT_READY` with coded problems; submit → withdraw; **only an ADMIN publishes** (instructor 403, no author route); publishing bumps `version` and puts the course in the storefront; `ILLEGAL_TRANSITION` names the edge; archive hides and is terminal; another's course 404, learner 403; **a transition on a stale copy is rejected by `@Version`** |
 | unit (no Spring) | `PublishGateTest` | a complete course has no problems; each failing example breaks exactly its own rule; **every requirement code has a failing example** (a rule without a test fails the build); the checklist lists every rule in order; free is a decided price |
 
 ## 11. Interview notes — 60-second recall

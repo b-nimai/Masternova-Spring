@@ -61,7 +61,7 @@ The catalog is checked by tests, so it can't go stale:
 | # | Pattern | Type | Where in Masternova | Real class | Note | Lab | Status |
 |---|---------|------|---------------------|------------|------|-----|--------|
 | 1 | Strategy | Behavioral | Payment providers (Phase 9) · ABR transcode ladder (Phase 7) · Spring's own: `DelegatingPasswordEncoder` picks the hashing algorithm by the `{id}` prefix (Phase 3) · Google sign-in as a second auth method (3.6, deferred) | — | [note](docs/01-strategy.md) | [lab](lab/src/main/java/com/masternova/patterns/strategy/) | 🔨 |
-| 2 | State | Behavioral | Course lifecycle (Phase 6) · order state machine (Phase 9) · upload session (Phase 7) | — | — | — | ☐ |
+| 2 | State | Behavioral | Course lifecycle: sealed `CourseState`, default methods throw, each state overrides only its legal events (5 overrides = the diagram); gated edges re-run the publish gate (Phase 6) · upload session (Phase 7) · order state machine (Phase 9) | `com.masternova.api.catalog.domain.CourseState` | [note](docs/02-state.md) | [lab](lab/src/main/java/com/masternova/patterns/state/) | ✅ |
 | 3 | Chain of Responsibility | Behavioral | Entitlement policy chain, explicit DENY wins (Phase 8) · Spring's own: the `SecurityFilterChain` (bearer-token filter → authorization), fed by every module's `PublicEndpoints` (Phase 3) · Angular's `HttpInterceptorFn` chain (Phase 3) | — | — | — | ☐ |
 | 4 | Command | Behavioral | Undoable curriculum edits (Phase 6) | — | — | — | ☐ |
 | 5 | Memento | Behavioral | Snapshot/restore for curriculum undo (Phase 6) | — | — | — | ☐ |

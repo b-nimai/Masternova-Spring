@@ -120,7 +120,7 @@ Phases are listed **in the order you do them**.
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
-| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 2 | 22 h | ~2.5 h | 🔨 |
+| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 3 | 22 h | ~5 h | 🔨 |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **69** | **~326 h** | ~115.5 h | |
+| | **Total** | **137** | **70** | **~326 h** | ~118 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -315,7 +315,7 @@ concurrent edits.
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
 | 6.1 | [`docs/lld/catalog-authoring.md`](docs/lld/catalog-authoring.md) (§1–§9: state diagram + who may move, coded publish gate, commands with stored inverses, "the root's version covers the aggregate", deferrable position constraints instead of NestJS's park-negative trick) + [ADR-0010](docs/adr/0010-optimistic-concurrency-with-version.md) (`@Version` + `expectedVersion`) | — | — | — | 1.5 h | ✅ | 2026-10-03 |
-| 6.2 | Course lifecycle Draft → InReview → Published → Archived | `sealed interface CourseState`, exhaustive `switch` | — | **State** | 3 h | ☐ | |
+| 6.2 | Course lifecycle: sealed `CourseState` (records; default methods throw `ILLEGAL_TRANSITION`, each state overrides only its legal events), `Course.transition` (gate on submit/publish → 422 `COURSE_NOT_READY` with codes, `publishedAt` once, version bump); `CourseLifecycleService` (thin: who + load), `CourseAccess` (owner or admin, else 404); `POST /instructor/courses/{id}/{submit\|withdraw\|unpublish\|archive}`, `GET …/readiness`, `POST /admin/courses/{id}/publish` (ADMIN). The Phase 5 `publish()` placeholder is gone: the builder now goes through the real transitions. `CourseStateTest` (all 20 pairs), `CourseLifecycleIT` (incl. stale copy → `@Version`). [Pattern note 02](patterns/docs/02-state.md) + lab (3 styles compared) | `sealed interface CourseState`, default methods, exhaustive `switch`, `@Version` on transitions | — | **State**: catalog row 2 | 3 h | ✅ | 2026-10-03 |
 | 6.3 | *(done before 6.2: the state machine's gated edges need it)* Publish gate: `PublishGate` = AND of 6 coded `PublishRequirement`s (description, price decided, sections, no empty section, ≥ 3 lectures, a preview) that **collects** failures: `evaluate` → checklist, `problems` → 422. `course.price_set_at` (`V10`) tells free from undecided; `Course.touch()` makes the root's version cover the aggregate. `PublishGateTest`: every code must have a failing example. Pattern note 08 §3b | composition of predicates, `Predicate<T>`, parameterised tests | — | **Specification** (explainable) | 2 h | ✅ | 2026-10-03 |
 | 6.4 | Curriculum edits as commands (add/move/rename/delete section/lecture) with apply + invert | sealed records, Jackson `@JsonTypeInfo` polymorphism | — | **Command** | 4 h | ☐ | |
 | 6.5 | Undo/redo: snapshot stack vs inverse commands; build both, keep one, record why | deep copies, `Deque` | — | **Memento** | 2.5 h | ☐ | |

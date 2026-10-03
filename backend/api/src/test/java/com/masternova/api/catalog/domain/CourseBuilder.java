@@ -42,7 +42,8 @@ public final class CourseBuilder {
   private String slug = "course-" + SEQUENCE.incrementAndGet();
   private String title;
   private String subtitle;
-  private String description = "A course built by a test.";
+  private String description =
+      "A course built by a test: long enough to pass the publish gate's description rule.";
   private CourseLevel level = CourseLevel.BEGINNER;
   private String language = "en";
   private Money price = Money.zero("INR");
@@ -50,7 +51,8 @@ public final class CourseBuilder {
   private Category category;
   private Instructor instructor = new Instructor(UUID.randomUUID(), "Test Instructor");
   private Instant createdAt = DEFAULT_TIME;
-  private Instant publishedAt; // null = stays a draft
+  private Instant publishedAt; // null = not published
+  private boolean submitted; // IN_REVIEW
   private BigDecimal ratingAverage;
   private int ratingCount;
   private final List<SectionSpec> sections = new ArrayList<>();
@@ -136,6 +138,12 @@ public final class CourseBuilder {
     return published(createdAt);
   }
 
+  /** Submitted for review (IN_REVIEW), through the real transition. */
+  public CourseBuilder submitted() {
+    this.submitted = true;
+    return this;
+  }
+
   public CourseBuilder rated(String average, int count) {
     this.ratingAverage = new BigDecimal(average);
     this.ratingCount = count;
@@ -185,10 +193,29 @@ public final class CourseBuilder {
     if (ratingAverage != null) {
       course.updateRatingSummary(ratingAverage, ratingCount);
     }
-    if (publishedAt != null) {
-      course.publish(publishedAt);
+    if (submitted || publishedAt != null) {
+      Instant at = publishedAt != null ? publishedAt : createdAt;
+      if (sections.isEmpty()) {
+        addMinimalCurriculum(course); // a course can only reach review with a real curriculum
+      }
+      // ⭐ through the REAL lifecycle: DRAFT → IN_REVIEW → PUBLISHED, gate included. A test that
+      //    asks for a published course with an incomplete curriculum fails loudly here.
+      course.transition(CourseAction.SUBMIT, at);
+      if (publishedAt != null) {
+        course.transition(CourseAction.PUBLISH, at);
+      }
     }
     return course;
+  }
+
+  /** The smallest curriculum the publish gate accepts: 3 lectures, one of them a preview. */
+  private static void addMinimalCurriculum(Course course) {
+    Section section = course.addSection("Getting started");
+    course.addLecture(
+        section, "Welcome", LectureKind.VIDEO, true, LectureDuration.ofSeconds(60), null);
+    course.addLecture(
+        section, "Setup", LectureKind.VIDEO, false, LectureDuration.ofSeconds(60), null);
+    course.addLecture(section, "Notes", LectureKind.ARTICLE, false, LectureDuration.ZERO, null);
   }
 
   private record SectionSpec(String title, List<LectureBuilder> lectures) {}

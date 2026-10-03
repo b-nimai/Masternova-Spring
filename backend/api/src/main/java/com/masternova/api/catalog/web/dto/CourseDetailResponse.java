@@ -33,6 +33,8 @@ public record CourseDetailResponse(
     String instructorName,
     CategoryRef category,
     Instant publishedAt,
+    boolean priceSet,
+    long version,
     List<SectionResponse> sections) {
 
   public record SectionResponse(String id, String title, List<LectureResponse> lectures) {
@@ -70,6 +72,8 @@ public record CourseDetailResponse(
         c.instructor().name(),
         CategoryRef.from(c.category()),
         c.publishedAt().orElse(null),
+        c.priceSetAt().isPresent(),
+        c.version() == null ? 0 : c.version(), // ⭐ editors send it back as expectedVersion
         c.sections().stream().map(SectionResponse::from).toList());
   }
 }

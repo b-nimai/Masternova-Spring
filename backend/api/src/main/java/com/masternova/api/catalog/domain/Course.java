@@ -1,5 +1,7 @@
 package com.masternova.api.catalog.domain;
 
+import com.masternova.api.platform.ConflictException;
+import com.masternova.api.platform.RuleViolationException;
 import com.masternova.kernel.money.Money;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
@@ -25,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -271,20 +274,45 @@ public class Course {
         : title.substring(0, 120 - suffix.length()) + suffix;
   }
 
-  // ------------------------------------------------------------------ lifecycle (Phase 5 subset)
+  // ------------------------------------------------------------------ lifecycle (State)
+
+  /** The State object for the persisted status (docs/lld/catalog-authoring.md §3). */
+  public CourseState state() {
+    return CourseState.of(status);
+  }
 
   /**
-   * Publishes the course. Phase 5 needs published courses to browse (seed data, tests); Phase 6
-   * replaces this with the State pattern and the publish gate. Nothing can archive a course before
-   * then, so there's no transition to guard yet. The one rule kept now: {@code publishedAt} is
-   * stamped on the FIRST publish and never moves (it's the NEWEST sort key).
+   * Moves the course through its lifecycle.
+   *
+   * <ol>
+   *   <li>The STATE decides whether the action is legal from here ({@code ILLEGAL_TRANSITION}).
+   *   <li>Submit and publish re-run the PUBLISH GATE against the course AS IT IS NOW — a course
+   *       edited while waiting in review is checked again ({@code COURSE_NOT_READY}, 422).
+   *   <li>{@code publishedAt} is stamped on the first publish and never moves.
+   *   <li>{@code touch} bumps the version, so every open editor tab becomes stale.
+   * </ol>
    */
-  public void publish(Instant now) {
-    status = CourseStatus.PUBLISHED;
-    if (publishedAt == null) {
+  public void transition(CourseAction action, Instant now) {
+    CourseStatus next = state().on(action);
+    if (action.isGated()) {
+      List<PublishCheck> problems = PublishGate.problems(this);
+      if (!problems.isEmpty()) {
+        throw new RuleViolationException(
+            "COURSE_NOT_READY", "The course isn't ready yet.", Map.of("problems", problems));
+      }
+    }
+    status = next;
+    if (next == CourseStatus.PUBLISHED && publishedAt == null) {
       publishedAt = micros(now);
     }
-    updatedAt = micros(now);
+    touch(now);
+  }
+
+  /** Content writes go through this: an archived course is read-only. */
+  void requireEditable() {
+    if (!state().acceptsEdits()) {
+      throw new ConflictException("COURSE_ARCHIVED", "An archived course can't be changed.");
+    }
   }
 
   // ------------------------------------------------------------------ pricing
