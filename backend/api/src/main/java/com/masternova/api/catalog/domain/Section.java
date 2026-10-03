@@ -13,6 +13,7 @@ import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.hibernate.annotations.BatchSize;
 
@@ -39,7 +40,13 @@ public class Section {
   // ⭐ @BatchSize: when ONE section's lectures are touched, Hibernate loads the lectures of up to
   //    64 sections in that persistence context with ONE "WHERE section_id IN (…)" query. That turns
   //    the curriculum's N+1 (a query per section) into 1. Note 12 §5.
-  @OneToMany(mappedBy = "section", cascade = CascadeType.ALL, orphanRemoval = true)
+  //
+  // ⭐ NO orphanRemoval here (on purpose, found by CurriculumIT): moving a lecture to another
+  //    section takes it out of THIS list, and orphanRemoval would DELETE it at flush even though it
+  //    was just added to the other section (JPA calls re-parenting an orphan non-portable). An
+  //    explicit removal goes through Course.removeLecture → CurriculumCleanup instead. Removing a
+  //    whole section still deletes its lectures: cascade = ALL includes REMOVE.
+  @OneToMany(mappedBy = "section", cascade = CascadeType.ALL)
   @OrderBy("position")
   @BatchSize(size = 64)
   private List<Lecture> lectures = new ArrayList<>();
@@ -58,7 +65,11 @@ public class Section {
   }
 
   Section(Course course, String title, int position) {
-    this.id = UUID.randomUUID();
+    this(UUID.randomUUID(), course, title, position);
+  }
+
+  Section(UUID id, Course course, String title, int position) {
+    this.id = Objects.requireNonNull(id, "id");
     this.course = course;
     this.title = Lecture.requireTitle(title);
     this.position = position;
@@ -69,6 +80,52 @@ public class Section {
     Lecture lecture = new Lecture(this, title, kind, lectures.size(), preview, duration, assetId);
     lectures.add(lecture);
     return lecture;
+  }
+
+  // ------------------------------------------------------------------ curriculum operations
+  // Package-private: only Course (the root) calls them, and it keeps the rollups and version right.
+
+  void rename(String newTitle) {
+    title = Lecture.requireTitle(newTitle);
+  }
+
+  void placeAt(int newPosition) {
+    position = newPosition;
+  }
+
+  java.util.Optional<Lecture> lecture(UUID lectureId) {
+    return lectures.stream().filter(l -> l.id().equals(lectureId)).findFirst();
+  }
+
+  int indexOf(Lecture lecture) {
+    return lectures.indexOf(lecture);
+  }
+
+  /** Inserts at {@code index} (clamped into range) and renumbers. */
+  void insert(Lecture lecture, int index) {
+    lectures.add(Math.clamp(index, 0, lectures.size()), lecture);
+    renumber();
+  }
+
+  /** Takes a lecture out of this section's list (MOVE or REMOVE) and renumbers the rest. */
+  void detach(Lecture lecture) {
+    lectures.remove(lecture);
+    renumber();
+  }
+
+  /**
+   * ⭐ Positions are always 0..n-1 in list order. Renumbering row by row makes two rows share a
+   * position for a moment; the UNIQUE constraint is DEFERRABLE INITIALLY DEFERRED (V11), so it's
+   * checked at commit, when every row has its final position.
+   */
+  private void renumber() {
+    for (int i = 0; i < lectures.size(); i++) {
+      lectures.get(i).placeIn(this, i);
+    }
+  }
+
+  SectionSnapshot snapshot() {
+    return new SectionSnapshot(id, title, lectures.stream().map(Lecture::snapshot).toList());
   }
 
   public UUID id() {

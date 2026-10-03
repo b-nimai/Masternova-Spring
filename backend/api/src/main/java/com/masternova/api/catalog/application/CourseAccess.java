@@ -42,7 +42,11 @@ class CourseAccess {
    * at flush.
    */
   Course forEditing(UUID courseId, Viewer actor, long expectedVersion) {
-    Course course = forAuthoring(courseId, actor);
+    courses
+        .lockById(courseId) // ⭐ first: serialises this course's editors (see CourseRepository)
+        .filter(c -> mayAuthor(actor, c))
+        .orElseThrow(() -> new NotFoundException("Course", courseId));
+    Course course = forAuthoring(courseId, actor); // same instance, now with its curriculum
     course.requireEditable();
     if (course.version() != expectedVersion) {
       throw ConflictException.versionConflict(expectedVersion, course.version());

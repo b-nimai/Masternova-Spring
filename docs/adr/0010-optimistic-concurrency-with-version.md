@@ -41,6 +41,17 @@ cover the whole aggregate, not just the `course` row.
   - Every content write touches the course row, so edits to one course serialise on it. Fine for
     one instructor's course; it would matter only for a document edited by many people at once.
 
+## Addendum (6.4, 2026-10-03): the edit transaction locks the course row first
+
+`CurriculumIT` found a **deadlock** with 10 concurrent edits of one version. Each transaction
+inserted its section row first (Hibernate flushes inserts before the versioned `UPDATE course`).
+Under the deferred position constraint, T1 waited at commit on T2's uncommitted row while T2 waited
+on T1's course-row lock. Every content write now begins with `CourseRepository.lockById`
+(`SELECT … FOR UPDATE` on the course row), the same lesson as the NestJS "claim is the first
+statement". The lock lasts the edit's few milliseconds, never a user's think time: the second editor
+waits, then sees the new version and gets the clean 409. Result: 10 concurrent → 1 winner, 9 × 409,
+no deadlock.
+
 ## Alternatives rejected
 
 | Option | Why not |

@@ -15,7 +15,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | 3 | Optimistic concurrency on content writes | ✅ Phase 6 |
 | 4 | `Idempotency-Key` on unsafe, unversioned writes | ✅ Phase 2.6 |
 | 5 | Money in minor units + currency | ✅ Phase 5 |
-| 6 | Commands as request bodies (sealed union) | Phase 6 |
+| 6 | Commands as request bodies (sealed union) | ✅ Phase 6 |
 | 7 | 64-bit integers as strings | Phase 7 |
 | 8 | Client-driven uploads return a plan, not a stream | Phase 7 |
 | 9 | Long-running work streams over SSE | Phase 7 |
@@ -142,6 +142,13 @@ Curriculum edits are `POST …/curriculum` with a discriminated union on `kind`.
 a `sealed interface CurriculumCommand` with record implementations, and Jackson polymorphism
 uses `@JsonTypeInfo(property = "kind")`. Adding an edit type adds a record, not a route, and
 each command is storable and invertible, which is what makes undo possible.
+
+**Implemented in Phase 6** (`CurriculumCommand`, `POST /api/v1/instructor/courses/{id}/curriculum`):
+`{"expectedVersion": 7, "command": {"kind": "ADD_LECTURE", "sectionId": "…", "title": "…",
+"lectureKind": "ARTICLE"}}`. Kinds: `ADD_SECTION`, `RENAME_SECTION`, `REORDER_SECTIONS` (the whole
+order), `REMOVE_SECTION`, `ADD_LECTURE`, `UPDATE_LECTURE`, `MOVE_LECTURE`, `REMOVE_LECTURE`.
+`RESTORE_*` are server-only (400 `NOT_A_CLIENT_COMMAND`). Omitted ids are generated. A field is
+never named `kind` (that's the discriminator).
 
 ## 7. 64-bit integers as strings
 

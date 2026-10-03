@@ -73,7 +73,19 @@ public class Lecture {
       boolean preview,
       LectureDuration duration,
       UUID assetId) {
-    this.id = UUID.randomUUID();
+    this(UUID.randomUUID(), section, title, kind, position, preview, duration, assetId);
+  }
+
+  Lecture(
+      UUID id,
+      Section section,
+      String title,
+      LectureKind kind,
+      int position,
+      boolean preview,
+      LectureDuration duration,
+      UUID assetId) {
+    this.id = Objects.requireNonNull(id, "id");
     this.section = section;
     this.title = requireTitle(title);
     this.kind = Objects.requireNonNull(kind, "kind");
@@ -81,6 +93,34 @@ public class Lecture {
     this.preview = preview;
     this.duration = Objects.requireNonNull(duration, "duration");
     this.assetId = assetId;
+  }
+
+  /** Brings a removed lecture back, same id (the Memento's restore). */
+  static Lecture restore(Section section, LectureSnapshot s, int position) {
+    return new Lecture(
+        s.id(),
+        section,
+        s.title(),
+        s.kind(),
+        position,
+        s.preview(),
+        LectureDuration.ofSeconds(s.durationSeconds()),
+        s.assetId());
+  }
+
+  LectureSnapshot snapshot() {
+    return new LectureSnapshot(id, title, kind, preview, duration.seconds(), assetId);
+  }
+
+  void update(String newTitle, boolean newPreview) {
+    title = requireTitle(newTitle);
+    preview = newPreview;
+  }
+
+  /** Re-parents the lecture (MOVE_LECTURE); the owning side, so this is what JPA writes. */
+  void placeIn(Section newSection, int newPosition) {
+    section = newSection;
+    position = newPosition;
   }
 
   static String requireTitle(String title) {

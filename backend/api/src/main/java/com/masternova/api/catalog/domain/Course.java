@@ -1,7 +1,9 @@
 package com.masternova.api.catalog.domain;
 
 import com.masternova.api.platform.ConflictException;
+import com.masternova.api.platform.NotFoundException;
 import com.masternova.api.platform.RuleViolationException;
+import com.masternova.api.platform.ValidationException;
 import com.masternova.kernel.money.Money;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
@@ -19,6 +21,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -30,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -148,6 +152,9 @@ public class Course {
   @OrderBy("position")
   private List<Section> sections = new ArrayList<>();
 
+  /** Lectures removed in this unit of work, deleted by {@link CurriculumCleanup} (see Section). */
+  @Transient private final List<Lecture> removedLectures = new ArrayList<>();
+
   protected Course() {} // for Hibernate
 
   /**
@@ -255,6 +262,155 @@ public class Course {
     lectureCount++;
     totalDuration = totalDuration.plus(duration);
     return lecture;
+  }
+
+  // ------------------------------------------------------------------ curriculum editing (6.4)
+  // The operations CurriculumCommands are made of. Each one returns what its INVERSE needs, and
+  // every one ends in recomputeRollups(): recomputing a few dozen rows can't drift, a delta can.
+
+  /**
+   * ⭐ Applies one curriculum command and returns the command that undoes it. The one entry point
+   * for edits, so none can skip the checks or the version bump.
+   */
+  public CurriculumCommand apply(CurriculumCommand command, Instant now) {
+    requireEditable();
+    CurriculumCommand inverse = command.applyTo(this);
+    recomputeRollups();
+    touch(now);
+    return inverse;
+  }
+
+  /** The lectures removed in this unit of work, for the repository to delete. */
+  public List<Lecture> removedLectures() {
+    return List.copyOf(removedLectures);
+  }
+
+  public void forgetRemovedLectures() {
+    removedLectures.clear();
+  }
+
+  Section section(UUID sectionId) {
+    return sections.stream()
+        .filter(s -> s.id().equals(sectionId))
+        .findFirst()
+        .orElseThrow(() -> new NotFoundException("Section", sectionId)); // never "someone else's"
+  }
+
+  Lecture lecture(UUID lectureId) {
+    return sections.stream()
+        .flatMap(s -> s.lecture(lectureId).stream())
+        .findFirst()
+        .orElseThrow(() -> new NotFoundException("Lecture", lectureId));
+  }
+
+  Section addSection(UUID sectionId, String title) {
+    if (sections.stream().anyMatch(s -> s.id().equals(sectionId))) {
+      throw new ConflictException("DUPLICATE_ID", "That section already exists.");
+    }
+    Section section = new Section(sectionId, this, title, sections.size());
+    sections.add(section);
+    return section;
+  }
+
+  void renameSection(UUID sectionId, String title) {
+    section(sectionId).rename(title);
+  }
+
+  List<UUID> sectionOrder() {
+    return sections.stream().map(Section::id).toList();
+  }
+
+  /** ⭐ The WHOLE new order, validated as a permutation: two tabs can't produce a half-order. */
+  void reorderSections(List<UUID> order) {
+    if (order.size() != sections.size() || !Set.copyOf(order).equals(Set.copyOf(sectionOrder()))) {
+      throw ValidationException.of(
+          "order", "NOT_A_PERMUTATION", "Send every section id of this course exactly once.");
+    }
+    sections.sort(java.util.Comparator.comparingInt(s -> order.indexOf(s.id())));
+    renumberSections();
+  }
+
+  SectionSnapshot removeSection(UUID sectionId) {
+    Section section = section(sectionId);
+    SectionSnapshot snapshot = section.snapshot(); // ⭐ the Memento, captured BEFORE the delete
+    sections.remove(section); // orphanRemoval deletes it; cascade deletes its lectures
+    renumberSections();
+    return snapshot;
+  }
+
+  void restoreSection(SectionSnapshot snapshot, int position) {
+    Section section = new Section(snapshot.id(), this, snapshot.title(), 0);
+    for (int i = 0; i < snapshot.lectures().size(); i++) {
+      section.insert(Lecture.restore(section, snapshot.lectures().get(i), i), i);
+    }
+    sections.add(Math.clamp(position, 0, sections.size()), section);
+    renumberSections();
+  }
+
+  int positionOf(UUID sectionId) {
+    return sections.indexOf(section(sectionId));
+  }
+
+  Lecture addLecture(
+      UUID lectureId,
+      UUID sectionId,
+      String title,
+      LectureKind kind,
+      boolean preview,
+      LectureDuration duration) {
+    if (sections.stream().anyMatch(s -> s.lecture(lectureId).isPresent())) {
+      throw new ConflictException("DUPLICATE_ID", "That lecture already exists.");
+    }
+    Section section = section(sectionId);
+    Lecture lecture =
+        new Lecture(
+            lectureId, section, title, kind, section.lectures().size(), preview, duration, null);
+    section.insert(lecture, section.lectures().size());
+    return lecture;
+  }
+
+  /** Where a lecture is: what MOVE and REMOVE need to put it back. */
+  record Place(UUID sectionId, int position) {}
+
+  Place placeOf(UUID lectureId) {
+    Lecture lecture = lecture(lectureId);
+    return new Place(lecture.section().id(), lecture.section().indexOf(lecture));
+  }
+
+  void updateLecture(UUID lectureId, String title, boolean preview) {
+    lecture(lectureId).update(title, preview);
+  }
+
+  void moveLecture(UUID lectureId, UUID toSectionId, int toPosition) {
+    Lecture lecture = lecture(lectureId);
+    Section target = section(toSectionId);
+    lecture.section().detach(lecture);
+    target.insert(lecture, toPosition); // re-parents it: the owning side changes section_id
+  }
+
+  LectureSnapshot removeLecture(UUID lectureId) {
+    Lecture lecture = lecture(lectureId);
+    LectureSnapshot snapshot = lecture.snapshot(); // the Memento, before the delete
+    lecture.section().detach(lecture);
+    removedLectures.add(lecture); // deleted explicitly by CurriculumCleanup (no orphanRemoval)
+    return snapshot;
+  }
+
+  void restoreLecture(LectureSnapshot snapshot, UUID sectionId, int position) {
+    Section section = section(sectionId);
+    section.insert(Lecture.restore(section, snapshot, position), position);
+  }
+
+  private void renumberSections() {
+    for (int i = 0; i < sections.size(); i++) {
+      sections.get(i).placeAt(i);
+    }
+  }
+
+  private void recomputeRollups() {
+    List<Lecture> all = sections.stream().flatMap(s -> s.lectures().stream()).toList();
+    lectureCount = all.size();
+    totalDuration = LectureDuration.total(all.stream().map(Lecture::duration).toList());
   }
 
   // ------------------------------------------------------------------ duplication (Prototype)
