@@ -287,7 +287,9 @@ sequenceDiagram
 
 ## 10. Tests that prove it
 
-*(filled in as the tasks land)*
+| Level | Test | Proves |
+|---|---|---|
+| unit (no Spring) | `PublishGateTest` | a complete course has no problems; each failing example breaks exactly its own rule; **every requirement code has a failing example** (a rule without a test fails the build); the checklist lists every rule in order; free is a decided price |
 
 ## 11. Interview notes — 60-second recall
 

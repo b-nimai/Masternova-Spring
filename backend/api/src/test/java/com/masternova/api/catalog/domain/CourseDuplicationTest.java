@@ -62,6 +62,7 @@ class CourseDuplicationTest {
     assertThat(copy.description()).isEqualTo(source.description());
     assertThat(copy.level()).isEqualTo(CourseLevel.INTERMEDIATE);
     assertThat(copy.price()).isEqualTo(source.price());
+    assertThat(copy.priceSetAt()).isEqualTo(source.priceSetAt()); // the pricing decision is content
     assertThat(copy.instructor()).isEqualTo(source.instructor());
     assertThat(copy.category()).isSameAs(source.category()); // another aggregate: referenced
     assertThat(copy.sections()).extracting(Section::title).containsExactly("Intro", "Core");

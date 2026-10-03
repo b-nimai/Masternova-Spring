@@ -97,6 +97,13 @@ public class Course {
       column = @Column(name = "currency", nullable = false, length = 3))
   private Money price;
 
+  /**
+   * When pricing was confirmed. ⭐ Separate from the price because {@code 0} can't tell "free" from
+   * "nobody has decided yet" — and the publish gate needs to know which (PRICE_NOT_SET).
+   */
+  @Column(name = "price_set_at")
+  private Instant priceSetAt;
+
   @Column(name = "instructor_id", nullable = false)
   private UUID instructorId; // an id, not a @ManyToOne User: identity's entity is not ours to map
 
@@ -160,6 +167,7 @@ public class Course {
     this.language = source.language;
     this.level = source.level;
     this.price = source.price; // ⭐ immutable value object: sharing the reference IS a copy
+    this.priceSetAt = source.priceSetAt; // the pricing decision is content: it's copied too
     this.category = source.category; // another aggregate: referenced, never copied
     this.instructorId = source.instructorId; // the copy stays with the course's instructor
     this.instructorName = source.instructorName;
@@ -279,6 +287,24 @@ public class Course {
     updatedAt = micros(now);
   }
 
+  // ------------------------------------------------------------------ pricing
+
+  /** Confirms the price (free or paid): the decision the publish gate waits for. */
+  public void confirmPrice(Money newPrice, Instant now) {
+    price = requireCatalogCurrency(newPrice);
+    priceSetAt = micros(now);
+    touch(now);
+  }
+
+  /**
+   * ⭐ Marks the ROOT as changed. JPA bumps {@code @Version} only when the course row itself is
+   * updated; a lecture rename updates only the lecture row. Every mutation through the root calls
+   * this, so the course's version covers the whole aggregate (ADR-0010).
+   */
+  void touch(Instant now) {
+    updatedAt = micros(now);
+  }
+
   /** The rating summary is owned by engagement (Phase 11); catalog stores it to sort by it. */
   public void updateRatingSummary(BigDecimal average, int count) {
     if (count < 0 || average.signum() < 0 || average.compareTo(MAX_RATING) > 0) {
@@ -377,6 +403,10 @@ public class Course {
 
   public Optional<Instant> publishedAt() {
     return Optional.ofNullable(publishedAt);
+  }
+
+  public Optional<Instant> priceSetAt() {
+    return Optional.ofNullable(priceSetAt);
   }
 
   public Money price() {

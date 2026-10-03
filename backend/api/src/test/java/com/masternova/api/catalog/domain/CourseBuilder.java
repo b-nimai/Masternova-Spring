@@ -46,6 +46,7 @@ public final class CourseBuilder {
   private CourseLevel level = CourseLevel.BEGINNER;
   private String language = "en";
   private Money price = Money.zero("INR");
+  private boolean priceConfirmed = true; // a decided price is the boring default
   private Category category;
   private Instructor instructor = new Instructor(UUID.randomUUID(), "Test Instructor");
   private Instant createdAt = DEFAULT_TIME;
@@ -103,6 +104,12 @@ public final class CourseBuilder {
 
   public CourseBuilder free() {
     return priced(0);
+  }
+
+  /** Pricing not decided yet: the publish gate's PRICE_NOT_SET. */
+  public CourseBuilder unpriced() {
+    this.priceConfirmed = false;
+    return this;
   }
 
   public CourseBuilder in(Category category) {
@@ -168,6 +175,9 @@ public final class CourseBuilder {
             instructor,
             createdAt);
     course.changeSubtitle(subtitle);
+    if (priceConfirmed) {
+      course.confirmPrice(price, createdAt);
+    }
     for (SectionSpec spec : sections) {
       Section section = course.addSection(spec.title());
       spec.lectures().forEach(lecture -> lecture.addTo(course, section));
