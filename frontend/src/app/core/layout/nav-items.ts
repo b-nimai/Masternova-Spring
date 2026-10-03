@@ -16,6 +16,13 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Home', icon: 'home', link: '/', roles: [] },
   { label: 'Courses', icon: 'school', link: '/courses', roles: [] },
   { label: 'Playground', icon: 'science', link: '/playground', roles: [] },
+  {
+    label: 'Teach',
+    icon: 'cast_for_education',
+    link: '/instructor',
+    roles: ['INSTRUCTOR', 'ADMIN'],
+    requiresAuth: true,
+  },
   { label: 'My account', icon: 'person', link: '/account', roles: [], requiresAuth: true },
   {
     label: 'Admin',

@@ -1,0 +1,30 @@
+<section class="mine">
+  <header>
+    <h1>My courses</h1>
+    <a mat-flat-button routerLink="/instructor/courses/new" data-testid="new-course"
+      ><mat-icon>add</mat-icon> New course</a
+    >
+  </header>
+  @if (courses.isLoading()) {
+    <mat-spinner diameter="32" />
+  } @else if (courses.error()) {
+    <p class="form-error">
+      Couldn't load your courses. <button mat-button (click)="courses.reload()">Retry</button>
+    </p>
+  } @else {
+    <ul>
+      @for (c of courses.value()?.items; track c.id) {
+        <li [attr.data-testid]="'mine-' + c.slug">
+          <a [routerLink]="['/instructor/courses', c.id, 'edit']" class="title">{{ c.title }}</a>
+          <span class="status">{{ c.status }}</span>
+          <span class="meta"
+            >{{ c.lectureCount }} lectures · {{ c.totalDurationSeconds | duration }} ·
+            {{ c.priceMinor | money: c.currency }}</span
+          >
+        </li>
+      } @empty {
+        <li class="empty" data-testid="empty">No courses yet. Start your first one.</li>
+      }
+    </ul>
+  }
+</section>

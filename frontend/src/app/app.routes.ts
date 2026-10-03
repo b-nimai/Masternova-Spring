@@ -22,6 +22,26 @@ export const routes: Routes = [
       import('./features/catalog/course-detail/course-detail').then((m) => m.CourseDetail),
   },
   {
+    path: 'instructor', // Phase 6: an instructor's own courses (INSTRUCTOR or ADMIN)
+    canMatch: [authGuard, roleGuard('INSTRUCTOR', 'ADMIN')],
+    loadComponent: () =>
+      import('./features/instructor/instructor-courses/instructor-courses').then(
+        (m) => m.InstructorCourses,
+      ),
+  },
+  {
+    path: 'instructor/courses/new',
+    canMatch: [authGuard, roleGuard('INSTRUCTOR', 'ADMIN')],
+    loadComponent: () =>
+      import('./features/instructor/new-course/new-course').then((m) => m.NewCourse),
+  },
+  {
+    path: 'instructor/courses/:id/edit', // :id → the wizard's `id` input
+    canMatch: [authGuard, roleGuard('INSTRUCTOR', 'ADMIN')],
+    loadComponent: () =>
+      import('./features/instructor/course-wizard/course-wizard').then((m) => m.CourseWizard),
+  },
+  {
     path: 'login',
     canMatch: [guestGuard],
     loadComponent: () => import('./features/auth/login/login').then((m) => m.Login),

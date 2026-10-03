@@ -4,7 +4,7 @@
 > an edit**, undoes a mistaken drag, and is stopped from publishing a half-finished course, with
 > every rule living in the `Course` aggregate rather than in a service or a form.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/catalog` (authoring half) · **Status:** draft (6.1)
+**Module:** `backend/api/src/main/java/com/masternova/api/catalog` (authoring half) · **Status:** built (Phase 6, 6.1–6.8)
 **Last updated:** 2026-10-03 · **Angular:** `frontend/src/app/features/instructor`
 **Builds on:** [`catalog.md`](catalog.md) (the aggregate, visibility, Prototype). **Reused from:**
 NestJS Masternova `docs/lld/wizard-draft-state.md`: same forces; several decisions come out
@@ -298,8 +298,31 @@ sequenceDiagram
 | ⭐ HTTP + Postgres | `CurriculumIT` | add section/lecture → new version + rollups; **a lecture moves between sections and keeps its id** (found: `orphanRemoval` deleted it); **a full section reversal under the deferred constraint**; removing a section deletes its lectures; `RESTORE_*`, stale versions, unknown kinds and foreign ids refused; **10 concurrent edits → 1 winner, no deadlock** (found: needed the row lock); a course gutted while in review can't be published |
 | ⭐ HTTP + Postgres | `UndoRedoIT` | **undoing a section removal brings back the same section and lecture ids**; several undos/redos walk the history in order (a redo of "add section" recreates the same id, so a later redo still finds it); a new edit discards the redo branch; nothing to undo/redo → 409; **a double-tapped undo undoes once** (versioned); undoing a move restores the exact place |
 | measurement | `UndoStrategyComparisonTest` | one history entry on a 10×5 course: 193–880 B as command + inverse vs 7,541 B as a whole snapshot (ADR-0011) |
+| frontend (Vitest) | `authoring-api.spec`, `course-editor-store.spec`, `course-wizard.spec`, `curriculum-editor.spec`, `new-course.spec`, `instructor-courses.spec`, `conflict-dialog.spec` | every write sends the shared version; **the details form uses the version a curriculum edit produced**; loading fills the form without saving; **autosave is debounced into one PUT**; a 409 opens the conflict dialog and reloads (no retry); commands for add/reorder (whole order)/drop (optimistic, then MOVE_LECTURE); undo by button and Ctrl+Z, but not inside a text field; one Idempotency-Key per create form |
+| ⭐ e2e (Playwright, seeded instructor) | `e2e/tests/authoring.spec.ts` | the whole flow in a real browser: create → details autosaved → free price confirmed → section + 3 lectures → undo / Ctrl+Shift+Z redo → every requirement met → submit → IN_REVIEW; **two real tabs: the stale one gets the conflict dialog and nothing is overwritten** |
 | unit (no Spring) | `PublishGateTest` | a complete course has no problems; each failing example breaks exactly its own rule; **every requirement code has a failing example** (a rule without a test fails the build); the checklist lists every rule in order; free is a decided price |
 
 ## 11. Interview notes — 60-second recall
 
-*(written last, in 6.8)*
+- **The problem:** authoring is a days-long session across two tabs with autosave. Three things
+  break: a concurrent save silently discards the other tab's work, a half-finished course reaches the
+  catalog, and a reorder trips the position constraint mid-statement.
+- **Optimistic concurrency (ADR-0010):** every content write sends `expectedVersion`; a pre-check
+  answers 409 with both versions, and JPA's `@Version` catches the same-instant race. **The root's
+  version covers the aggregate** (every mutator `touch`es the course). Proof: 10 concurrent saves →
+  exactly 1 winner. The edit transaction **locks the course row first**: without it, 10 concurrent
+  curriculum edits *deadlocked* under the deferred constraint (found by the IT).
+- **State:** sealed `CourseState`; default methods throw `ILLEGAL_TRANSITION`, each state overrides
+  only its legal events (5 overrides for 4 × 5 pairs, all 20 tested). No `DRAFT → PUBLISHED`; only an
+  ADMIN publishes; submit and publish re-run the gate, so a course gutted while in review can't be
+  published.
+- **Publish gate = an explainable Specification:** 6 coded requirements; one list makes the 422 and
+  the wizard's checklist; a test fails if a rule has no failing example.
+- **Command + Memento (ADR-0011):** every edit is a sealed record whose `applyTo` returns its
+  inverse; a removal captures a snapshot *before* the delete. History in a table (replicas,
+  deploys). Built both designs: 193–880 B per edit vs 7.5 KB for a whole-curriculum snapshot.
+- **Three bugs only a real database showed:** `orphanRemoval` deleted a lecture moved between
+  sections; the deadlock above; Jackson 3 rejects omitted primitives.
+- **Angular:** one component-scoped store holds the version; autosave = `debounceTime` +
+  **`concatMap`** (a cancelled `switchMap` PUT still happened server-side); 409 → dialog + reload,
+  never retry; CDK drag-drop → `MOVE_LECTURE`; Ctrl+Z ignored inside inputs. Proven with two real tabs.

@@ -120,7 +120,7 @@ Phases are listed **in the order you do them**.
 | 6 | [D2 — CI/CD hardening](#phase-d2--cicd-hardening) | 6 | 6 | 10 h | ~8.5 h | ✅ |
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
-| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 6 | 22 h | ~13.5 h | 🔨 |
+| 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 8 | 22 h | ~21 h | ✅ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 0 | 30 h | — | ☐ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **73** | **~326 h** | ~126.5 h | |
+| | **Total** | **137** | **75** | **~326 h** | ~134 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -320,7 +320,7 @@ concurrent edits.
 | 6.4 | Curriculum edits as commands: sealed `CurriculumCommand` (10 records, JSON `kind`), `applyTo` returns the inverse (removals carry a `SectionSnapshot`/`LectureSnapshot` Memento), ids generated before applying; `Course.apply` (editable + rollups recomputed + touch); one route `POST …/curriculum`; `V11` deferrable position constraints. **3 real-DB findings, fixed:** `orphanRemoval` deleted a moved lecture (→ explicit removal via a Spring Data custom fragment `CurriculumCleanup`), concurrent edits deadlocked (→ `lockById` first, ADR-0010 addendum), Jackson 3 rejects null primitives (→ boxed optionals). `CurriculumCommandTest` (every kind round-trips), `CurriculumCommandJsonTest`, `CurriculumIT`. API conventions §6 ✅. [Pattern note 04](patterns/docs/04-command.md) + lab | sealed records, Jackson `@JsonTypeInfo` polymorphism, deferrable constraints, `@Lock(PESSIMISTIC_WRITE)`, repository fragments | — | **Command**: catalog row 4 | 4 h | ✅ | 2026-10-03 |
 | 6.5 | Undo/redo in the `course_edit` history table (`V12`, jsonb command + inverse, `undone_at` for the redo branch; `CourseEditLog` caretaker over JDBC), `POST …/curriculum/undo` · `/redo` (versioned: a double-tapped undo undoes once), `GET …/curriculum` (`canUndo`/`canRedo`). **Built both, kept one** ([ADR-0011](docs/adr/0011-undo-with-stored-inverses.md)): `UndoStrategyComparisonTest` measured 193–880 B per edit (inverse commands) vs 7,541 B (whole-curriculum snapshot) on a 10×5 course → inverses shipped, Memento only for what a removal destroys. `UndoRedoIT`. [Pattern note 05](patterns/docs/05-memento.md) + lab (snapshot-stack caretaker) | deep copies, `Deque`, jsonb via `JdbcClient`, Jackson polymorphism round trip | — | **Memento**: catalog row 5 | 2.5 h | ✅ | 2026-10-03 |
 | 6.6 | *(done before 6.4: every write needs it)* The wizard's versioned content writes: `POST /instructor/courses` (`Idempotency-Key`; instructor name via identity's new public `IdentityApi`), `GET …/{id}`, `PUT …/{id}/details`, `PUT …/{id}/pricing` (all with `expectedVersion`). `CourseAccess.forEditing` pre-check → 409 `{expectedVersion, currentVersion}`; `@Version` catches the same-instant race; `Course.touch` makes the root's version cover the aggregate; `Slugs`. `CourseAuthoringIT`: **10 concurrent saves → exactly 1 winner**. API conventions §3 ✅. Java note [13 optimistic locking](patterns/java/13-optimistic-locking-and-lost-updates.md) | JPA `@Version`, `OptimisticLockException`, `ObjectOptimisticLockingFailureException`, latch-driven concurrency tests | — | — | 1.5 h | ✅ | 2026-10-03 |
-| 6.7 | Angular: instructor wizard (stepper, typed forms, debounced autosave) | — | `MatStepper`, `FormGroup<T>`, `debounceTime` + `switchMap` | — | 4 h | ☐ | |
+| 6.7 | Angular instructor area: `/instructor` (my courses, `rxResource`), `/instructor/courses/new` (one Idempotency-Key per form), `/instructor/courses/:id/edit` wizard (`MatStepper`: Details autosaved · Pricing · Curriculum editor · Review checklist + submit/withdraw) behind `roleGuard('INSTRUCTOR','ADMIN')`, "Teach" nav item. Typed `FormGroup<T>`; autosave = `debounceTime` + **`concatMap`** (deviation: `switchMap` cancels only the response, the server still applies the write → self-inflicted 409s); form patched on (re)load only with `emitEvent: false`. Playwright `authoring.spec.ts`: the whole flow + **two real tabs → conflict dialog, nothing overwritten**. Angular note [05](patterns/angular/05-wizard-autosave-drag-drop.md) | — | `MatStepper`, `FormGroup<T>`, `debounceTime` + `concatMap` | — | 4 h | ✅ | 2026-10-03 |
 | 6.8 | *(committed before 6.7: the wizard embeds it)* Angular curriculum editor: every change a command (`AuthoringApi` mirrors the sealed union), CDK `cdkDropListGroup` drag-drop of lectures across sections (optimistic, immutable, then `MOVE_LECTURE`), sections reordered by ↑/↓ (a11y) sending the whole order, add/rename/preview/remove; server-side undo/redo buttons from `canUndo`/`canRedo` + Ctrl/⌘+Z, Ctrl+Shift+Z/Ctrl+Y (ignored inside text fields); `CourseEditorStore` (`@Service({autoProvided: false})`, one shared version) + `ConflictDialog` on 409 → reload, never retry | — | CDK `DragDrop`, `MatDialog`, keyboard shortcuts, component-scoped signal store | — | 3.5 h | ✅ | 2026-10-03 |
 
 ---
@@ -501,8 +501,8 @@ Tick these as they're used *for real* in the project, not just read about.
 ### 3.3 Angular
 
 - [x] standalone components · [x] `@Service()` + `inject()` · [x] `toSignal` · [x] `@switch` / `@let` control flow · [x] lazy routes
-- [x] `signal` / `computed` / `effect` · [x] `input()` / `output()` · [ ] typed reactive forms · [x] interceptors · [x] guards
-- [x] RxJS operators in anger · [ ] Material (stepper, dialog, table) · [ ] CDK drag-drop · [x] CDK virtual scroll · [x] `@defer`
+- [x] `signal` / `computed` / `effect` · [x] `input()` / `output()` · [x] typed reactive forms · [x] interceptors · [x] guards
+- [x] RxJS operators in anger · [x] Material (stepper, dialog; table later) · [x] CDK drag-drop · [x] CDK virtual scroll · [x] `@defer`
 - [x] Vitest + `HttpTestingController` · [x] Playwright e2e
 
 ### 3.4 DevOps

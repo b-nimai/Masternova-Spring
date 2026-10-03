@@ -1,0 +1,50 @@
+<mat-card appearance="outlined" class="new-course">
+  <mat-card-header>
+    <mat-card-title>New course</mat-card-title>
+    <mat-card-subtitle>You can change all of this later.</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <form [formGroup]="form" (ngSubmit)="create()">
+      <mat-form-field appearance="outline">
+        <mat-label>Title</mat-label>
+        <input matInput formControlName="title" data-testid="title" />
+        @if (form.controls.title.hasError('required')) {
+          <mat-error>A title is required.</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Category</mat-label>
+        <mat-select formControlName="categorySlug" data-testid="category">
+          @for (root of categories(); track root.slug) {
+            <mat-optgroup [label]="root.name">
+              @for (child of root.children; track child.slug) {
+                <mat-option [value]="child.slug">{{ child.name }}</mat-option>
+              }
+            </mat-optgroup>
+          }
+        </mat-select>
+        @if (form.controls.categorySlug.hasError('server')) {
+          <mat-error>{{ form.controls.categorySlug.getError('server') }}</mat-error>
+        }
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Level</mat-label>
+        <mat-select formControlName="level">
+          @for (l of levels; track l) {
+            <mat-option [value]="l">{{ levelLabels[l] }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Language</mat-label>
+        <input matInput formControlName="language" maxlength="2" />
+      </mat-form-field>
+      @if (failed()) {
+        <p class="form-error" data-testid="error">Couldn't create the course. Please try again.</p>
+      }
+      <button mat-flat-button type="submit" data-testid="create" [disabled]="busy()">
+        Create draft
+      </button>
+    </form>
+  </mat-card-content>
+</mat-card>
