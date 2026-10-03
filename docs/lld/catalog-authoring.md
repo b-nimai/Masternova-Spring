@@ -53,7 +53,7 @@ inside it. Phase 6 adds:
 |---|---|
 | `Course.version` (exists since V6) | the optimistic-concurrency token. Since the root is the consistency boundary, **every** change inside the aggregate bumps it, including a lecture rename (§4, "the root's version covers the aggregate"). |
 | `Course.priceSetAt` | stamped when pricing is confirmed. Distinguishes "free" from "nobody has priced this yet". |
-| `course_edit` (table) | one applied curriculum command, its inverse, the version it produced, whether it's undone. The undo/redo history. |
+| `course_edit` (table, V12) | one applied curriculum command, its inverse, the version it produced, whether it's undone. The undo/redo history ([ADR-0011](../adr/0011-undo-with-stored-inverses.md): inverse commands, not a snapshot stack). |
 | `CourseState` | the State pattern over the persisted `CourseStatus`. |
 
 **Legal states and who may move between them:**
@@ -296,6 +296,8 @@ sequenceDiagram
 | ⭐ unit (no Spring) | `CurriculumCommandTest` | **every client command kind round-trips through its own inverse** to an identical curriculum (ids, positions, flags, rollups); a removal's inverse carries the Memento (same ids, media kept) and is server-only; moves keep positions dense; reorders must be permutations; foreign ids 404; duplicate ids 409; archived refuses; edits touch the root |
 | unit | `CurriculumCommandJsonTest` | the JSON contract: a client command by `kind`; an inverse with a Memento survives a JSON round trip (the history stores it); unknown kinds rejected |
 | ⭐ HTTP + Postgres | `CurriculumIT` | add section/lecture → new version + rollups; **a lecture moves between sections and keeps its id** (found: `orphanRemoval` deleted it); **a full section reversal under the deferred constraint**; removing a section deletes its lectures; `RESTORE_*`, stale versions, unknown kinds and foreign ids refused; **10 concurrent edits → 1 winner, no deadlock** (found: needed the row lock); a course gutted while in review can't be published |
+| ⭐ HTTP + Postgres | `UndoRedoIT` | **undoing a section removal brings back the same section and lecture ids**; several undos/redos walk the history in order (a redo of "add section" recreates the same id, so a later redo still finds it); a new edit discards the redo branch; nothing to undo/redo → 409; **a double-tapped undo undoes once** (versioned); undoing a move restores the exact place |
+| measurement | `UndoStrategyComparisonTest` | one history entry on a 10×5 course: 193–880 B as command + inverse vs 7,541 B as a whole snapshot (ADR-0011) |
 | unit (no Spring) | `PublishGateTest` | a complete course has no problems; each failing example breaks exactly its own rule; **every requirement code has a failing example** (a rule without a test fails the build); the checklist lists every rule in order; free is a decided price |
 
 ## 11. Interview notes — 60-second recall

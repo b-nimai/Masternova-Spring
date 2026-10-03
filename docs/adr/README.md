@@ -21,3 +21,4 @@ re-derived rather than copied.
 | [0008](0008-shared-messaging-module.md) | A shared `messaging` module owns the outbox protocol (writer in the api, relay in the worker) | accepted |
 | [0009](0009-keyset-pagination-over-offset.md) | Keyset (cursor) pagination over `LIMIT/OFFSET`, via Spring Data `Window` + our own typed cursor | accepted |
 | [0010](0010-optimistic-concurrency-with-version.md) | Optimistic concurrency: JPA `@Version` + `expectedVersion` in the body; the root's version covers the aggregate | accepted |
+| [0011](0011-undo-with-stored-inverses.md) | Curriculum undo: stored inverse commands (9–39× smaller per edit than a snapshot stack, intent kept), Memento only for what a removal destroys | accepted |

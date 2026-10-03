@@ -111,7 +111,7 @@ covers the whole aggregate: every mutation through `Course` touches the root. Pr
 
 ## 4. Idempotency
 
-Unsafe writes with no version to guard them (duplicate course, undo, complete upload, checkout)
+Unsafe writes with no version to guard them (create course, duplicate course, complete upload, checkout)
 **require** an `Idempotency-Key` header: annotate the controller method with
 `@IdempotencyKeyRequired`. **Implemented in Phase 2.6** (`IdempotencyFilter`, `IdempotencyIT`):
 
@@ -124,6 +124,9 @@ Unsafe writes with no version to guard them (duplicate course, undo, complete up
 | the first request ended in a 5xx | the key is released, so the retry really runs |
 | `@IdempotencyKeyRequired` endpoint without the header | 400 `VALIDATION_FAILED` (`errors[0].field = "Idempotency-Key"`) |
 | empty key or key longer than 200 chars | 400 `IDEMPOTENCY_KEY_INVALID` |
+
+Undo/redo are **versioned** instead (they carry `expectedVersion`, Phase 6.5): a double-tapped
+undo undoes once and the second press gets 409 `VERSION_CONFLICT`.
 
 Any POST/PUT/PATCH/DELETE that *carries* the header is handled this way, annotated or not. A repeat with the same key returns the stored
 response. The same key with a different body is 422. A request with the key still in flight
