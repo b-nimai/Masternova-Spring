@@ -1,6 +1,6 @@
 package com.masternova.api.media.web.dto;
 
-import com.masternova.api.media.domain.DeadJobs.DeadJob;
+import com.masternova.api.media.domain.PipelineJobs.DeadJob;
 import java.time.Instant;
 import java.util.UUID;
 

@@ -18,6 +18,8 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+      repositories:
+        enabled: false # Redis is a cache and a pub/sub bus here, never a repository store
   jpa:
     open-in-view: false # no lazy loading from controllers — fetch what you need in the service
     hibernate:

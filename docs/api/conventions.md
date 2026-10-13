@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-13 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-13 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -18,7 +18,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | 6 | Commands as request bodies (sealed union) | ✅ Phase 6 |
 | 7 | 64-bit integers as strings | ✅ Phase 7.3 (byte sizes are bounded, so numbers) |
 | 8 | Client-driven uploads return a plan, not a stream | ✅ Phase 7.3 |
-| 9 | Long-running work streams over SSE | Phase 7 |
+| 9 | Long-running work streams over SSE | ✅ Phase 7.7 |
 | 10 | Authorization denials carry a reason code | Phase 8 |
 | 11 | Media is bought with a short-lived token | Phase 8 |
 | 12 | Payment webhooks answer 200 for almost everything | Phase 9 |
@@ -183,10 +183,18 @@ Implemented by `UploadController`, `UploadService`, `UploadState` (media LLD §3
 
 ## 9. Long-running work: SSE
 
-Transcode progress is exposed two ways: a one-shot `GET` for clients that poll, and a
-`GET …/stream` (`SseEmitter`, `text/event-stream`) that emits only on change and closes at a
-terminal state. Always send `Cache-Control: no-cache` and `X-Accel-Buffering: no`, because
-nginx and ALBs buffer by default.
+Transcode progress is exposed two ways: a one-shot `GET /api/v1/media/assets/{id}` for clients
+that poll, and `GET …/{id}/stream` (`SseEmitter`, `text/event-stream`). The stream sends a
+`snapshot` event first, then `progress` events (lossy ticks, ≤ 1/s per job) and a fresh `snapshot`
+whenever a job finishes, and the server closes it at `READY` or `FAILED`. Always send
+`Cache-Control: no-cache` and `X-Accel-Buffering: no`, because nginx and ALBs buffer by default.
+A `: keep-alive` comment every 20 s stops proxies from closing an idle stream.
+
+The stream is authenticated with the normal **bearer token**, so the SPA reads it with
+`HttpClient` (`observe: 'events'`, `reportProgress`, fetch backend), not `EventSource`, which can't
+send an `Authorization` header. Implemented by `AssetController`, `AssetEvents` (Redis
+`media:asset:*` → this replica's open streams) and `AssetProgressService` (access checked once,
+when the stream opens).
 
 ## 10. Denials carry a reason
 

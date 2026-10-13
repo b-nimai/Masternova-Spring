@@ -1,8 +1,8 @@
 package com.masternova.api.media.application;
 
-import com.masternova.api.media.domain.DeadJobs;
-import com.masternova.api.media.domain.DeadJobs.DeadJob;
 import com.masternova.api.media.domain.MediaStatus;
+import com.masternova.api.media.domain.PipelineJobs;
+import com.masternova.api.media.domain.PipelineJobs.DeadJob;
 import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.NotFoundException;
 import java.time.Clock;
@@ -21,10 +21,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DeadJobService {
 
-  private final DeadJobs jobs;
+  private final PipelineJobs jobs;
   private final Clock clock;
 
-  DeadJobService(DeadJobs jobs, Clock clock) {
+  DeadJobService(PipelineJobs jobs, Clock clock) {
     this.jobs = jobs;
     this.clock = clock;
   }

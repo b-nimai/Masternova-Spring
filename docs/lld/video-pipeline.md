@@ -4,7 +4,7 @@
 > playlist, poster, scrub sprite) as a **small DAG of leased, retryable jobs** in the worker,
 > where a crash at any moment leads to a rerun that **overwrites** instead of duplicating.
 
-**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** built: ffmpeg tooling (7.5), job DAG (7.4), retries + dead letters + sweeper (7.6)
+**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** built: ffmpeg tooling (7.5), job DAG (7.4), retries + dead letters + sweeper (7.6), live progress (7.7)
 **Last updated:** 2026-10-13 · **Angular:** progress over SSE in `features/instructor/upload` (7.7, 7.8)
 **Pairs with:** [`media.md`](media.md) (the upload, the asset, the key layout) ·
 [ADR-0013](../adr/0013-hls-for-playback.md) (HLS, ladder, segment rules) ·
@@ -237,11 +237,18 @@ sequenceDiagram
 ```
 
 **Progress (7.7):** the transcoder runs ffmpeg with `-progress pipe:1` and turns
-`out_time_us / duration` into a percentage. `ProgressSink` publishes to Redis
-`media:asset:{id}` at most once a second (lossy is fine) and writes `pipeline_job.progress` at
-most every 5 s, so a fresh SSE subscriber gets the current state from the DB. The api's
-`SseEmitter` endpoint subscribes to the channel. Redis pub/sub reaches every api replica, and
-there's no sticky routing.
+`out_time_us / duration` into a percentage. Two paths:
+
+- **live:** `ProgressPublisher` sends `progress` ticks to Redis `media:asset:{id}`, ≤ 1/s per job
+  (lossy by design; 100 % is never throttled), and a `changed` ping after every job outcome;
+- **durable:** the heartbeat writes `pipeline_job.progress` every 5 s.
+
+The api's `AssetEvents` subscribes to `media:asset:*` once per replica. Redis pub/sub reaches
+every replica, so there's no sticky routing. It forwards ticks to the open streams, answers
+`changed` with a fresh DB snapshot, and closes the stream at READY or FAILED. A new stream gets the
+DB snapshot first (registered *before* the snapshot is sent: a duplicate, never a gap). A Redis
+outage loses live ticks only: publishing errors are swallowed in the worker, and the api
+subscribes in the background with retry, so it still boots without Redis.
 
 ## 6. Patterns used
 

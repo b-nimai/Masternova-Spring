@@ -6,10 +6,11 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * The api's window onto the worker's {@code pipeline_job} table: list what died, put one back in
- * the queue (video-pipeline LLD §8, "dead job"). The worker owns every other write to the table.
+ * The api's window onto the worker's {@code pipeline_job} table: how far an asset's jobs are (the
+ * progress stream, 7.7), what died, and putting a dead job back in the queue (video-pipeline LLD
+ * §8). The worker owns every other write to the table.
  */
-public interface DeadJobs {
+public interface PipelineJobs {
 
   record DeadJob(
       UUID id,
@@ -19,6 +20,12 @@ public interface DeadJobs {
       int attempts,
       String lastError,
       Instant at) {}
+
+  /** One job of an asset, as the upload page shows it. */
+  record JobProgress(String type, String rung, String status, int percent) {}
+
+  /** Every job of the asset, in DAG order (PROBE, TRANSCODE by rung, THUMBNAILS, PACKAGE). */
+  List<JobProgress> progressOf(UUID assetId);
 
   List<DeadJob> list(int limit);
 

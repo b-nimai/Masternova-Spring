@@ -1,7 +1,7 @@
 package com.masternova.api.media.infrastructure;
 
-import com.masternova.api.media.domain.DeadJobs;
 import com.masternova.api.media.domain.MediaStatus;
+import com.masternova.api.media.domain.PipelineJobs;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
@@ -12,11 +12,11 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 /**
- * {@link DeadJobs} over JDBC: {@code pipeline_job} is the worker's table, not an entity of this
+ * {@link PipelineJobs} over JDBC: {@code pipeline_job} is the worker's table, not an entity of this
  * module. ⭐ Every write is conditional on the current status, like the worker's own.
  */
 @Repository
-class JdbcDeadJobs implements DeadJobs {
+class JdbcPipelineJobs implements PipelineJobs {
 
   private static final RowMapper<DeadJob> ROW =
       (rs, i) ->
@@ -31,8 +31,32 @@ class JdbcDeadJobs implements DeadJobs {
 
   private final JdbcClient jdbc;
 
-  JdbcDeadJobs(JdbcClient jdbc) {
+  JdbcPipelineJobs(JdbcClient jdbc) {
     this.jdbc = jdbc;
+  }
+
+  @Override
+  public List<JobProgress> progressOf(UUID assetId) {
+    return jdbc.sql(
+            """
+            SELECT type, rung, status, progress FROM pipeline_job WHERE asset_id = :asset
+             ORDER BY CASE type WHEN 'PROBE' THEN 0 WHEN 'TRANSCODE' THEN 1
+                                WHEN 'THUMBNAILS' THEN 2 ELSE 3 END,
+                      length(rung), rung
+            """)
+        .param("asset", assetId)
+        .query(
+            (rs, i) -> {
+              String status = rs.getString("status");
+              int percent =
+                  switch (status) {
+                    case "DONE" -> 100;
+                    case "RUNNING" -> rs.getInt("progress"); // NULL → 0
+                    default -> 0;
+                  };
+              return new JobProgress(rs.getString("type"), rs.getString("rung"), status, percent);
+            })
+        .list();
   }
 
   @Override

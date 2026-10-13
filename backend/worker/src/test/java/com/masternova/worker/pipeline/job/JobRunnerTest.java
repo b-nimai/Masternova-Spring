@@ -37,6 +37,7 @@ class JobRunnerTest {
   final PipelineStore store = mock(PipelineStore.class);
   final MutableClock clock = new MutableClock();
   final UUID asset = UUID.randomUUID();
+  final ProgressPublisher publisher = mock(ProgressPublisher.class);
 
   PipelineProperties props(Duration heartbeat) {
     return new PipelineProperties(
@@ -87,7 +88,8 @@ class JobRunnerTest {
         store,
         new TransactionTemplate(mock(PlatformTransactionManager.class)),
         props(heartbeat),
-        clock);
+        clock,
+        publisher);
   }
 
   Job probe(int attempt) {
@@ -104,6 +106,8 @@ class JobRunnerTest {
     verify(store).lockAsset(asset);
     verify(jobs).complete(job.id(), "w");
     verify(jobs).enqueue(JobSpec.of(asset, JobType.THUMBNAILS));
+    verify(publisher).progress(job, 42); // live tick
+    verify(publisher).changed(job); // after the commit
   }
 
   @Test
@@ -146,6 +150,7 @@ class JobRunnerTest {
 
     verify(store).markFailed(asset, "MEDIA_UNREADABLE");
     verify(jobs, never()).reschedule(any(), any(), any(), any());
+    verify(publisher).changed(any()); // a failure is a change too
   }
 
   @Test

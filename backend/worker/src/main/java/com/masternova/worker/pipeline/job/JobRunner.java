@@ -16,8 +16,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * Runs ONE claimed job to its outcome (video-pipeline LLD §5):
  *
  * <ul>
- *   <li>while the processor works, a heartbeat extends the lease and records progress — no
- *       transaction is open while ffmpeg runs;
+ *   <li>while the processor works, a heartbeat extends the lease and records progress (live ticks
+ *       go to Redis through {@link ProgressPublisher}) — no transaction is open while ffmpeg runs;
  *   <li>success: ONE transaction = lock the asset + mark DONE (only if the lease is still ours) +
  *       the processor's effects + enqueue what it unlocked. A worker that lost its lease changes
  *       nothing — its outputs were the same keys anyway;
@@ -36,6 +36,7 @@ public class JobRunner {
   private final TransactionTemplate tx;
   private final PipelineProperties props;
   private final Clock clock;
+  private final ProgressPublisher publisher;
 
   JobRunner(
       JobProcessorRegistry registry,
@@ -43,13 +44,15 @@ public class JobRunner {
       PipelineStore store,
       TransactionTemplate tx,
       PipelineProperties props,
-      Clock clock) {
+      Clock clock,
+      ProgressPublisher publisher) {
     this.registry = registry;
     this.jobs = jobs;
     this.store = store;
     this.tx = tx;
     this.props = props;
     this.clock = clock;
+    this.publisher = publisher;
   }
 
   public void execute(Job job, String workerId) {
@@ -57,7 +60,15 @@ public class JobRunner {
     Thread heartbeat = Thread.ofVirtual().start(() -> heartbeat(job, workerId, progress));
     try {
       JobProcessor.Completion completion =
-          registry.of(job.type()).run(job, props.workDir(), progress::set);
+          registry
+              .of(job.type())
+              .run(
+                  job,
+                  props.workDir(),
+                  percent -> {
+                    progress.set(percent);
+                    publisher.progress(job, percent);
+                  });
       heartbeat.interrupt();
       tx.executeWithoutResult(
           status -> {
@@ -71,6 +82,8 @@ public class JobRunner {
     } catch (RuntimeException e) {
       heartbeat.interrupt();
       fail(job, workerId, e);
+    } finally {
+      publisher.changed(job); // after the commit: subscribers re-read the asset
     }
   }
 
