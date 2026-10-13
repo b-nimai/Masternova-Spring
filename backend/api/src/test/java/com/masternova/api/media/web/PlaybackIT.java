@@ -140,7 +140,11 @@ class PlaybackIT {
     String masterUrl = masterUrl();
     String ticket = masterUrl.substring(masterUrl.indexOf("?t=") + 3);
 
-    assertThat(mvc.get().uri(masterUrl + "x")).hasStatus(HttpStatus.FORBIDDEN);
+    assertThat(mvc.get().uri(masterUrl + "x"))
+        .hasStatus(HttpStatus.FORBIDDEN)
+        .bodyJson() // the playlist routes produce HLS only, yet a refusal is still a problem body
+        .extractingPath("$.reason")
+        .isEqualTo("PLAYBACK_TICKET_INVALID");
     UUID other = asset("READY");
     assertThat(mvc.get().uri("/api/v1/media/assets/{id}/hls/master.m3u8?t=" + ticket, other))
         .hasStatus(HttpStatus.FORBIDDEN);

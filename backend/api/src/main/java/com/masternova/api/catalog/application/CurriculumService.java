@@ -63,7 +63,7 @@ public class CurriculumService {
     }
     Course course = access.forEditing(courseId, actor, expectedVersion);
     // ⭐ only the course's own instructor's videos — even when an admin does the attaching
-    if (command instanceof CurriculumCommand.AttachMedia(var lectureId, var assetId)
+    if (command instanceof CurriculumCommand.AttachMedia(var _, var assetId)
         && assetId != null
         && !media.isOwnedBy(assetId, course.instructor().id())) {
       throw ValidationException.of(

@@ -25,5 +25,6 @@ class ProgressParserTest {
     assertThat(parser.percent("frame=120")).isEmpty();
     assertThat(parser.percent("progress=continue")).isEmpty();
     assertThat(parser.percent("out_time_us=N/A")).isEmpty();
+    assertThat(parser.percent("out_time_us=garbage")).isEmpty(); // never throws
   }
 }

@@ -11,6 +11,8 @@ import com.masternova.api.platform.NotFoundException;
 import com.masternova.storage.HlsPlaylists;
 import com.masternova.storage.MediaKeys;
 import com.masternova.storage.ObjectStorage;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -70,7 +72,8 @@ public class PlaybackService {
   public String master(UUID assetId, String ticket) {
     check(assetId, ticket);
     return HlsPlaylists.rewriteUris(
-        storage.getText(MediaKeys.master(assetId)), uri -> uri + "?t=" + ticket);
+        storage.getText(MediaKeys.master(assetId)),
+        uri -> uri + "?t=" + URLEncoder.encode(ticket, StandardCharsets.UTF_8));
   }
 
   /** A rung playlist whose init segment and segments are presigned storage urls. */

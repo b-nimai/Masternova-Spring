@@ -24,7 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/media/assets/{id}")
 class PlaybackController {
 
-  static final MediaType HLS = MediaType.parseMediaType("application/vnd.apple.mpegurl");
+  static final String HLS_VALUE = "application/vnd.apple.mpegurl";
+  static final MediaType HLS = MediaType.parseMediaType(HLS_VALUE);
 
   private final PlaybackService playback;
 
@@ -37,12 +38,12 @@ class PlaybackController {
     return PlaybackResponse.from(playback.ticket(me, id));
   }
 
-  @GetMapping("/hls/master.m3u8")
+  @GetMapping(value = "/hls/master.m3u8", produces = HLS_VALUE) // never text/html
   ResponseEntity<String> master(@PathVariable UUID id, @RequestParam("t") String ticket) {
     return playlist(playback.master(id, ticket));
   }
 
-  @GetMapping("/hls/{rung:[0-9]{2,4}p}/index.m3u8")
+  @GetMapping(value = "/hls/{rung:[0-9]{2,4}p}/index.m3u8", produces = HLS_VALUE)
   ResponseEntity<String> rung(
       @PathVariable UUID id, @PathVariable String rung, @RequestParam("t") String ticket) {
     return playlist(playback.rung(id, rung, ticket));

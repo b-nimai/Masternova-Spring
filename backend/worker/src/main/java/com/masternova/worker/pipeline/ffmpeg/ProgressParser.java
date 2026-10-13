@@ -29,7 +29,12 @@ public final class ProgressParser {
     if (value.equals("N/A")) { // before the first frame is out
       return OptionalInt.empty();
     }
-    double seconds = Long.parseLong(value) / 1_000_000.0;
+    double seconds;
+    try {
+      seconds = Long.parseLong(value) / 1_000_000.0;
+    } catch (NumberFormatException e) { // a progress line is a hint, never a reason to fail a job
+      return OptionalInt.empty();
+    }
     int percent = (int) Math.floor(100 * seconds / durationSeconds);
     return OptionalInt.of(Math.clamp(percent, 0, 99)); // 100 only when ffmpeg says it's done
   }
