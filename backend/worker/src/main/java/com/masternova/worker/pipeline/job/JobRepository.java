@@ -1,5 +1,6 @@
 package com.masternova.worker.pipeline.job;
 
+import com.masternova.worker.pipeline.PipelineProperties;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
@@ -19,10 +20,12 @@ public class JobRepository {
 
   private final JdbcClient jdbc;
   private final Clock clock;
+  private final int maxAttempts;
 
-  JobRepository(JdbcClient jdbc, Clock clock) {
+  JobRepository(JdbcClient jdbc, Clock clock, PipelineProperties props) {
     this.jdbc = jdbc;
     this.clock = clock;
+    this.maxAttempts = props.maxAttempts();
   }
 
   /** ⭐ Idempotent: the unique (asset, type, rung) makes a second enqueue a no-op. */
@@ -58,6 +61,8 @@ public class JobRepository {
                    next_attempt_at = :leaseUntil, updated_at = :now
              WHERE id IN (SELECT id FROM pipeline_job
                            WHERE status IN ('PENDING', 'RUNNING') AND next_attempt_at <= :now
+                             -- a lapsed lease on the LAST attempt is buried, never re-handed out
+                             AND (status = 'PENDING' OR attempts < :maxAttempts)
                            ORDER BY next_attempt_at
                            LIMIT :max
                            FOR UPDATE SKIP LOCKED)
@@ -67,6 +72,7 @@ public class JobRepository {
         .param("leaseUntil", Timestamp.from(now.plus(lease)))
         .param("now", Timestamp.from(now))
         .param("max", max)
+        .param("maxAttempts", maxAttempts)
         .query(
             (rs, i) ->
                 new Job(
@@ -133,6 +139,18 @@ public class JobRepository {
         .param("max", maxAttempts)
         .query(UUID.class)
         .list();
+  }
+
+  /** Is this job running right now, under a lease that hasn't lapsed? (the startup cleanup) */
+  public boolean isLeased(UUID jobId) {
+    return jdbc.sql(
+                "SELECT count(*) FROM pipeline_job WHERE id = :id AND status = 'RUNNING'"
+                    + " AND next_attempt_at > :now")
+            .param("id", jobId)
+            .param("now", Timestamp.from(clock.instant()))
+            .query(Integer.class)
+            .single()
+        > 0;
   }
 
   /** RUNNING → DONE, only while still holding the lease. */

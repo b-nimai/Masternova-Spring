@@ -1,5 +1,6 @@
 package com.masternova.worker.pipeline.job;
 
+import com.masternova.storage.MediaKeys;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -42,10 +43,6 @@ public class ProgressPublisher {
     this.clock = clock;
   }
 
-  public static String channel(UUID assetId) {
-    return "media:asset:" + assetId;
-  }
-
   public void progress(Job job, int percent) {
     Instant now = clock.instant();
     Instant last = lastSent.get(job.id());
@@ -71,7 +68,7 @@ public class ProgressPublisher {
 
   private void publish(UUID assetId, Map<String, Object> message) {
     try {
-      redis.convertAndSend(channel(assetId), json.writeValueAsString(message));
+      redis.convertAndSend(MediaKeys.progressChannel(assetId), json.writeValueAsString(message));
     } catch (RuntimeException e) {
       log.debug("progress for {} not published: {}", assetId, e.getMessage());
     }

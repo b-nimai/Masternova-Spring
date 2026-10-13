@@ -6,6 +6,7 @@ import com.masternova.api.media.web.dto.AssetProgressResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -70,19 +71,21 @@ class AssetEvents implements MessageListener, AutoCloseable {
   @Override
   public void onMessage(Message message, byte[] pattern) {
     try {
-      JsonNode event = json.readTree(new String(message.getBody(), StandardCharsets.UTF_8));
-      UUID assetId = UUID.fromString(event.path("assetId").asString());
+      // ⭐ the asset is in the CHANNEL name: replicas with nobody watching it stop here, unparsed
+      String channel = new String(message.getChannel(), StandardCharsets.UTF_8);
+      UUID assetId = UUID.fromString(channel.substring(channel.lastIndexOf(':') + 1));
       Set<Subscriber> subs = byAsset.get(assetId);
-      if (subs == null) {
-        return; // nobody on this replica watches this asset
+      if (subs == null || subs.isEmpty()) {
+        return;
       }
-      for (Subscriber sub : subs) {
-        if (event.path("kind").asString().equals("progress")) {
-          event(sub, "progress", event);
-        } else {
-          send(assetId, sub, sub.feed().refresh().get());
-        }
+      JsonNode event = json.readTree(new String(message.getBody(), StandardCharsets.UTF_8));
+      if (event.path("kind").asString().equals("progress")) {
+        subs.forEach(sub -> event(sub, "progress", event));
+        return;
       }
+      // one database read per message, however many tabs watch this asset
+      AssetProgressView view = subs.iterator().next().feed().refresh().get();
+      List.copyOf(subs).forEach(sub -> send(assetId, sub, view));
     } catch (RuntimeException e) {
       log.debug("ignoring a malformed progress message: {}", e.getMessage());
     }

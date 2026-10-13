@@ -38,13 +38,12 @@ public class ProcessRunner {
           "Output file does not contain any stream",
           "Stream map '0:v:0' matches no streams");
 
-  public record Result(String stdout) {}
-
   /**
-   * @param stdoutLines called for each stdout line as it arrives; also collected into the result
+   * @param stdoutLines called for each stdout line as it arrives (nothing is kept: a long encode's
+   *     progress lines would be megabytes)
    * @param workDir where the stderr log goes (and the process's working directory)
    */
-  public Result run(
+  public void run(
       List<String> command, Path workDir, Duration timeout, Consumer<String> stdoutLines) {
     Path stderr = workDir.resolve("stderr-" + System.nanoTime() + ".log");
     Process process;
@@ -59,7 +58,6 @@ public class ProcessRunner {
       throw new MediaToolException(
           "can't start " + command.getFirst() + ": " + e.getMessage(), false);
     }
-    StringBuilder out = new StringBuilder();
     Thread reader =
         Thread.ofVirtual()
             .start(
@@ -70,7 +68,6 @@ public class ProcessRunner {
                               process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = lines.readLine()) != null) {
-                      out.append(line).append('\n');
                       stdoutLines.accept(line);
                     }
                   } catch (IOException e) {
@@ -86,7 +83,7 @@ public class ProcessRunner {
     } catch (InterruptedException e) {
       process.destroyForcibly();
       Thread.currentThread().interrupt();
-      throw new JobInterruptedException(command.getFirst() + " was interrupted");
+      throw new MediaToolException(command.getFirst() + " was interrupted", false);
     }
     if (process.exitValue() != 0) {
       String tail = tail(stderr);
@@ -95,7 +92,6 @@ public class ProcessRunner {
           command.getFirst() + " exited " + process.exitValue() + ": " + tail, permanent);
     }
     deleteQuietly(stderr);
-    return new Result(out.toString());
   }
 
   /** The last 4 KB of stderr — what ends up in {@code pipeline_job.last_error}. */

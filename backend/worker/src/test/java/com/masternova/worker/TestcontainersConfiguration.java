@@ -37,10 +37,6 @@ public class TestcontainersConfiguration {
 
   @Bean
   DynamicPropertyRegistrar storageProperties(SeaweedFsContainer seaweed) {
-    return registry -> {
-      registry.add("masternova.storage.endpoint", seaweed::endpoint);
-      registry.add("masternova.storage.access-key", () -> SeaweedFsContainer.ACCESS_KEY);
-      registry.add("masternova.storage.secret-key", () -> SeaweedFsContainer.SECRET_KEY);
-    };
+    return seaweed::register;
   }
 }

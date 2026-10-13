@@ -101,6 +101,14 @@ public class MediaAsset {
     return ownerId.equals(userId);
   }
 
+  /**
+   * ⭐ The ONE "may see this asset" rule (upload, progress, playback): its owner or an admin. Phase
+   * 8's entitlement for learners extends it here, once.
+   */
+  public boolean isVisibleTo(UUID userId, boolean admin) {
+    return admin || isOwnedBy(userId);
+  }
+
   public UUID id() {
     return id;
   }
@@ -115,10 +123,6 @@ public class MediaAsset {
 
   public long sizeBytes() {
     return sizeBytes;
-  }
-
-  public String originalFilename() {
-    return originalFilename;
   }
 
   public Optional<Integer> durationSeconds() {

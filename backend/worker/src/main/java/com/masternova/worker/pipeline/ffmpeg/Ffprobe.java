@@ -1,5 +1,6 @@
 package com.masternova.worker.pipeline.ffmpeg;
 
+import com.masternova.storage.MediaKeys;
 import com.masternova.worker.pipeline.PipelineProperties;
 import java.net.URI;
 import java.nio.file.Path;
@@ -16,9 +17,6 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class Ffprobe {
 
-  /** Smaller than this on either side isn't a lecture video (and makes no valid rung name). */
-  static final int MIN_SIDE = 16;
-
   private final ProcessRunner runner;
   private final JsonMapper json;
   private final String ffprobe;
@@ -30,23 +28,21 @@ public class Ffprobe {
   }
 
   public SourceInfo probe(URI source, Path workDir) {
-    String out =
-        runner
-            .run(
-                List.of(
-                    ffprobe,
-                    "-v",
-                    "error",
-                    "-print_format",
-                    "json",
-                    "-show_format",
-                    "-show_streams",
-                    source.toString()),
-                workDir,
-                Duration.ofMinutes(2),
-                line -> {})
-            .stdout();
-    return parse(out);
+    StringBuilder out = new StringBuilder();
+    runner.run(
+        List.of(
+            ffprobe,
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            source.toString()),
+        workDir,
+        Duration.ofMinutes(2),
+        line -> out.append(line).append('\n'));
+    return parse(out.toString());
   }
 
   /** Package-visible for the parser test: real ffprobe JSON, no process. */
@@ -66,7 +62,7 @@ public class Ffprobe {
     }
     int width = video.path("width").asInt(0);
     int height = video.path("height").asInt(0);
-    if (width < MIN_SIDE || height < MIN_SIDE) {
+    if (width < MediaKeys.MIN_RUNG_HEIGHT || height < MediaKeys.MIN_RUNG_HEIGHT) {
       // ⭐ permanent: nothing playable to make of it (found in review: height 0 became a '2p' rung
       //    that failed only after five full encodes)
       throw new MediaToolException("the video is too small: " + width + "x" + height, true);

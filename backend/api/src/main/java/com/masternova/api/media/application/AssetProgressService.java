@@ -53,7 +53,7 @@ public class AssetProgressService {
               MediaAsset asset =
                   assets
                       .findById(assetId)
-                      .filter(a -> me.has(Role.ADMIN) || a.isOwnedBy(me.id()))
+                      .filter(a -> a.isVisibleTo(me.id(), me.has(Role.ADMIN)))
                       .orElseThrow(() -> new NotFoundException("Asset", assetId));
               return view(asset);
             });

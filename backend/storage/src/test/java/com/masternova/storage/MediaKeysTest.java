@@ -35,6 +35,14 @@ class MediaKeysTest {
   }
 
   @Test
+  void rungNamesStartAtTheMinimumHeight() {
+    assertThat(MediaKeys.isRungName("16p")).isTrue();
+    assertThat(MediaKeys.isRungName("1080p")).isTrue();
+    assertThat(MediaKeys.isRungName("15p")).isFalse();
+    assertThat(MediaKeys.isRungName("2p")).isFalse();
+  }
+
+  @Test
   void aRungNameCannotEscapeItsPrefix() {
     assertThatThrownBy(() -> MediaKeys.rung(ASSET, "../source"))
         .isInstanceOf(IllegalArgumentException.class);

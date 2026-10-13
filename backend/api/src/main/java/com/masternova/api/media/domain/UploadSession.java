@@ -123,11 +123,6 @@ public class UploadSession {
     status = UploadStatus.ABORTED;
   }
 
-  public void markExpired() {
-    requireOpen();
-    status = UploadStatus.EXPIRED;
-  }
-
   private void requireOpen() {
     if (status != UploadStatus.OPEN) {
       throw new IllegalStateException("upload " + id + " is " + status);

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.api.catalog.domain.Instructor;
 import com.masternova.api.catalog.domain.TestInstructors;
+import com.masternova.api.catalog.domain.TestMedia;
+import com.masternova.storage.MediaKeys;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -93,17 +95,7 @@ class AssetProgressIT {
   }
 
   private UUID processingAsset(String status) {
-    UUID asset = UUID.randomUUID();
-    db.sql(
-            """
-            INSERT INTO media_asset (id, owner_id, kind, status, original_filename, content_type,
-                                     size_bytes, created_at, version)
-            VALUES (:id, :owner, 'VIDEO', :status, 'a.mp4', 'video/mp4', 1, now(), 0)
-            """)
-        .param("id", asset)
-        .param("owner", asha.id())
-        .param("status", status)
-        .update();
+    UUID asset = new TestMedia(dataSource).asset(asha.id(), status, null);
     db.sql(
             """
             INSERT INTO pipeline_job (id, asset_id, type, rung, status, attempts, next_attempt_at,
@@ -185,7 +177,7 @@ class AssetProgressIT {
 
     // the worker's tick (ProgressPublisher's exact message)
     redis.convertAndSend(
-        "media:asset:" + asset,
+        MediaKeys.progressChannel(asset),
         "{\"kind\":\"progress\",\"assetId\":\""
             + asset
             + "\",\"job\":\"TRANSCODE\",\"rung\":\"720p\",\"percent\":75}");
@@ -197,7 +189,7 @@ class AssetProgressIT {
         .update();
     db.sql("UPDATE media_asset SET status = 'READY' WHERE id = :a").param("a", asset).update();
     redis.convertAndSend(
-        "media:asset:" + asset, "{\"kind\":\"changed\",\"assetId\":\"" + asset + "\"}");
+        MediaKeys.progressChannel(asset), "{\"kind\":\"changed\",\"assetId\":\"" + asset + "\"}");
 
     assertThat(next(lines))
         .startsWith("snapshot ")

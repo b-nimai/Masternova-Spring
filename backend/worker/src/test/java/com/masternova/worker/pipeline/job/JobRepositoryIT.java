@@ -117,14 +117,14 @@ class JobRepositoryIT {
   void aJobThatLostItsWorkerOnTheLastAttemptIsBuriedInsteadOfReclaimed() {
     UUID asset = assets.uploadedAsset();
     jobs.enqueue(JobSpec.of(asset, JobType.TRANSCODE));
-    for (int attempt = 1; attempt <= 3; attempt++) {
-      assertThat(jobs.buryAbandoned(3)).isEmpty();
+    for (int attempt = 1; attempt <= 5; attempt++) { // max-attempts defaults to 5
+      assertThat(jobs.buryAbandoned(5)).isEmpty();
       jobs.claim(1, LEASE, "worker-" + attempt); // …and every worker is OOM-killed
       clock.advance(LEASE.plusSeconds(1));
     }
 
-    assertThat(jobs.buryAbandoned(3)).containsExactly(asset);
-    assertThat(jobs.claim(1, LEASE, "worker-4")).isEmpty(); // ⭐ no fourth worker taken down
+    assertThat(jobs.claim(1, LEASE, "worker-6")).isEmpty(); // ⭐ never handed to a sixth worker
+    assertThat(jobs.buryAbandoned(5)).containsExactly(asset);
     assertThat(jobs.jobsOf(asset))
         .singleElement()
         .satisfies(j -> assertThat(j.status()).isEqualTo("DEAD"));

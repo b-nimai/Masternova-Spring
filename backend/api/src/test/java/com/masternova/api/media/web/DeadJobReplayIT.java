@@ -6,6 +6,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.api.catalog.domain.Instructor;
 import com.masternova.api.catalog.domain.TestInstructors;
+import com.masternova.api.catalog.domain.TestMedia;
 import com.masternova.api.identity.Role;
 import java.util.List;
 import java.util.UUID;
@@ -59,16 +60,7 @@ class DeadJobReplayIT {
 
   /** A FAILED asset whose {@code type} job died after {@code attempts} tries. */
   private UUID deadJob(String type) {
-    UUID asset = UUID.randomUUID();
-    jdbc.sql(
-            """
-            INSERT INTO media_asset (id, owner_id, kind, status, original_filename, content_type,
-                                     size_bytes, failure_code, created_at, version)
-            VALUES (:id, :owner, 'VIDEO', 'FAILED', 'a.mp4', 'video/mp4', 1, 'TRANSCODE_FAILED', now(), 0)
-            """)
-        .param("id", asset)
-        .param("owner", asha.id())
-        .update();
+    UUID asset = new TestMedia(dataSource).asset(asha.id(), "FAILED", null);
     UUID job = UUID.randomUUID();
     jdbc.sql(
             """

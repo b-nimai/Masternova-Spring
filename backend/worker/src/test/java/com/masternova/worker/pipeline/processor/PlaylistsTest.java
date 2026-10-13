@@ -11,23 +11,6 @@ import org.junit.jupiter.api.Test;
 class PlaylistsTest {
 
   @Test
-  void aRungPlaylistReferencesItsInitSegmentAndEverySegment() {
-    String rung =
-        """
-        #EXTM3U
-        #EXT-X-VERSION:7
-        #EXT-X-MAP:URI="init.mp4"
-        #EXTINF:6.000000,
-        seg_00000.m4s
-        #EXTINF:1.000000,
-        seg_00001.m4s
-        #EXT-X-ENDLIST
-        """;
-    assertThat(PackageProcessor.referencedFiles(rung))
-        .containsExactly("init.mp4", "seg_00000.m4s", "seg_00001.m4s");
-  }
-
-  @Test
   void theMasterPlaylistListsRungsLowestFirstWithBandwidthResolutionAndCodecs() {
     String master =
         PackageProcessor.masterPlaylist(

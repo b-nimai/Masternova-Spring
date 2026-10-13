@@ -17,6 +17,10 @@
       <span class="label">Uploading {{ s.percent | number: '1.0-0' }}%</span>
       <mat-progress-bar mode="determinate" [value]="s.percent" />
     }
+    @case ('completing') {
+      <span class="label">Finishing the upload…</span>
+      <mat-progress-bar mode="indeterminate" />
+    }
     @case ('processing') {
       <span class="label">{{ s.step }} · {{ s.percent }}%</span>
       <mat-progress-bar mode="determinate" [value]="s.percent" />

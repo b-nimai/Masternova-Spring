@@ -13,7 +13,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { Subscription, timer } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { MediaApi } from '../../../../core/api/media-api';
 import { asProblem } from '../../../../core/api/problem';
 import { HlsPlayer } from '../../../../shared/hls-player/hls-player';
@@ -23,6 +23,7 @@ import { ChunkedUploader } from '../chunked-uploader';
 export type VideoState =
   | { kind: 'none' }
   | { kind: 'uploading'; percent: number }
+  | { kind: 'completing' }
   | { kind: 'processing'; percent: number; step: string }
   | { kind: 'ready' }
   | { kind: 'failed'; message: string; resumable: boolean };
@@ -82,6 +83,8 @@ export class LectureVideo {
         next: (p) => {
           if (p.phase === 'uploading') {
             this.state.set({ kind: 'uploading', percent: (100 * p.sentBytes) / p.totalBytes });
+          } else if (p.phase === 'completing') {
+            this.state.set({ kind: 'completing' });
           } else if (p.phase === 'done') {
             this.state.set({ kind: 'processing', percent: 0, step: 'Starting' });
             this.uploaded.emit(p.assetId);
@@ -128,7 +131,7 @@ export class LectureVideo {
       return;
     }
     this.watching = this.media
-      .stream(assetId)
+      .follow(assetId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (e) => {
@@ -161,17 +164,6 @@ export class LectureVideo {
         },
         error: () =>
           this.state.set({ kind: 'processing', percent: 0, step: 'Reconnect to see progress' }),
-        // ⭐ the server also closes a stream that has been open a long time (30 min): if the asset
-        //    isn't finished yet, open a new one (found in review)
-        complete: () => {
-          if (this.state().kind === 'processing' && this.assetId() === assetId) {
-            timer(1000)
-              .pipe(takeUntilDestroyed(this.destroyRef))
-              .subscribe(() => {
-                if (this.assetId() === assetId) this.watch(assetId);
-              });
-          }
-        },
       });
   }
 }

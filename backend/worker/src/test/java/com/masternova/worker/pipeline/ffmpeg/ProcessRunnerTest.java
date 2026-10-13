@@ -23,10 +23,9 @@ class ProcessRunnerTest {
   @Test
   void stdoutArrivesLineByLine() {
     List<String> lines = new ArrayList<>();
-    var result = runner.run(sh("echo a; echo b"), dir, Duration.ofSeconds(5), lines::add);
+    runner.run(sh("echo a; echo b"), dir, Duration.ofSeconds(5), lines::add);
 
     assertThat(lines).containsExactly("a", "b");
-    assertThat(result.stdout()).isEqualTo("a\nb\n");
   }
 
   @Test

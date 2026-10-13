@@ -4,13 +4,18 @@ import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
 import com.masternova.storage.ObjectStorage;
 import com.masternova.worker.pipeline.PipelineStore;
+import com.masternova.worker.pipeline.WorkDirs;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Stream;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 
 /**
  * TEMPLATE METHOD: the skeleton every pipeline job runs (video-pipeline LLD §4), with the steps
@@ -20,8 +25,9 @@ import java.util.stream.Stream;
  * <ol>
  *   <li>a private work directory per job;
  *   <li>{@link #process} — the hook: ffprobe / ffmpeg / a playlist, writing local files;
- *   <li>⭐ upload the outputs with COMMIT MARKERS LAST (a rung's {@code index.m3u8}, the asset's
- *       {@code master.m3u8}): a reader never sees a playlist whose segments aren't all there;
+ *   <li>⭐ upload the outputs (in parallel) with COMMIT MARKERS LAST (a rung's {@code index.m3u8},
+ *       the asset's {@code master.m3u8}): a reader never sees a playlist whose segments aren't all
+ *       there;
  *   <li>hand back a {@link Completion} — the database effects ({@link #record}, {@link #next}) —
  *       for the runner to apply in ONE transaction with marking the job DONE;
  *   <li>always delete the work directory, even when a step throws.
@@ -61,7 +67,7 @@ public abstract class JobProcessor<R> {
     } catch (IOException e) {
       throw new UncheckedIOException(e);
     } finally {
-      deleteRecursively(dir);
+      WorkDirs.deleteTree(dir);
     }
   }
 
@@ -76,6 +82,9 @@ public abstract class JobProcessor<R> {
     return List.of();
   }
 
+  /** Parts in flight at once: segments upload in parallel; latency, not bandwidth, is the cost. */
+  static final int PARALLEL_UPLOADS = 8;
+
   private void upload(List<Output> outputs) {
     for (Output o : outputs) {
       // a tool that "succeeded" without writing its file (found in e2e: an empty sprite) must say
@@ -84,28 +93,42 @@ public abstract class JobProcessor<R> {
         throw new IllegalStateException(type() + " produced no " + o.file().getFileName());
       }
     }
-    outputs.stream()
-        .sorted(Comparator.comparing(Output::commitMarker)) // false < true: markers go last
-        .forEach(o -> storage.put(o.key(), o.file(), o.contentType()));
+    // ⭐ everything else in parallel (bounded), THEN the commit markers, one by one
+    putAll(outputs.stream().filter(o -> !o.commitMarker()).toList());
+    outputs.stream().filter(Output::commitMarker).forEach(this::put);
   }
 
-  private static void deleteRecursively(Path dir) {
-    if (!Files.exists(dir)) {
-      return;
-    }
-    try (Stream<Path> paths = Files.walk(dir)) {
-      paths.sorted(Comparator.reverseOrder()).forEach(JobProcessor::deleteQuietly);
-    } catch (IOException e) {
-      // a leftover is wiped by the startup cleanup; never fail a job over it
+  private void putAll(List<Output> outputs) {
+    Semaphore permits = new Semaphore(PARALLEL_UPLOADS);
+    try (ExecutorService pool = Executors.newVirtualThreadPerTaskExecutor()) {
+      List<Future<?>> uploads = new ArrayList<>();
+      for (Output o : outputs) {
+        uploads.add(
+            pool.submit(
+                () -> {
+                  permits.acquireUninterruptibly();
+                  try {
+                    put(o);
+                  } finally {
+                    permits.release();
+                  }
+                }));
+      }
+      for (Future<?> upload : uploads) {
+        upload.get(); // the first failure fails the job (and the rest stop with the pool)
+      }
+    } catch (ExecutionException e) {
+      throw e.getCause() instanceof RuntimeException r
+          ? r
+          : new IllegalStateException(e.getCause());
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("interrupted while uploading", e);
     }
   }
 
-  private static void deleteQuietly(Path path) {
-    try {
-      Files.deleteIfExists(path);
-    } catch (IOException ignored) {
-      // see deleteRecursively
-    }
+  private void put(Output o) {
+    storage.put(o.key(), o.file(), o.contentType());
   }
 
   // ------------------------------------------------------------------ the hook's vocabulary

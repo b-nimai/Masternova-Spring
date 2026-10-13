@@ -21,19 +21,15 @@ class UploadStateTest {
     "OPEN,      resume,   PERFORM",
     "OPEN,      complete, PERFORM",
     "OPEN,      abort,    PERFORM",
-    "OPEN,      expire,   PERFORM",
     "COMPLETED, resume,   UPLOAD_ALREADY_COMPLETED",
     "COMPLETED, complete, REPLAY",
     "COMPLETED, abort,    UPLOAD_ALREADY_COMPLETED",
-    "COMPLETED, expire,   REPLAY",
     "ABORTED,   resume,   UPLOAD_ABORTED",
     "ABORTED,   complete, UPLOAD_ABORTED",
     "ABORTED,   abort,    REPLAY",
-    "ABORTED,   expire,   REPLAY",
     "EXPIRED,   resume,   UPLOAD_EXPIRED",
     "EXPIRED,   complete, UPLOAD_EXPIRED",
     "EXPIRED,   abort,    REPLAY",
-    "EXPIRED,   expire,   REPLAY"
   })
   void everyCell(UploadStatus status, String event, String expected) {
     UploadState state = UploadState.of(status);
@@ -42,7 +38,6 @@ class UploadStateTest {
           case "resume" -> UploadState::resume;
           case "complete" -> UploadState::complete;
           case "abort" -> UploadState::abort;
-          case "expire" -> UploadState::expire;
           default -> throw new IllegalArgumentException(event);
         };
 

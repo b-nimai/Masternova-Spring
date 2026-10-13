@@ -7,6 +7,7 @@ import com.jayway.jsonpath.JsonPath;
 import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.api.catalog.domain.Instructor;
 import com.masternova.api.catalog.domain.TestInstructors;
+import com.masternova.api.catalog.domain.TestMedia;
 import com.masternova.api.identity.Role;
 import com.masternova.storage.MediaKeys;
 import com.masternova.storage.ObjectStorage;
@@ -76,18 +77,7 @@ class PlaybackIT {
   }
 
   private UUID asset(String status) {
-    UUID id = UUID.randomUUID();
-    db.sql(
-            """
-            INSERT INTO media_asset (id, owner_id, kind, status, original_filename, content_type,
-                                     size_bytes, created_at, version)
-            VALUES (:id, :owner, 'VIDEO', :status, 'v.mp4', 'video/mp4', 1, now(), 0)
-            """)
-        .param("id", id)
-        .param("owner", asha.id())
-        .param("status", status)
-        .update();
-    return id;
+    return new TestMedia(dataSource).asset(asha.id(), status, null);
   }
 
   private static RequestPostProcessor as(UUID id, Role role) {

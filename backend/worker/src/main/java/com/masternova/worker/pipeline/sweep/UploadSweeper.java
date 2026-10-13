@@ -1,5 +1,6 @@
 package com.masternova.worker.pipeline.sweep;
 
+import com.masternova.storage.MediaKeys;
 import com.masternova.storage.ObjectStorage;
 import com.masternova.storage.PendingUpload;
 import java.sql.Timestamp;
@@ -118,7 +119,7 @@ public class UploadSweeper {
                 .list());
     Instant cutoff = clock.instant().minus(ORPHAN_AGE);
     int aborted = 0;
-    for (PendingUpload upload : storage.listMultipartUploads("media/")) {
+    for (PendingUpload upload : storage.listMultipartUploads(MediaKeys.ROOT)) {
       if (!open.contains(upload.uploadId()) && upload.initiated().isBefore(cutoff)) {
         storage.abortMultipartUpload(upload.key(), upload.uploadId());
         aborted++;

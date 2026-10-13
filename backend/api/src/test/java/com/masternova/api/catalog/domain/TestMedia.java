@@ -33,6 +33,23 @@ public final class TestMedia {
     return course;
   }
 
+  /** One asset row, as media leaves it in {@code status} — the only place tests insert one. */
+  public UUID asset(UUID ownerId, String status, Integer durationSeconds) {
+    UUID id = UUID.randomUUID();
+    jdbc.sql(
+            """
+            INSERT INTO media_asset (id, owner_id, kind, status, original_filename, content_type,
+                                     size_bytes, duration_seconds, created_at, version)
+            VALUES (:id, :owner, 'VIDEO', :status, 'v.mp4', 'video/mp4', 1, :seconds, now(), 0)
+            """)
+        .param("id", id)
+        .param("owner", ownerId)
+        .param("status", status)
+        .param("seconds", durationSeconds)
+        .update();
+    return id;
+  }
+
   /** Before {@link TestInstructors#deleteAll()}: assets reference their owners. */
   public void deleteAll() {
     jdbc.sql("DELETE FROM pipeline_job").update();

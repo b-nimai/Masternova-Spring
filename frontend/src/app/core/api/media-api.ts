@@ -1,11 +1,12 @@
 import {
   HttpClient,
+  HttpErrorResponse,
   HttpDownloadProgressEvent,
   HttpEventType,
   HttpHeaders,
 } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
-import { Observable } from 'rxjs';
+import { defer, EMPTY, Observable, repeat, retry, tap, throwError, timer } from 'rxjs';
 
 /** Mirrors `CreateUploadRequest`. */
 export interface CreateUploadRequest {
@@ -73,6 +74,18 @@ export function parseSse(text: string): {
   return { events, rest };
 }
 
+/** Delay before reopening a progress stream that ended early or dropped. */
+export const RECONNECT_MS = 1000;
+
+function isFinished(e: AssetEvent): boolean {
+  return e.event === 'snapshot' && (e.data.status === 'READY' || e.data.status === 'FAILED');
+}
+
+/** A dropped connection or a server hiccup is worth reconnecting for; a 403/404 is not. */
+function isTransient(e: unknown): boolean {
+  return e instanceof HttpErrorResponse && (e.status === 0 || e.status >= 500);
+}
+
 /** The media module's API: resumable uploads and an asset's processing progress. */
 @Service()
 export class MediaApi {
@@ -105,15 +118,26 @@ export class MediaApi {
     return this.http.post<PlaybackResponse>(`${this.base}/assets/${assetId}/playback`, null);
   }
 
-  asset(assetId: string): Observable<AssetProgressResponse> {
-    return this.http.get<AssetProgressResponse>(`${this.base}/assets/${assetId}`);
+  /**
+   * ⭐ An asset's progress until it is READY or FAILED, however often the connection ends: a
+   *    stream the server closed early (its time limit) or the network dropped is reopened after
+   *    {@link RECONNECT_MS}. Each new stream starts with a fresh snapshot, so nothing is missed.
+   */
+  follow(assetId: string): Observable<AssetEvent> {
+    let finished = false;
+    return defer(() => this.stream(assetId)).pipe(
+      tap((e) => (finished ||= isFinished(e))),
+      retry({ delay: (e) => (isTransient(e) ? timer(RECONNECT_MS) : throwError(() => e)) }),
+      repeat({ delay: () => (finished ? EMPTY : timer(RECONNECT_MS)) }),
+    );
   }
 
   /**
    * The SSE progress stream, read through HttpClient — NOT EventSource, which can't send the
    * bearer token (API conventions §9). The fetch backend reports the body as it streams
    * (`partialText`); this parses the new part of it into events. Completes when the server closes
-   * the stream (READY or FAILED).
+   * the stream — at READY or FAILED, or after its 30-minute limit. Callers usually want
+   * {@link follow}.
    */
   stream(assetId: string): Observable<AssetEvent> {
     return new Observable<AssetEvent>((subscriber) => {

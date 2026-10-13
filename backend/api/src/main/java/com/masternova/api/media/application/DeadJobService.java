@@ -38,12 +38,11 @@ public class DeadJobService {
   @PreAuthorize("hasRole('ADMIN')")
   @Transactional
   public DeadJob replay(UUID jobId) {
-    String status = jobs.statusOf(jobId).orElseThrow(() -> new NotFoundException("Job", jobId));
+    DeadJob job = jobs.find(jobId).orElseThrow(() -> new NotFoundException("Job", jobId));
     if (!jobs.requeue(jobId, clock.instant())) {
       throw new ConflictException(
-          "JOB_NOT_DEAD", "Only a dead job can be replayed.", Map.of("status", status));
+          "JOB_NOT_DEAD", "Only a dead job can be replayed.", Map.of("status", job.status()));
     }
-    DeadJob job = jobs.find(jobId).orElseThrow();
     // a dead PROBE means the asset never got past UPLOADED; any later job ran while PROCESSING
     jobs.reviveAsset(
         job.assetId(), job.type().equals("PROBE") ? MediaStatus.UPLOADED : MediaStatus.PROCESSING);

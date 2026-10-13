@@ -1,7 +1,7 @@
 import { HttpEventType, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { AssetEvent, MediaApi, parseSse } from './media-api';
+import { AssetEvent, MediaApi, parseSse, RECONNECT_MS } from './media-api';
 
 describe('parseSse', () => {
   it('splits complete events and keeps the unfinished tail', () => {
@@ -65,5 +65,47 @@ describe('MediaApi', () => {
     expect(events.map((e) => e.event)).toEqual(['snapshot', 'progress', 'snapshot']);
     expect(events[1].data).toEqual({ job: 'TRANSCODE', rung: '720p', percent: 55 });
     expect(done).toBe(true);
+  });
+
+  describe('follow', () => {
+    const processing =
+      'event:snapshot\ndata:{"status":"PROCESSING","percent":30,"failureCode":null,"jobs":[]}\n\n';
+    const ready =
+      'event:snapshot\ndata:{"status":"READY","percent":100,"failureCode":null,"jobs":[]}\n\n';
+
+    afterEach(() => vi.useRealTimers());
+
+    it('reopens a stream the server closed before the asset finished, and stops at READY', () => {
+      vi.useFakeTimers();
+      const statuses: string[] = [];
+      let done = false;
+      api.follow('a1').subscribe({
+        next: (e) => e.event === 'snapshot' && statuses.push(e.data.status),
+        complete: () => (done = true),
+      });
+
+      http.expectOne('/api/v1/media/assets/a1/stream').flush(processing); // closed at 30 min
+      vi.advanceTimersByTime(RECONNECT_MS);
+      http.expectOne('/api/v1/media/assets/a1/stream').flush(ready);
+      vi.advanceTimersByTime(RECONNECT_MS);
+
+      http.expectNone('/api/v1/media/assets/a1/stream'); // ⭐ finished: no third stream
+      expect(statuses).toEqual(['PROCESSING', 'READY']);
+      expect(done).toBe(true);
+    });
+
+    it('rides out a dropped connection but not a refusal', () => {
+      vi.useFakeTimers();
+      let error: unknown;
+      api.follow('a1').subscribe({ error: (e) => (error = e) });
+
+      http.expectOne('/api/v1/media/assets/a1/stream').error(new ProgressEvent('error')); // status 0
+      vi.advanceTimersByTime(RECONNECT_MS);
+      http
+        .expectOne('/api/v1/media/assets/a1/stream')
+        .flush({ code: 'NOT_FOUND' }, { status: 404, statusText: 'Not Found' });
+
+      expect(error).toBeDefined();
+    });
   });
 });

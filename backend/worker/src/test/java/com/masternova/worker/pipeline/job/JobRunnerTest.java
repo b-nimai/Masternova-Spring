@@ -214,19 +214,32 @@ class JobRunnerTest {
   }
 
   @Test
-  void anInterruptionByOurOwnShutdownHandsTheJobBackUncounted() {
+  void aJobFailingWhileThisProcessShutsDownIsHandedBackUncounted() {
     Job job = probe(2);
-
-    runner(
+    JobRunner runner =
+        runner(
             () -> {
-              throw new com.masternova.worker.pipeline.ffmpeg.JobInterruptedException("deploy");
+              throw new StorageUnavailableException("upload aborted by the shutdown", null);
             },
-            Duration.ofMinutes(1))
-        .execute(job, "w");
+            Duration.ofMinutes(1));
+    runner.shutDown(); // ⭐ any step, any exception: it's the deploy, not the media
 
-    verify(jobs).release(job.id(), "w"); // ⭐ not reschedule (an attempt + backoff), not bury
+    runner.execute(job, "w");
+
+    verify(jobs).release(job.id(), "w");
     verify(jobs, never()).reschedule(any(), any(), any(), any());
     verify(jobs, never()).bury(any(), any(), any());
+  }
+
+  @Test
+  void abandonedJobsAreBuriedAndTheirAssetsFailedTogether() {
+    UUID other = UUID.randomUUID();
+    when(jobs.buryAbandoned(3)).thenReturn(List.of(asset, other));
+
+    runner(() -> null, Duration.ofMinutes(1)).buryAbandoned();
+
+    verify(store).markFailed(asset, "TRANSCODE_FAILED");
+    verify(store).markFailed(other, "TRANSCODE_FAILED");
   }
 
   @Test

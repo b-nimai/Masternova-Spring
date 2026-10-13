@@ -2,7 +2,6 @@ package com.masternova.worker.pipeline.job;
 
 import com.masternova.worker.pipeline.PipelineProperties;
 import com.masternova.worker.pipeline.PipelineStore;
-import com.masternova.worker.pipeline.ffmpeg.JobInterruptedException;
 import com.masternova.worker.pipeline.ffmpeg.MediaToolException;
 import java.time.Clock;
 import java.time.Duration;
@@ -38,6 +37,7 @@ public class JobRunner {
   private final PipelineProperties props;
   private final Clock clock;
   private final ProgressPublisher publisher;
+  private volatile boolean shuttingDown;
 
   JobRunner(
       JobProcessorRegistry registry,
@@ -57,20 +57,8 @@ public class JobRunner {
   }
 
   public void execute(Job job, String workerId) {
-    AtomicInteger progress = new AtomicInteger(-1);
-    Thread heartbeat = Thread.ofVirtual().start(() -> heartbeat(job, workerId, progress));
     try {
-      JobProcessor.Completion completion =
-          registry
-              .of(job.type())
-              .run(
-                  job,
-                  props.workDir(),
-                  percent -> {
-                    progress.set(percent);
-                    publisher.progress(job, percent);
-                  });
-      heartbeat.interrupt();
+      JobProcessor.Completion completion = runWithHeartbeat(job, workerId);
       tx.executeWithoutResult(
           status -> {
             store.lockAsset(job.assetId()); // ⭐ siblings finishing at once serialise here
@@ -80,17 +68,54 @@ public class JobRunner {
             }
             completion.apply(store).forEach(jobs::enqueue);
           });
-    } catch (JobInterruptedException e) {
-      // ⭐ our shutdown, not the media's fault: give the job back as it was, due now
-      jobs.release(job.id(), workerId);
     } catch (RuntimeException e) {
-      heartbeat.interrupt();
-      fail(job, workerId, e);
+      if (shuttingDown) {
+        // ⭐ our deploy / scale-in interrupted it, whatever step it was in (ffmpeg, an upload…):
+        //    not the media's fault — give it back uncounted, due now
+        jobs.release(job.id(), workerId);
+      } else {
+        fail(job, workerId, e);
+      }
+    } finally {
+      publisher.changed(job); // after the commit: subscribers re-read the asset
+    }
+  }
+
+  /** The processor's work, with the lease kept alive meanwhile — stopped on EVERY exit path. */
+  private JobProcessor.Completion runWithHeartbeat(Job job, String workerId) {
+    AtomicInteger progress = new AtomicInteger(-1);
+    Thread heartbeat = Thread.ofVirtual().start(() -> heartbeat(job, workerId, progress));
+    try {
+      return registry
+          .of(job.type())
+          .run(
+              job,
+              props.workDir(),
+              percent -> {
+                progress.set(percent);
+                publisher.progress(job, percent);
+              });
     } finally {
       heartbeat
           .interrupt(); // ⭐ also on an Error (OOM…): a live heartbeat would hold the lease forever
-      publisher.changed(job); // after the commit: subscribers re-read the asset
     }
+  }
+
+  /** From now on, a failing job is this process going away, not a failure (JobPoller.close). */
+  void shutDown() {
+    shuttingDown = true;
+  }
+
+  /**
+   * ⭐ Jobs whose worker DIED on their last allowed attempt: DEAD and their asset FAILED, in ONE
+   * transaction — a source that OOM-kills every worker must stop being retried (the attempt check
+   * in {@link #fail} never runs after a SIGKILL).
+   */
+  public void buryAbandoned() {
+    tx.executeWithoutResult(
+        status ->
+            jobs.buryAbandoned(props.maxAttempts())
+                .forEach(asset -> store.markFailed(asset, "TRANSCODE_FAILED")));
   }
 
   private void heartbeat(Job job, String workerId, AtomicInteger progress) {

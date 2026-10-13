@@ -40,6 +40,13 @@ public class SeaweedFsContainer extends GenericContainer<SeaweedFsContainer> {
     return URI.create("http://" + getHost() + ":" + getMappedPort(S3_PORT));
   }
 
+  /** Points an app's {@code masternova.storage.*} at this container (api and worker ITs). */
+  public void register(org.springframework.test.context.DynamicPropertyRegistry registry) {
+    registry.add("masternova.storage.endpoint", this::endpoint);
+    registry.add("masternova.storage.access-key", () -> ACCESS_KEY);
+    registry.add("masternova.storage.secret-key", () -> SECRET_KEY);
+  }
+
   /** Path-style, static credentials, the media bucket (already created). */
   public StorageProperties storageProperties() {
     return new StorageProperties(

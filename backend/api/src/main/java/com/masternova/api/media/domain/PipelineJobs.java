@@ -17,6 +17,7 @@ public interface PipelineJobs {
       UUID assetId,
       String type,
       String rung,
+      String status,
       int attempts,
       String lastError,
       Instant at) {}
@@ -29,9 +30,7 @@ public interface PipelineJobs {
 
   List<DeadJob> list(int limit);
 
-  /** The job and its status, whatever it is (replay must tell "not dead" from "not there"). */
-  Optional<String> statusOf(UUID jobId);
-
+  /** The job, whatever its status (replay must tell "not dead" from "not there"). */
   Optional<DeadJob> find(UUID jobId);
 
   /**

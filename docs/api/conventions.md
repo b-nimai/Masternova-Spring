@@ -188,7 +188,9 @@ that poll, and `GET …/{id}/stream` (`SseEmitter`, `text/event-stream`). The st
 `snapshot` event first, then `progress` events (lossy ticks, ≤ 1/s per job) and a fresh `snapshot`
 whenever a job finishes, and the server closes it at `READY` or `FAILED`. Always send
 `Cache-Control: no-cache` and `X-Accel-Buffering: no`, because nginx and ALBs buffer by default.
-A `: keep-alive` comment every 20 s stops proxies from closing an idle stream.
+A `: keep-alive` comment every 20 s stops proxies from closing an idle stream. The server ends a
+stream after 30 minutes; the SPA's `MediaApi.follow` reopens a stream that ended (or dropped) before
+`READY`/`FAILED`, and each new stream starts with a fresh snapshot.
 
 The stream is authenticated with the normal **bearer token**, so the SPA reads it with
 `HttpClient` (`observe: 'events'`, `reportProgress`, fetch backend), not `EventSource`, which can't

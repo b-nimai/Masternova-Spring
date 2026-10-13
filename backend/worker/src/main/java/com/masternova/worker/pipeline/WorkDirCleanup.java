@@ -1,11 +1,10 @@
 package com.masternova.worker.pipeline;
 
+import com.masternova.worker.pipeline.job.JobRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.FileTime;
-import java.time.Clock;
-import java.util.Comparator;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,8 +14,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * A SIGKILL skips the template's {@code finally}, so a job's work directory can outlive it. On
- * startup, remove job directories in which nothing changed for longer than a lease — a running job
- * (another process on the same host) keeps writing files somewhere under its own.
+ * startup, remove every job directory whose job isn't RUNNING under a live lease. ⭐ Directories are
+ * named by job id, so this asks the job table — exact, unlike guessing from file times (a second
+ * worker on the same host keeps its running job's files).
  */
 @Component
 class WorkDirCleanup {
@@ -24,50 +24,32 @@ class WorkDirCleanup {
   private static final Logger log = LoggerFactory.getLogger(WorkDirCleanup.class);
 
   private final PipelineProperties props;
-  private final Clock clock;
+  private final JobRepository jobs;
 
-  WorkDirCleanup(PipelineProperties props, Clock clock) {
+  WorkDirCleanup(PipelineProperties props, JobRepository jobs) {
     this.props = props;
-    this.clock = clock;
+    this.jobs = jobs;
   }
 
   @EventListener(ApplicationReadyEvent.class)
   void removeLeftovers() throws IOException {
     Path root = props.workDir();
     Files.createDirectories(root);
-    FileTime cutoff = FileTime.from(clock.instant().minus(props.lease()));
     try (Stream<Path> dirs = Files.list(root)) {
       for (Path dir : dirs.toList()) {
-        if (newestChange(dir).compareTo(cutoff) < 0) {
+        if (!isLiveJob(dir)) {
           log.info("removing a crashed job's work directory {}", dir);
-          deleteTree(dir);
+          WorkDirs.deleteTree(dir);
         }
       }
     }
   }
 
-  /**
-   * ⭐ The newest change ANYWHERE under the job's directory: ffmpeg writes into {@code <rung>/}, so
-   * the job directory's own mtime stops moving while a transcode runs (found in review).
-   */
-  static FileTime newestChange(Path dir) throws IOException {
-    try (Stream<Path> paths = Files.walk(dir)) {
-      FileTime newest = Files.getLastModifiedTime(dir);
-      for (Path p : paths.toList()) {
-        FileTime t = Files.getLastModifiedTime(p);
-        if (t.compareTo(newest) > 0) {
-          newest = t;
-        }
-      }
-      return newest;
-    }
-  }
-
-  private static void deleteTree(Path dir) throws IOException {
-    try (Stream<Path> paths = Files.walk(dir)) {
-      for (Path p : paths.sorted(Comparator.reverseOrder()).toList()) {
-        Files.deleteIfExists(p);
-      }
+  private boolean isLiveJob(Path dir) {
+    try {
+      return jobs.isLeased(UUID.fromString(dir.getFileName().toString()));
+    } catch (IllegalArgumentException notAJobId) {
+      return false; // not ours to keep
     }
   }
 }

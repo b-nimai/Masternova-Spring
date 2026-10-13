@@ -46,7 +46,7 @@ On the way out, a paid lecture must not become one permanent, shareable URL.
 | Type | Kind | Invariant |
 |---|---|---|
 | `MediaAsset` (`media_asset`) | `@Entity`, aggregate root | owned by one user (`owner_id`); status only moves forward: `AWAITING_UPLOAD → UPLOADED → PROCESSING → READY \| FAILED` (and `FAILED → PROCESSING` only through an admin replay). `duration_seconds`, `width`, `height` are known only from `PROCESSING` on (the worker's probe). |
-| `UploadSession` (`upload_session`) | `@Entity`, one per asset | a sealed `UploadState` (State pattern, 7.3). It stores the **plan**, never the uploaded parts (ADR-0014). `expires_at` is fixed at creation. |
+| `UploadSession` (`upload_session`) | `@Entity`, one per asset | a sealed `UploadState` (State pattern, 7.3). It stores the **plan**, never the uploaded parts (ADR-0014). `expires_at` is fixed at creation; past it, `state(now)` is already `Expired` for every api event, and the worker's sweeper records `EXPIRED` with a conditional SQL update (it can't use the api's entity). |
 | `PartPlan` | value object (record) | `1 ≤ partCount ≤ 100`; `partSize ≥ 5 MiB` (S3's minimum for all but the last part), a whole number of MiB; `partSize × (partCount − 1) < size ≤ partSize × partCount`. The **≤ 100** keeps the create response to one batch of URLs and `ListParts` to one page. |
 | `StoredPart` | value object (record) | what the provider says it holds: `(number, size, etag)` |
 | `MediaKeys` | static key layout, in `backend/storage` | `media/{assetId}/source` · `media/{assetId}/hls/master.m3u8` · `…/hls/{rung}/index.m3u8 · init.mp4 · seg_NNNNN.m4s` · `…/poster.jpg` · `…/sprite.jpg` + `sprite.vtt`. **Deterministic**: computed from ids, never stored, and never random. |
@@ -60,7 +60,7 @@ stateDiagram-v2
   OPEN --> OPEN: resume (ListParts → missing parts, fresh URLs)
   OPEN --> COMPLETED: complete (ListParts matches the plan → CompleteMultipartUpload)
   OPEN --> ABORTED: abort (instructor)
-  OPEN --> EXPIRED: sweeper (past expires_at → AbortMultipartUpload)
+  OPEN --> EXPIRED: past expires_at (the worker's sweeper aborts at the provider and records it)
   COMPLETED --> COMPLETED: complete again → same 200 (idempotent)
   ABORTED --> ABORTED: abort again → 204
   COMPLETED --> [*]
@@ -73,7 +73,6 @@ stateDiagram-v2
 | resume | missing parts + URLs | 409 `UPLOAD_ALREADY_COMPLETED` | 409 `UPLOAD_ABORTED` | 409 `UPLOAD_EXPIRED` |
 | complete | check plan → `COMPLETED` (or 422 `UPLOAD_INCOMPLETE`) | **200, same body** | 409 `UPLOAD_ABORTED` | 409 `UPLOAD_EXPIRED` |
 | abort | `ABORTED` | 409 `UPLOAD_ALREADY_COMPLETED` | **204** | **204** |
-| expire (sweeper) | `EXPIRED` | no-op | no-op | no-op |
 
 **Part plan:** `partSize = max(5 MiB, roundUpToMiB(ceil(size / 100)))`. So 200 MB → 39 × 5 MiB,
 500 MiB → 100 × 5 MiB, 500 MiB + 1 B → 84 × 6 MiB, and 10 GiB → 100 × 103 MiB (`PartPlanTest`).

@@ -2,6 +2,7 @@ package com.masternova.worker.pipeline.ffmpeg;
 
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import com.masternova.storage.MediaKeys;
 import java.util.List;
 
 /**
@@ -29,6 +30,7 @@ public interface LadderProfile {
     }
     Rung lowest = rungs().getFirst();
     int even = source.height() - source.height() % 2;
-    return List.of(Rung.of(Math.max(2, even), lowest.videoKbps(), lowest.audioKbps()));
+    return List.of(
+        Rung.of(Math.max(MediaKeys.MIN_RUNG_HEIGHT, even), lowest.videoKbps(), lowest.audioKbps()));
   }
 }

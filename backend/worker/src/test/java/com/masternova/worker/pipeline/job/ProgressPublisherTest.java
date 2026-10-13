@@ -43,7 +43,9 @@ class ProgressPublisherTest {
     publisher.changed(job);
     verify(redis)
         .convertAndSend(
-            org.mockito.ArgumentMatchers.eq("media:asset:" + job.assetId()), anyString());
+            org.mockito.ArgumentMatchers.eq(
+                com.masternova.storage.MediaKeys.progressChannel(job.assetId())),
+            anyString());
   }
 
   @Test

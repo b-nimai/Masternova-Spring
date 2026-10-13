@@ -11,7 +11,7 @@ import java.util.Map;
  * <pre>
  *   OPEN ──complete──► COMPLETED      (complete again → the same 200)
  *     ├───abort──────► ABORTED        (abort again → 204)
- *     └───expire─────► EXPIRED        (the sweeper; abort → 204)
+ *     └─(past expiry)─► EXPIRED     (the worker's sweeper records it; abort → 204)
  * </pre>
  *
  * <ul>
@@ -48,11 +48,6 @@ public sealed interface UploadState {
     throw rejected("abort");
   }
 
-  /** The sweeper: an OPEN session past its expiry. Anything else is left alone. */
-  default Step expire() {
-    return Step.REPLAY;
-  }
-
   private ConflictException rejected(String event) {
     String code =
         switch (status()) {
@@ -87,11 +82,6 @@ public sealed interface UploadState {
 
     @Override
     public Step abort() {
-      return Step.PERFORM;
-    }
-
-    @Override
-    public Step expire() {
       return Step.PERFORM;
     }
   }

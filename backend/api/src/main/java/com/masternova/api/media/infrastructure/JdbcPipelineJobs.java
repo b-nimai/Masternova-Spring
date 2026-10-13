@@ -25,6 +25,7 @@ class JdbcPipelineJobs implements PipelineJobs {
               rs.getObject("asset_id", UUID.class),
               rs.getString("type"),
               rs.getString("rung"),
+              rs.getString("status"),
               rs.getInt("attempts"),
               rs.getString("last_error"),
               rs.getTimestamp("updated_at").toInstant());
@@ -63,7 +64,7 @@ class JdbcPipelineJobs implements PipelineJobs {
   public List<DeadJob> list(int limit) {
     return jdbc.sql(
             """
-            SELECT id, asset_id, type, rung, attempts, last_error, updated_at FROM pipeline_job
+            SELECT id, asset_id, type, rung, status, attempts, last_error, updated_at FROM pipeline_job
              WHERE status = 'DEAD' ORDER BY updated_at DESC LIMIT :limit
             """)
         .param("limit", limit)
@@ -72,18 +73,10 @@ class JdbcPipelineJobs implements PipelineJobs {
   }
 
   @Override
-  public Optional<String> statusOf(UUID jobId) {
-    return jdbc.sql("SELECT status FROM pipeline_job WHERE id = :id")
-        .param("id", jobId)
-        .query(String.class)
-        .optional();
-  }
-
-  @Override
   public Optional<DeadJob> find(UUID jobId) {
     return jdbc.sql(
             """
-            SELECT id, asset_id, type, rung, attempts, last_error, updated_at FROM pipeline_job
+            SELECT id, asset_id, type, rung, status, attempts, last_error, updated_at FROM pipeline_job
              WHERE id = :id
             """)
         .param("id", jobId)

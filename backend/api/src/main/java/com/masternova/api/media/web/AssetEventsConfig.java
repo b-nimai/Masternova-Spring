@@ -1,5 +1,6 @@
 package com.masternova.api.media.web;
 
+import com.masternova.storage.MediaKeys;
 import java.time.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,6 @@ import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 class AssetEventsConfig {
 
   private static final Logger log = LoggerFactory.getLogger(AssetEventsConfig.class);
-  static final String CHANNELS = "media:asset:*";
   static final Duration RETRY = Duration.ofSeconds(5);
 
   @Bean
@@ -30,7 +30,7 @@ class AssetEventsConfig {
       RedisConnectionFactory redis, AssetEvents events) {
     RedisMessageListenerContainer container = new RedisMessageListenerContainer();
     container.setConnectionFactory(redis);
-    container.addMessageListener(events, new PatternTopic(CHANNELS));
+    container.addMessageListener(events, new PatternTopic(MediaKeys.PROGRESS_CHANNELS));
     container.setAutoStartup(false);
     return container;
   }

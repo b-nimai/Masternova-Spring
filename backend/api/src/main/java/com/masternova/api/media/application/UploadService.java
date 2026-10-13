@@ -140,16 +140,25 @@ public class UploadService {
       storage.completeMultipartUpload(key, session.providerUploadId(), stored);
     } catch (NoSuchUploadException gone) {
       // ⭐ the provider forgot the upload id: completed (we crashed before our commit last time)
-      //    or aborted. Provider truth again — the object is there with the declared size, or not.
-      if (storage.head(key).filter(o -> o.size() == plan.size()).isEmpty()) {
+      //    or aborted. Provider truth again — the HEAD below decides which.
+      if (!hasDeclaredSize(key, plan)) {
         throw new ConflictException(
             "UPLOAD_EXPIRED", "This upload no longer exists. Start a new one.", Map.of());
       }
+      return finish(session, now);
     }
-    long stored = storage.head(key).orElseThrow(() -> missingAfterComplete(key)).size();
-    if (stored != plan.size()) {
-      throw new StorageException("completed " + key + " has " + stored + " bytes", null);
+    if (!hasDeclaredSize(key, plan)) {
+      throw new StorageException(
+          "completed " + key + " but it doesn't have the declared size", null);
     }
+    return finish(session, now);
+  }
+
+  /**
+   * Our side of a completed upload: COMPLETED, UPLOADED, and the event that starts the pipeline.
+   */
+  private UploadView finish(UploadSession session, Instant now) {
+    String key = session.objectKey();
 
     session.markCompleted(now);
     MediaAsset asset = assets.findById(session.assetId()).orElseThrow();
@@ -179,12 +188,14 @@ public class UploadService {
     return found
         .filter(
             s ->
-                me.has(Role.ADMIN)
-                    || assets.findById(s.assetId()).map(a -> a.isOwnedBy(me.id())).orElse(false))
+                assets
+                    .findById(s.assetId())
+                    .map(a -> a.isVisibleTo(me.id(), me.has(Role.ADMIN)))
+                    .orElse(false))
         .orElseThrow(() -> new NotFoundException("Upload", uploadId));
   }
 
-  private static StorageException missingAfterComplete(String key) {
-    return new StorageException("completed " + key + " but HEAD finds nothing", null);
+  private boolean hasDeclaredSize(String key, PartPlan plan) {
+    return storage.head(key).filter(o -> o.size() == plan.size()).isPresent();
   }
 }

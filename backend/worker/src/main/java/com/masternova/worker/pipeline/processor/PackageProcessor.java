@@ -2,6 +2,7 @@ package com.masternova.worker.pipeline.processor;
 
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import com.masternova.storage.HlsPlaylists;
 import com.masternova.storage.MediaKeys;
 import com.masternova.storage.ObjectStorage;
 import com.masternova.storage.StorageUnavailableException;
@@ -53,14 +54,17 @@ class PackageProcessor extends JobProcessor<Void> {
     boolean audio = store.sourceInfo(job.assetId()).orElseThrow().hasAudio();
     for (Rendition r : renditions) {
       String prefix = MediaKeys.rung(job.assetId(), r.rung());
-      for (String file : referencedFiles(storage.getText(r.playlistKey()))) {
-        if (storage.head(prefix + file).isEmpty()) {
+      // ⭐ one LIST per rung, not a HEAD per segment (a 1-hour rung has ~600 of them)
+      java.util.Set<String> stored = new java.util.HashSet<>(storage.listKeys(prefix));
+      for (String file : HlsPlaylists.uris(storage.getText(r.playlistKey()))) {
+        if (!stored.contains(prefix + file)) {
           // temporary: the rung's rerun (or eventual consistency) will produce it
           throw new StorageUnavailableException("missing " + prefix + file, null);
         }
       }
     }
-    Path master = Files.writeString(dir.resolve("master.m3u8"), masterPlaylist(renditions, audio));
+    Path master =
+        Files.writeString(dir.resolve(MediaKeys.MASTER), masterPlaylist(renditions, audio));
     return new Work<>(
         List.of(
             Output.marker(
@@ -72,20 +76,6 @@ class PackageProcessor extends JobProcessor<Void> {
   protected List<JobSpec> next(Job job, Void nothing, PipelineStore store) {
     readiness.readyIfComplete(job.assetId(), store);
     return List.of();
-  }
-
-  /** The media files a rung playlist points at: its {@code EXT-X-MAP} and every segment line. */
-  static List<String> referencedFiles(String playlist) {
-    return playlist
-        .lines()
-        .map(String::strip)
-        .map(
-            line ->
-                line.startsWith("#EXT-X-MAP:")
-                    ? line.replaceAll(".*URI=\"([^\"]+)\".*", "$1")
-                    : line)
-        .filter(line -> !line.isEmpty() && !line.startsWith("#"))
-        .toList();
   }
 
   /**

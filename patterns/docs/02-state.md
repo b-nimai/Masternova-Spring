@@ -144,7 +144,6 @@ must **not** start the pipeline twice. So each event returns a `Step`:
 | `resume` | PERFORM | 409 `UPLOAD_ALREADY_COMPLETED` | 409 `UPLOAD_ABORTED` | 409 `UPLOAD_EXPIRED` |
 | `complete` | PERFORM | **REPLAY** | 409 | 409 |
 | `abort` | PERFORM | 409 | **REPLAY** | **REPLAY** |
-| `expire` (sweeper) | PERFORM | REPLAY | REPLAY | REPLAY |
 
 Three details worth stealing:
 

@@ -61,9 +61,9 @@ class ThumbnailProcessor extends JobProcessor<Void> {
     SourceInfo source = store.sourceInfo(job.assetId()).orElseThrow();
     var input =
         storage.presignInternalDownload(MediaKeys.source(job.assetId()), props.sourceUrlTtl());
-    Path poster = dir.resolve("poster.jpg");
-    Path sprite = dir.resolve("sprite.jpg");
-    Path vtt = dir.resolve("sprite.vtt");
+    Path poster = dir.resolve(MediaKeys.POSTER);
+    Path sprite = dir.resolve(MediaKeys.SPRITE);
+    Path vtt = dir.resolve(MediaKeys.SPRITE_VTT);
 
     double interval = StillCommands.spriteInterval(source.durationSeconds());
     int tiles = (int) Math.max(1, Math.ceil(source.durationSeconds() / interval));
@@ -109,7 +109,8 @@ class ThumbnailProcessor extends JobProcessor<Void> {
           .append(" --> ")
           .append(timestamp(end))
           .append('\n')
-          .append("sprite.jpg#xywh=")
+          .append(MediaKeys.SPRITE)
+          .append("#xywh=")
           .append(x)
           .append(',')
           .append(y)

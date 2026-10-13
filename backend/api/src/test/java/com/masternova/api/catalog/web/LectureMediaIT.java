@@ -116,19 +116,7 @@ class LectureMediaIT {
   }
 
   private UUID asset(Instructor owner, String status, Integer seconds) {
-    UUID id = UUID.randomUUID();
-    db.sql(
-            """
-            INSERT INTO media_asset (id, owner_id, kind, status, original_filename, content_type,
-                                     size_bytes, duration_seconds, created_at, version)
-            VALUES (:id, :owner, 'VIDEO', :status, 'v.mp4', 'video/mp4', 1, :seconds, now(), 0)
-            """)
-        .param("id", id)
-        .param("owner", owner.id())
-        .param("status", status)
-        .param("seconds", seconds)
-        .update();
-    return id;
+    return new TestMedia(dataSource).asset(owner.id(), status, seconds);
   }
 
   @Test

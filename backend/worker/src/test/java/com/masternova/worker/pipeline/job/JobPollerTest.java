@@ -10,7 +10,6 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.masternova.worker.pipeline.PipelineStore;
 import com.masternova.worker.pipeline.TestPipelineProperties;
 import java.util.List;
 import java.util.UUID;
@@ -21,7 +20,6 @@ class JobPollerTest {
 
   final JobRepository jobs = mock(JobRepository.class);
   final JobRunner runner = mock(JobRunner.class);
-  final PipelineStore store = mock(PipelineStore.class);
 
   @Test
   void claimsOnlyAsManyJobsAsThereAreFreeSlots() throws Exception {
@@ -37,7 +35,7 @@ class JobPollerTest {
         .execute(any(), anyString());
 
     try (JobPoller poller =
-        new JobPoller(jobs, runner, store, TestPipelineProperties.defaults())) { // 1 slot
+        new JobPoller(jobs, runner, TestPipelineProperties.defaults())) { // 1 slot
       poller.poll(); // takes the slot
       verify(runner, timeout(2000)).execute(any(), anyString());
       poller.poll(); // ⭐ slot busy: doesn't even ask for more work
@@ -49,21 +47,25 @@ class JobPollerTest {
   @Test
   void nothingDueRunsNothing() {
     when(jobs.claim(anyInt(), any(), anyString())).thenReturn(List.of());
-    try (JobPoller poller = new JobPoller(jobs, runner, store, TestPipelineProperties.defaults())) {
+    try (JobPoller poller = new JobPoller(jobs, runner, TestPipelineProperties.defaults())) {
       poller.poll();
     }
     verify(runner, never()).execute(any(), any());
   }
 
   @Test
-  void aJobWhoseWorkerDiedOnItsLastAttemptIsBuriedNotHandedOut() {
-    UUID asset = UUID.randomUUID();
-    when(jobs.buryAbandoned(5)).thenReturn(List.of(asset));
+  void everyPollFirstBuriesJobsWhoseWorkerDiedOnTheirLastAttempt() {
     when(jobs.claim(anyInt(), any(), anyString())).thenReturn(List.of());
-    try (JobPoller poller = new JobPoller(jobs, runner, store, TestPipelineProperties.defaults())) {
+    try (JobPoller poller = new JobPoller(jobs, runner, TestPipelineProperties.defaults())) {
       poller.poll();
     }
-    verify(store).markFailed(asset, "TRANSCODE_FAILED");
+    verify(runner).buryAbandoned();
+  }
+
+  @Test
+  void closingTellsTheRunnerFirstSoInterruptedJobsAreHandedBack() {
+    new JobPoller(jobs, runner, TestPipelineProperties.defaults()).close();
+    verify(runner).shutDown();
   }
 
   @Test
