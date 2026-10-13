@@ -26,6 +26,9 @@ LABEL org.opencontainers.image.source="https://github.com/b-nimai/Masternova-Spr
       org.opencontainers.image.title="masternova-${APP}"
 # Base images lag behind Alpine's security fixes; pull them in at build time (as the web image does).
 RUN apk upgrade --no-cache && addgroup -S app && adduser -S -G app -H app
+# The worker transcodes (video-pipeline LLD §9): ffmpeg + ffprobe, from Alpine's package (patched
+# with the base). Only in the worker image — the api never runs them.
+RUN if [ "$APP" = "worker" ]; then apk add --no-cache ffmpeg; fi
 # Rarely-changing files first: a layer that comes after a changed one is rebuilt and re-shipped
 # too, so the healthcheck script sits above the application layer (patterns/devops/01 §3).
 COPY --chmod=755 healthcheck.sh /usr/local/bin/healthcheck

@@ -71,6 +71,9 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      # the worker's pipeline ITs run the real ffmpeg / ffprobe on a generated clip (Phase 7)
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Build and test (Testcontainers uses the runner's Docker)
         run: ./mvnw -B verify
       - name: Upload coverage report

@@ -41,6 +41,10 @@ masternova:
     # dev-only credentials (compose.yaml). Blank in AWS: the default chain (IRSA, instance role).
     access-key: ${STORAGE_ACCESS_KEY:masternova}
     secret-key: ${STORAGE_SECRET_KEY:masternova-dev-secret}
+  pipeline: # → PipelineProperties (video-pipeline LLD)
+    ladder: ${PIPELINE_LADDER:standard} # standard (360/720/1080p) | fast (240/360p ultrafast: dev, CI)
+    slots: ${PIPELINE_SLOTS:2} # jobs at once; ffmpeg is multi-threaded, so ~cores/2
+    work-dir: ${PIPELINE_WORK_DIR:/tmp/pipeline}
   outbox: # → messaging's OutboxProperties
     relay-enabled: true # ⭐ the ONLY process that consumes the outbox (ADR-0008)
     poll-interval: 1s

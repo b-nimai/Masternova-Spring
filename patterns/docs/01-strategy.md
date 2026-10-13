@@ -3,8 +3,8 @@
 > **One-liner:** define a family of algorithms behind one interface, so the caller chooses one at
 > runtime and new ones are added without editing the caller.
 
-**Type:** Behavioral · **Status:** lab built, real code arrives in Phases 3, 7 and 9 · **Last updated:** 2026-10-02
-**Real code:** — (planned: `com.masternova.api.commerce.payment.PaymentGateway`) · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/)
+**Type:** Behavioral · **Status:** ✅ in real code (Phase 7.5); payment gateways follow in Phase 9 · **Last updated:** 2026-10-13
+**Real code:** `com.masternova.worker.pipeline.ffmpeg.LadderProfile` (Strategy) → `StandardLadder`, `FastLadder` (ConcreteStrategy), chosen by `masternova.pipeline.ladder` · planned: `com.masternova.api.commerce.payment.PaymentGateway` · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/) (payments) and [`strategy/ladder/`](../lab/src/main/java/com/masternova/patterns/strategy/ladder/Ladder.java) (the transcode ladder)
 
 **Trigger phrase:** "*support several providers/methods/algorithms, and more later*", or
 "*the behaviour depends on a type/config value*".
@@ -122,6 +122,24 @@ public String pay(PaymentProvider provider, ChargeRequest request) {
 | Enum with abstract method per constant | Fine for tiny pure logic, but providers need injected SDK clients and config, which enums can't take |
 | Inheritance (`abstract class Checkout`, subclass per provider) | Fixes the behaviour at construction; can't pick per request; that's Template Method's job |
 
+## 7b. First real use: the transcode ladder (Phase 7.5)
+
+Which HLS renditions to make, and how hard x264 should work, has **two real answers**:
+
+- **`StandardLadder`** (prod): 360p / 720p / 1080p at `veryfast`, where quality matters;
+- **`FastLadder`** (dev, CI, the crash IT): 240p / 360p at `ultrafast`, so a test clip takes about
+  a second through the **same** pipeline code.
+
+That's the force: two implementations that exist from day one, not "maybe a second one later".
+Spring picks one with `@ConditionalOnProperty(name = "masternova.pipeline.ladder")`, so the
+processor never contains `if (ci)`.
+
+One rule is shared by every strategy: never upscale, and always keep one rung. It lives in the
+interface as a **default method** (`rungsFor`), and each strategy only lists its `rungs()` and
+`preset()`. That's a Strategy with a little Template Method inside it. It's fine while the shared
+part is one rule; if it grew, the shared part would move into the processor and the strategies
+would shrink to data. `LadderProfileTest` pins the rule for both.
+
 ## 8. Interview Q&A
 
 - **Q: Strategy vs State?**
@@ -142,7 +160,7 @@ public String pay(PaymentProvider provider, ChargeRequest request) {
 
 - **Intent:** a family of interchangeable algorithms behind one interface, chosen at runtime.
 - **Roles:** Strategy (interface) · ConcreteStrategy · Context (holds and uses one).
-- **In Masternova:** payment gateways, auth methods, transcode profiles, coupon types.
+- **In Masternova:** the transcode ladder (`StandardLadder` / `FastLadder`, by property; a shared never-upscale default method) · payment gateways next (Phase 9).
 - **Pitfall:** one implementation is not a seam. And select via a registry, not a `switch` that
   just moved somewhere else.
 
