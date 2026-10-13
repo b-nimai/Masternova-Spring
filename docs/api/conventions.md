@@ -161,7 +161,7 @@ numbers lose precision there. Money in minor units is the deliberate exception.
 ## 8. Uploads return a plan, not a stream
 
 `POST /api/v1/media/uploads` returns part boundaries plus presigned URLs, at most 100 per
-response. The bytes go browser → S3/MinIO directly and never touch the API.
+response. The bytes go browser → S3 (SeaweedFS in dev) directly and never touch the API.
 `GET /api/v1/media/uploads/{id}` is both progress and resume: it asks the storage provider
 what it actually holds.
 

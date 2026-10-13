@@ -22,3 +22,6 @@ re-derived rather than copied.
 | [0009](0009-keyset-pagination-over-offset.md) | Keyset (cursor) pagination over `LIMIT/OFFSET`, via Spring Data `Window` + our own typed cursor | accepted |
 | [0010](0010-optimistic-concurrency-with-version.md) | Optimistic concurrency: JPA `@Version` + `expectedVersion` in the body; the root's version covers the aggregate | accepted |
 | [0011](0011-undo-with-stored-inverses.md) | Curriculum undo: stored inverse commands (9–39× smaller per edit than a snapshot stack, intent kept), Memento only for what a removal destroys | accepted |
+| [0012](0012-seaweedfs-as-local-s3.md) | SeaweedFS as the local S3 server (MinIO's images stopped being published); 4 candidates probed, the only one refusing foreign-origin CORS like AWS *and* mature | accepted |
+| [0013](0013-hls-for-playback.md) | HLS with fMP4 segments, aligned-GOP H.264/AAC ladder, presigned segments behind a playback ticket | accepted |
+| [0014](0014-upload-progress-from-the-provider.md) | Upload progress lives in the provider: resume and complete ask `ListParts`; the client never sends ETags | accepted |

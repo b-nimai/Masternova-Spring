@@ -80,45 +80,48 @@ services:
       timeout: 3s
       retries: 10
 
-  # ⚠️ MinIO stopped publishing its images (minio/minio and quay.io/minio/* are no longer
-  #    pullable as of 2026-10-02). Opt-in until Phase 7 picks a replacement S3 server:
-  #    `docker compose --profile media up -d` works only where the image is already cached.
-  minio:
+  # S3 for media (Phase 7). SeaweedFS replaced MinIO, whose images stopped being published
+  # (ADR-0012). Opt-in `media` profile until the api uses S3 (7.2).
+  seaweedfs:
     profiles: [media]
-    image: minio/minio:latest
+    image: chrislusf/seaweedfs:4.48
     restart: unless-stopped
     logging: *logging
-    command: server /data --console-address ":9001"
+    command: server -s3 -dir=/data -volume.max=0
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      AWS_ACCESS_KEY_ID: masternova # dev-only credentials: the single admin identity
+      AWS_SECRET_ACCESS_KEY: masternova-dev-secret
     ports:
-      - '9010:9000' # S3 API
-      - '9011:9001' # web console — http://localhost:9011
+      - '9010:8333' # S3 API
     volumes:
-      - miniodata:/data
+      - mediadata:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8333/healthz']
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
-  # Creates the media bucket once. CORS must expose ETag: the browser's multipart uploader reads
-  # it off each part response to build the CompleteMultipartUpload request (Phase 7).
-  minio-init:
+  # Creates the media bucket and its CORS rule (idempotent: safe to re-run). The browser PUTs
+  # presigned parts straight to storage, so only the SPA's origins may; ETag is exposed for the
+  # uploader's per-part log (the server completes the upload from ListParts, ADR-0014).
+  media-init:
     profiles: [media]
-    image: minio/mc:latest
+    image: amazon/aws-cli:2.31.0
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin;
-      mc mb --ignore-existing local/masternova-media;
-      mc anonymous set download local/masternova-media/public;
-      mc admin config set local api cors_allow_origin='http://localhost:4200,http://localhost:8081';
-      echo 'minio-init: bucket + cors ready';
-      "
+    environment:
+      AWS_ACCESS_KEY_ID: masternova
+      AWS_SECRET_ACCESS_KEY: masternova-dev-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        s3="aws --endpoint-url http://seaweedfs:8333"
+        $$s3 s3api head-bucket --bucket masternova-media 2>/dev/null || $$s3 s3api create-bucket --bucket masternova-media
+        $$s3 s3api put-bucket-cors --bucket masternova-media --cors-configuration '{"CORSRules":[{"AllowedOrigins":["http://localhost:4200","http://localhost:8081"],"AllowedMethods":["PUT","GET","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3000}]}'
+        echo 'media-init: bucket + cors ready'
     restart: 'no' # a one-shot job: run once, exit 0, stay stopped
     logging: *logging
     labels:
@@ -216,7 +219,7 @@ services:
 
 volumes:
   pgdata:
-  miniodata:
+  mediadata:
 
 secrets:
   jwt_access_secret:

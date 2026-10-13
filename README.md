@@ -52,7 +52,7 @@ make stack   # http://localhost:8081
 | API | http://localhost:8080/api/v1 · health at `/actuator/health` |
 | Worker health | http://localhost:8090/actuator/health |
 | Mailpit (every dev email) | http://localhost:8026 |
-| MinIO console | http://localhost:9011 (minioadmin / minioadmin), only with `docker compose --profile media up -d`; MinIO's images are no longer published, so Phase 7 picks a replacement |
+| S3 (SeaweedFS) | http://localhost:9010 (masternova / masternova-dev-secret), with `docker compose --profile media up -d`; bucket `masternova-media` + CORS created by `media-init` ([ADR-0012](docs/adr/0012-seaweedfs-as-local-s3.md)) |
 | Postgres | `localhost:5433` (masternova / masternova) |
 
 ## Test

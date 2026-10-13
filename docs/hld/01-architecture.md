@@ -12,7 +12,7 @@ flowchart LR
   mn -- charge / refund --> pay[Razorpay]
   pay -- signed webhooks --> mn
   mn -- transactional email --> smtp[SMTP provider]
-  mn -- store media --> s3[(S3 / MinIO)]
+  mn -- store media --> s3[(S3 / SeaweedFS)]
   learner -- HLS segments --> cdn[CDN / signed URLs]
   cdn --> s3
 ```
@@ -25,7 +25,7 @@ flowchart LR
   web -->|/api/*| api[api: Spring Boot :8080]
   api --> pg[(PostgreSQL 17 + pgvector)]
   api --> redis[(Redis 7)]
-  api -->|presign| s3[(MinIO / S3)]
+  api -->|presign| s3[(SeaweedFS / S3)]
   browser -->|multipart upload, presigned| s3
   worker[worker: Spring Boot :8090] -->|poll outbox| pg
   worker --> redis
@@ -40,7 +40,7 @@ flowchart LR
 | `worker` | Spring Boot 4, no public API | Outbox / queue depth | Transcoding is CPU-bound and bursty; it must not starve request threads |
 | `postgres` | 17 + pgvector | Vertical, then read replicas | Source of truth; the outbox lives here so state and events commit together |
 | `redis` | 7 | — | Entitlement cache, progress write-back buffer, rate limits |
-| `minio` | S3 API | — | Media. Browsers upload directly with presigned URLs |
+| `seaweedfs` | S3 API ([ADR-0012](../adr/0012-seaweedfs-as-local-s3.md)); real S3 in D6 | — | Media. Browsers upload directly with presigned URLs; the worker reads sources and writes HLS |
 
 ## 3. Inside the api (C4 level 3): Spring Modulith modules
 
