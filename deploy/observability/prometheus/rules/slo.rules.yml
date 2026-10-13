@@ -1,0 +1,174 @@
+# SLOs and their multi-window, multi-burn-rate alerts (Google SRE workbook ch. 5). DevOps note 05 §6.
+#
+# Every SLO is over 30 days. The ERROR RATIO of the SLI is recorded over 4 windows; an alert
+# fires when the budget burns fast over a LONG window (it matters) AND a SHORT one (it's still
+# happening — so the alert also resolves soon after the problem stops):
+#
+#   page   : 14.4 × budget over 1 h AND 5 m   → 2 % of the 30-day budget gone in one hour
+#   ticket :  6   × budget over 6 h AND 30 m  → 5 % of the budget gone in six hours
+#
+# A ratio with no traffic is NaN, and NaN > x is false: an idle api never pages.
+groups:
+  - name: slo-api-availability
+    rules:
+      # SLO: 99.5 % of api requests succeed on the server (no 5xx). Error budget: 0.005.
+      - record: slo:api_availability:error_ratio_rate5m
+        expr: |
+          (sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream", status=~"5.."}[5m])) or vector(0))
+            /
+          sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[5m]))
+      - record: slo:api_availability:error_ratio_rate30m
+        expr: |
+          (sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream", status=~"5.."}[30m])) or vector(0))
+            /
+          sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[30m]))
+      - record: slo:api_availability:error_ratio_rate1h
+        expr: |
+          (sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream", status=~"5.."}[1h])) or vector(0))
+            /
+          sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[1h]))
+      - record: slo:api_availability:error_ratio_rate6h
+        expr: |
+          (sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream", status=~"5.."}[6h])) or vector(0))
+            /
+          sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[6h]))
+      - alert: ApiAvailabilityFastBurn
+        expr: |
+          slo:api_availability:error_ratio_rate1h > (14.4 * 0.005)
+          and
+          slo:api_availability:error_ratio_rate5m > (14.4 * 0.005)
+        for: 2m
+        labels:
+          severity: page
+          slo: api-availability
+        annotations:
+          summary: 'Api availability SLO is burning its error budget at 14.4× or more (over 1h and 5m)'
+          description: 'Error ratio over 1h: {{ $value | humanizePercentage }} (budget 0.5 %). SLO: 99.5 % of api requests succeed on the server (no 5xx).'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/api-availability.md
+      - alert: ApiAvailabilitySlowBurn
+        expr: |
+          slo:api_availability:error_ratio_rate6h > (6 * 0.005)
+          and
+          slo:api_availability:error_ratio_rate30m > (6 * 0.005)
+        for: 15m
+        labels:
+          severity: ticket
+          slo: api-availability
+        annotations:
+          summary: 'Api availability SLO is burning its error budget at 6× or more (over 6h and 30m)'
+          description: 'Error ratio over 6h: {{ $value | humanizePercentage }} (budget 0.5 %). SLO: 99.5 % of api requests succeed on the server (no 5xx).'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/api-availability.md
+  - name: slo-api-latency
+    rules:
+      # SLO: 95 % of api requests answer within 300 ms. Error budget: 0.05.
+      - record: slo:api_latency:error_ratio_rate5m
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_bucket{application="api", uri!~"/actuator.*|.*/stream", le="0.3"}[5m]))
+              /
+            sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[5m]))
+          )
+      - record: slo:api_latency:error_ratio_rate30m
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_bucket{application="api", uri!~"/actuator.*|.*/stream", le="0.3"}[30m]))
+              /
+            sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[30m]))
+          )
+      - record: slo:api_latency:error_ratio_rate1h
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_bucket{application="api", uri!~"/actuator.*|.*/stream", le="0.3"}[1h]))
+              /
+            sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[1h]))
+          )
+      - record: slo:api_latency:error_ratio_rate6h
+        expr: |
+          1 - (
+            sum(rate(http_server_requests_seconds_bucket{application="api", uri!~"/actuator.*|.*/stream", le="0.3"}[6h]))
+              /
+            sum(rate(http_server_requests_seconds_count{application="api", uri!~"/actuator.*|.*/stream"}[6h]))
+          )
+      - alert: ApiLatencyFastBurn
+        expr: |
+          slo:api_latency:error_ratio_rate1h > (14.4 * 0.05)
+          and
+          slo:api_latency:error_ratio_rate5m > (14.4 * 0.05)
+        for: 2m
+        labels:
+          severity: page
+          slo: api-latency
+        annotations:
+          summary: 'Api latency SLO is burning its error budget at 14.4× or more (over 1h and 5m)'
+          description: 'Error ratio over 1h: {{ $value | humanizePercentage }} (budget 5 %). SLO: 95 % of api requests answer within 300 ms.'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/api-latency.md
+      - alert: ApiLatencySlowBurn
+        expr: |
+          slo:api_latency:error_ratio_rate6h > (6 * 0.05)
+          and
+          slo:api_latency:error_ratio_rate30m > (6 * 0.05)
+        for: 15m
+        labels:
+          severity: ticket
+          slo: api-latency
+        annotations:
+          summary: 'Api latency SLO is burning its error budget at 6× or more (over 6h and 30m)'
+          description: 'Error ratio over 6h: {{ $value | humanizePercentage }} (budget 5 %). SLO: 95 % of api requests answer within 300 ms.'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/api-latency.md
+  - name: slo-outbox-freshness
+    rules:
+      # SLO: 99 % of events are handled within 60 s of their commit. Error budget: 0.01.
+      - record: slo:outbox_freshness:error_ratio_rate5m
+        expr: |
+          1 - (
+            sum(rate(outbox_delivery_lag_seconds_bucket{application="worker", le="60.0"}[5m]))
+              /
+            sum(rate(outbox_delivery_lag_seconds_count{application="worker"}[5m]))
+          )
+      - record: slo:outbox_freshness:error_ratio_rate30m
+        expr: |
+          1 - (
+            sum(rate(outbox_delivery_lag_seconds_bucket{application="worker", le="60.0"}[30m]))
+              /
+            sum(rate(outbox_delivery_lag_seconds_count{application="worker"}[30m]))
+          )
+      - record: slo:outbox_freshness:error_ratio_rate1h
+        expr: |
+          1 - (
+            sum(rate(outbox_delivery_lag_seconds_bucket{application="worker", le="60.0"}[1h]))
+              /
+            sum(rate(outbox_delivery_lag_seconds_count{application="worker"}[1h]))
+          )
+      - record: slo:outbox_freshness:error_ratio_rate6h
+        expr: |
+          1 - (
+            sum(rate(outbox_delivery_lag_seconds_bucket{application="worker", le="60.0"}[6h]))
+              /
+            sum(rate(outbox_delivery_lag_seconds_count{application="worker"}[6h]))
+          )
+      - alert: OutboxFreshnessFastBurn
+        expr: |
+          slo:outbox_freshness:error_ratio_rate1h > (14.4 * 0.01)
+          and
+          slo:outbox_freshness:error_ratio_rate5m > (14.4 * 0.01)
+        for: 2m
+        labels:
+          severity: page
+          slo: outbox-freshness
+        annotations:
+          summary: 'Outbox freshness SLO is burning its error budget at 14.4× or more (over 1h and 5m)'
+          description: 'Error ratio over 1h: {{ $value | humanizePercentage }} (budget 1 %). SLO: 99 % of events are handled within 60 s of their commit.'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/outbox-freshness.md
+      - alert: OutboxFreshnessSlowBurn
+        expr: |
+          slo:outbox_freshness:error_ratio_rate6h > (6 * 0.01)
+          and
+          slo:outbox_freshness:error_ratio_rate30m > (6 * 0.01)
+        for: 15m
+        labels:
+          severity: ticket
+          slo: outbox-freshness
+        annotations:
+          summary: 'Outbox freshness SLO is burning its error budget at 6× or more (over 6h and 30m)'
+          description: 'Error ratio over 6h: {{ $value | humanizePercentage }} (budget 1 %). SLO: 99 % of events are handled within 60 s of their commit.'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/outbox-freshness.md

@@ -5,7 +5,7 @@
 > written against **user-visible objectives**, not against CPU graphs.
 
 **Roadmap:** D3.1–D3.5 · **Last updated:** 2026-10-13
-**Real files:** [`deploy/observability/`](../../deploy/observability/) (Prometheus, Grafana provisioning + dashboards), `compose.yaml` (profile `observability`), [`backend/messaging/…/outbox/`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/) (outbox meters), [`JobRunner`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobRunner.java) + [`JobPoller`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobPoller.java) (pipeline meters), api + worker `application.yaml` (`management.*`)
+**Real files:** [`deploy/observability/`](../../deploy/observability/) (Prometheus + rules + their tests, Alertmanager, Grafana provisioning + dashboards, Tempo, Loki, Alloy), [`docs/runbooks/`](../../docs/runbooks/), `compose.yaml` (profile `observability`), [`backend/messaging/…/outbox/`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/) (outbox meters), [`JobRunner`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobRunner.java) + [`JobPoller`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobPoller.java) (pipeline meters), api + worker `application.yaml` (`management.*`)
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
 
@@ -16,6 +16,10 @@
 | 3 | [Dashboards as code](#3-dashboards-as-code-) | ⭐⭐ | D3.2 |
 | 4 | [Distributed tracing, through the outbox](#4-distributed-tracing-through-the-outbox-) | ⭐⭐⭐ | D3.3 |
 | 5 | [Centralized logs, and the jump between log and trace](#5-centralized-logs-and-the-jump-between-log-and-trace-) | ⭐⭐ | D3.4 |
+| 6 | [SLOs, burn-rate alerts, runbooks](#6-slos-burn-rate-alerts-runbooks-) | ⭐⭐⭐ | D3.5 |
+| 7 | [Common mistakes](#7-common-mistakes-) | ⭐⭐⭐ | — |
+| 8 | [Interview Q&A](#8-interview-qa-) | ⭐⭐⭐ | — |
+| 9 | [30-second recall](#9-30-second-recall) | ⭐⭐⭐ | — |
 
 ---
 
@@ -332,3 +336,163 @@ trace. The api had no lines in it, because a successful signup logs nothing ther
 **Try it:** `make stack && make obs` → <http://localhost:3001> → Explore → Loki →
 `{service="worker"}`, open a line, click **Open trace**. Alloy's pipeline graph is at
 <http://localhost:12345>.
+
+---
+
+## 6. SLOs, burn-rate alerts, runbooks ⭐⭐⭐
+
+### 6.1 Vocabulary
+
+- **SLI** (indicator): a ratio of good events to all events, measured where the user feels it,
+  e.g. *requests answered without a 5xx*.
+- **SLO** (objective): the target for that ratio over a window, e.g. *99.5 % over 30 days*.
+- **Error budget:** what the SLO allows to fail, `1 − SLO` (0.5 %). While budget is left you can
+  ship risky changes; when it's spent, reliability work comes first.
+- **Burn rate:** how fast the budget is going. `error ratio ÷ budget`; **1** spends exactly the
+  whole budget in 30 days, **14.4** spends it in about 2 days.
+
+### 6.2 The three SLOs
+
+| SLO | SLI (PromQL source) | Target | Budget |
+|---|---|---|---|
+| **api availability** | `http_server_requests` without 5xx, excluding `/actuator` and SSE streams | 99.5 % | 0.5 % |
+| **api latency** | requests in the `le="0.3"` bucket ÷ all, the exact edge from §2.4 | 95 % | 5 % |
+| **outbox freshness** | deliveries in the `le="60.0"` bucket of `outbox_delivery_lag_seconds` | 99 % | 1 % |
+
+Recording rules compute each error ratio over 5 m, 30 m, 1 h and 6 h
+(`slo:<name>:error_ratio_rate<window>`), so alerts and the **SLOs & error budgets** dashboard
+read cheap precomputed series.
+
+### 6.3 Multi-window, multi-burn-rate alerts
+
+A plain threshold ("error ratio > 0.5 % for 5 m") pages on every short blip and misses a slow leak.
+Following the Google SRE workbook (ch. 5), each SLO gets two alerts, each requiring a **long window
+AND a short window**:
+
+| Alert | Burn rate | Windows | Budget spent when it fires | Goes to |
+|---|---|---|---|---|
+| `…FastBurn` | ≥ 14.4 | 1 h **and** 5 m | 2 % in an hour | **page** |
+| `…SlowBurn` | ≥ 6 | 6 h **and** 30 m | 5 % in six hours | ticket |
+
+- The **long** window gives significance: one bad minute doesn't page.
+- The **short** window gives fast **reset**: once the problem stops, the 5 m ratio drops and the
+  alert resolves within minutes, even though the 1 h ratio still remembers the errors (unit test
+  *the page resolves soon after the errors stop*).
+- **No traffic → NaN → no alert.** A ratio with nothing in the denominator is NaN, and `NaN > x`
+  is false.
+
+The SLOs can't express everything, so three **symptom** alerts complete them:
+
+| Alert | Why the SLOs miss it |
+|---|---|
+| `ServiceDown` (`max by (job)(up) == 0`, 2 m) | an api that's down produces *no* requests, so its SLIs go NaN, not red |
+| `OutboxStalled` (oldest undelivered > 5 min) | a dead relay records no lag samples (§2.5): freshness goes NaN |
+| `DeadLetters` (outbox DEAD or pipeline job buried in the last hour, ticket) | rare enough to vanish in a ratio, but each one is a user missing an email or a video |
+
+None of them is a *cause* alert ("CPU > 80 %"): a busy machine that answers on time is fine, and a
+cause alert pages people for things users don't feel.
+
+### 6.4 Alerts are code, so they have tests
+
+`deploy/observability/prometheus/tests/alerts.test.yml` feeds synthetic series to
+`promtool test rules` and asserts what fires, including the annotations:
+
+| Case | Asserts |
+|---|---|
+| 10 % errors (with heavy `/actuator` traffic) | fast burn pages by 10 m, slow burn by 7 h; actuator doesn't dilute the ratio |
+| 4 % errors | ticket, **no** page |
+| errors for an hour, then 10 clean minutes | the page **resolves** though the 1 h ratio is still above 7.2 % |
+| no traffic | nothing fires |
+| 80 % slow / 50 % late deliveries | latency and outbox fast burns |
+| relay stalled | `OutboxStalled` pending at 14 m, firing at 17 m |
+| one of two api instances down, the worker down | `ServiceDown` only for the worker |
+| a buried transcode | `DeadLetters{kind="pipeline"}` |
+
+`make obs-check` (and the CI `observability` job) also runs `promtool check config`, `amtool
+check-config`, and parses **every dashboard query** by turning it into a recording rule
+(`scripts/dashboards_as_rules.py`). A typo in a panel fails the build instead of showing "No data"
+(checked by breaking one on purpose).
+
+### 6.5 Routing: Alertmanager → Mailpit
+
+- `severity: page` → `page-email`: 10 s group wait, repeated hourly while firing. `ticket` →
+  `ticket-email`: repeated every 12 h. Locally both are emails in Mailpit; in production a page
+  goes to a pager.
+- **Inhibition:** `ServiceDown{job="api"}` mutes the `api-*` SLO alerts, and
+  `ServiceDown{job="worker"}` mutes `OutboxStalled` and the freshness alerts, so you get the cause,
+  not its echoes. A firing page also mutes the same SLO's ticket.
+- Every alert's `runbook_url` links its runbook in [`docs/runbooks/`](../../docs/runbooks/)
+  (what it means for users → confirm → mitigate → fix for good).
+
+**Verified end to end:** stopping the worker container gave `ServiceDown{job="worker"}` pending
+within a minute and `[PAGE] ServiceDown FIRING` in Mailpit **2.5 minutes** after the stop (2 m
+`for:` + scrape + 10 s group wait), carrying the runbook URL. Starting the worker again gave
+`[PAGE] ServiceDown RESOLVED` about 4.5 minutes later: a resolution waits for the 5 m
+`group_interval`.
+
+---
+
+## 7. Common mistakes ⭐⭐⭐
+
+| Mistake | Instead |
+|---|---|
+| User ids, emails or raw URLs as metric tags | closed sets only (type, outcome, uri *template*); ids on spans and logs |
+| Averaging percentiles across replicas | export histogram buckets; `histogram_quantile` over `sum by (le)` |
+| A full default histogram on every HTTP series | the bucket edges you'll query (9 here) |
+| Counting an event before its transaction commits | count in `afterCommit` |
+| Trusting a flat-lined counter | a gauge that keeps growing when the work stops (`outbox_oldest_age_seconds`) |
+| Scraping one process through two targets | one target per process; check `count by (job) (up)` |
+| Dashboards edited in the UI | provision from git; `allowUiUpdates: false` |
+| Trace ids as Loki labels | structured metadata (a label per trace = a stream per request) |
+| A trace that stops at the queue / table | carry `traceparent` with the message (`outbox_message.headers`) |
+| Alerting on causes (CPU, memory) | alert on symptoms users feel: SLO burn, service down, work not happening |
+| A single-window error threshold | long AND short windows: significant *and* resets fast |
+| Alerts nobody has seen fire | unit-test the rules; fire one for real (stop a container) |
+
+---
+
+## 8. Interview Q&A ⭐⭐⭐
+
+**Q: Metrics, logs and traces: when do you use which?**
+Metrics to know *that* something is wrong and how big it is (cheap, aggregated, alertable).
+Traces to see *where* one request spent its time across services. Logs for *what exactly*
+happened, with values. The trace id connects them: alert → slow trace → that trace's log lines.
+
+**Q: What's cardinality, and how did you control it?**
+Each distinct label set is a time series. Tags here come from closed sets (`event_type`,
+`outcome`, `job_type`, uri templates); ids go to spans via high-cardinality key values. Bucket
+count matters too: HTTP uses 9 chosen edges instead of ~54.
+
+**Q: How do you trace across an asynchronous boundary like an outbox?**
+Store the context with the message. The writer's PRODUCER observation injects `traceparent` into
+a `headers` column; the relay's CONSUMER observation extracts it, so the worker's span is a child
+of the api's. `OutboxTracePropagationTest` proves it with the real OpenTelemetry SDK.
+
+**Q: Why not the OpenTelemetry Java agent?**
+It's a second instrumentation system beside Micrometer, and it can't see that a table row is a
+message: the outbox needs code anyway. Observations give metrics *and* spans from one call
+(ADR-0015).
+
+**Q: How would you alert on an SLO?**
+Multi-window burn rates: page at 14.4× over 1 h and 5 m, ticket at 6× over 6 h and 30 m. The
+long window gives significance, the short one makes it resolve quickly. Then add symptom alerts
+for the cases where the SLI goes NaN: the service is down, or a queue stopped.
+
+**Q: How do you know your alerts work?**
+`promtool test rules` with synthetic series, including the negatives (4 % doesn't page; the page
+resolves), in CI. And once for real: stopped the worker, got the page email in 2.5 minutes, and
+the resolution after restarting it.
+
+---
+
+## 9. 30-second recall
+
+- **RED** for services, **USE** for resources; tags from closed sets; histograms, not percentiles.
+- Count after commit; a gauge for silent failure (`outbox_oldest_age_seconds`).
+- Dashboards and datasources provisioned from git; Grafana has no state.
+- One trace from the api request to the worker: `traceparent` stored in `outbox_message.headers`.
+- `traceId` on every JSON log line; in Loki as structured metadata, never a label; Grafana links
+  log ↔ trace both ways.
+- SLOs: availability 99.5 %, latency 95 % < 300 ms, outbox 99 % < 60 s. Burn alerts at 14.4× (page)
+  and 6× (ticket), each with a long and a short window. Symptom alerts for down / stalled / dead
+  letters. Every alert has a runbook and a unit test.

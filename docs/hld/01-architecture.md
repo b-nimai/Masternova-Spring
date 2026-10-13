@@ -1,6 +1,6 @@
 # Architecture
 
-**Last updated:** 2026-10-02 · **Status:** Phase 0. Containers are real; module boxes are planned.
+**Last updated:** 2026-10-13 (cross-cutting: observability) · **Status:** Phase 0. Containers are real; module boxes are planned.
 
 ## 1. Context (C4 level 1)
 
@@ -80,7 +80,10 @@ The real diagram is generated on every build at `backend/api/target/spring-modul
 | Schema | Flyway owns it; Hibernate only `validate`s | `api/src/main/resources/db/migration` |
 | Time | An injected `Clock`, never `Instant.now()` | `platform/PlatformConfig` |
 | Config | Env vars over `application.yaml` defaults | `.env.example` |
-| Logs | JSON (ECS) in containers, human-readable in dev | `LOGGING_STRUCTURED_FORMAT_CONSOLE` |
+| Logs | JSON (ECS) in containers, human-readable in dev; `traceId` on every line; shipped to Loki by Alloy | `LOGGING_STRUCTURED_FORMAT_CONSOLE`, `deploy/observability/alloy` |
+| Metrics | Micrometer → `/actuator/prometheus`, scraped by Prometheus; RED/USE + outbox and pipeline meters | DevOps note 05 §2 |
+| Traces | Micrometer Observation → OTel SDK → OTLP → Tempo; the outbox row carries `traceparent` api → worker | [ADR-0015](../adr/0015-tracing-with-micrometer-observation-and-otlp.md) |
+| Alerting | 3 SLOs with multi-window burn-rate alerts + symptom alerts → Alertmanager; one runbook per alert | `deploy/observability/prometheus/rules`, `docs/runbooks/` |
 | Health | Actuator liveness/readiness groups → Docker `HEALTHCHECK`, K8s probes | `backend/healthcheck.sh` |
 | Concurrency | Virtual threads for request handling | `spring.threads.virtual.enabled` |
 
@@ -88,5 +91,6 @@ The real diagram is generated on every build at `backend/api/target/spring-modul
 
 - **Dev:** `make up` (infra) + `make api` / `make web` from source.
 - **Containers:** `make stack`, all services via compose, web on :8081.
+- **Observability (D3):** `make obs` adds Prometheus, Alertmanager, Grafana, Tempo, Loki and Alloy (compose profile `observability`) to either view above.
 - **Kubernetes (Phase D4):** k3d + Helm, Argo CD syncing from `deploy/helm`.
 - **AWS (Phase D6, optional):** ECS Fargate + RDS + ElastiCache + S3/CloudFront, via Terraform.

@@ -7,6 +7,14 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s # how often the rules below run
 
+rule_files: # recording rules + alerts (D3.5); unit-tested in tests/alerts.test.yml
+  - rules/*.rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   - job_name: api
     metrics_path: /actuator/prometheus
@@ -21,3 +29,7 @@ scrape_configs:
   - job_name: prometheus # its own health: rule evaluation failures, TSDB size
     static_configs:
       - targets: ['localhost:9090']
+
+  - job_name: alertmanager # notifications sent / failed: an alerting path that can't deliver is silent
+    static_configs:
+      - targets: ['alertmanager:9093']

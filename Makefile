@@ -24,12 +24,20 @@ secrets: ## Generate the local secret files the container stack mounts (gitignor
 stack: secrets ## Build images and run the whole app in containers (web on :8081)
 	docker compose --profile app up -d --build --wait postgres redis mailpit api worker web
 
-obs: ## Start observability: Grafana :3001, Prometheus :9091, Tempo, Loki + Alloy (for `make stack`; metrics + traces also for `make api`)
-	docker compose --profile observability up -d --wait prometheus tempo loki alloy grafana
+obs: ## Start observability: Grafana :3001, Prometheus :9091, Alertmanager :9094, Tempo, Loki + Alloy
+	docker compose --profile observability up -d --wait prometheus alertmanager tempo loki alloy grafana
 
-obs-check: ## Validate the observability config (promtool) — also runs in CI
-	docker run --rm --entrypoint promtool -v $(CURDIR)/deploy/observability/prometheus:/etc/prometheus:ro \
-	  prom/prometheus:v3.15.0 check config /etc/prometheus/prometheus.yml
+OBS := $(CURDIR)/deploy/observability
+obs-check: ## Validate observability config and unit-test the alert rules (promtool, amtool) — also in CI
+	docker run --rm --entrypoint promtool -v $(OBS)/prometheus:/etc/prometheus:ro -w /etc/prometheus \
+	  prom/prometheus:v3.15.0 check config prometheus.yml
+	docker run --rm --entrypoint promtool -v $(OBS)/prometheus:/etc/prometheus:ro -w /etc/prometheus/tests \
+	  prom/prometheus:v3.15.0 test rules alerts.test.yml
+	docker run --rm --entrypoint amtool -v $(OBS)/alertmanager:/etc/alertmanager:ro \
+	  prom/alertmanager:v0.34.1 check-config /etc/alertmanager/alertmanager.yml
+	@tmp=$$(mktemp -d) && python3 $(OBS)/scripts/dashboards_as_rules.py $(OBS)/grafana/dashboards $$tmp/dashboards.rules.json \
+	  && docker run --rm --entrypoint promtool -v $$tmp:/q:ro prom/prometheus:v3.15.0 check rules /q/dashboards.rules.json; \
+	  rc=$$?; rm -rf $$tmp; exit $$rc
 
 api: ## Run the api from source (:8080)
 	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && ./mvnw -pl api spring-boot:run

@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-13 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-13 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22) · Phase D3 ✅.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -122,7 +122,7 @@ Phases are listed **in the order you do them**.
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 8 | 22 h | ~21 h | ✅ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
-| 11 | [D3 — Observability](#phase-d3--observability) | 5 | 4 | 12 h | ~9.5 h | 🔨 |
+| 11 | [D3 — Observability](#phase-d3--observability) | 5 | 5 | 12 h | ~12 h | ✅ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 0 | 28 h | — | ☐ |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **85** | **~326 h** | ~168 h | |
+| | **Total** | **137** | **90** | **~326 h** | ~180 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -361,7 +361,7 @@ with alerts that mean something.
 | D3.2 | Compose profile **`observability`** (`make obs`): Prometheus v3.15.0 (:9091, 7 d retention, `--web.enable-lifecycle`) + Grafana 13.2.3 (:3001, anonymous **Viewer** + `viewers_can_edit` for Explore: Grafana 13 refuses other anonymous roles; **no state volume**). `deploy/observability/`: `prometheus.yml`, datasource with a fixed `uid`, a file provider (`allowUiUpdates: false`) and **4 dashboards** — HTTP (RED: 5xx ratio, share under 300 ms, quantiles from buckets, slowest routes; `/actuator` + SSE streams excluded), JVM (heap vs max, live data after GC, GC pause share, threads, CPU), Hikari (USE: in use / max, threads waiting, acquire + hold time, timeouts), Pipeline & outbox. `make obs-check` (promtool). **Found:** listing each app as container *and* host target scraped the container twice (the host port is its published port) → every `sum()` doubled; now one target via `host.docker.internal`, which reaches `make stack` and `make api` alike. Every panel query run against the live stack with traffic. Note 05 §3 | dashboards-as-code | 2.5 h | ✅ | 2026-10-13 |
 | D3.3 | `spring-boot-starter-opentelemetry` in both apps (Micrometer Tracing → OTel SDK → **OTLP/HTTP → Tempo 2.10.8**, its OTLP-metrics registry excluded). **Through the outbox** (ADR-0015): `V16` `outbox_message.headers JSONB`; `JdbcOutboxWriter.append` = PRODUCER observation (`SenderContext` → Boot injects `traceparent`), `OutboxRelay` delivers in a CONSUMER observation (`ReceiverContext` from the row) → the worker's span is the api request's grandchild. `OutboxMessage` gains `headers` (old constructor kept). `@Scheduled` observations off (a root trace per poll otherwise). Sampling 1.0 locally via `TRACING_SAMPLING_PROBABILITY`; the endpoint is an **env var only** (the property's presence turns the exporter on). **Verified live:** one signup = one Tempo trace, 8 spans, api + worker. `OutboxTracePropagationTest` (real OTel SDK + in-memory exporter, no Spring/DB: one trace id, CONSUMER's parent = PRODUCER; error status; tracing off → empty headers, fresh trace), `TransactionalOutboxIT` (headers round-trip, NULL → empty), **`TraceCorrelationIT`** (ECS JSON log line of the request has the trace id that's in the outbox row's `traceparent`; **found**: Boot's ECS writer emits top-level `traceId`, not ECS `trace.id`). Tempo is distroless → no compose healthcheck. ADR-0015 (rejected: OTel Java agent, id columns, span links). Note 05 §4 | distributed tracing, context propagation | 3 h | ✅ | 2026-10-13 |
 | D3.4 | **Loki 3.7.8** (single binary, tsdb v13, 72 h retention, structured metadata on) + **Grafana Alloy v1.20.1** (`discovery.docker` filtered to this compose project → `loki.process`: ECS JSON → `level` **label**, `traceId`/`spanId` **structured metadata**, never labels). Grafana: Loki `derivedFields` (log → *Open trace*) and Tempo `tracesToLogsV2` (span → its logs across services, `{service=…} \| traceId=…`). **Found:** the worker logged nothing on a successful email send → `NotificationService` logs template, event id and provider id (no address). **Verified live:** signup → worker line in Loki with `traceId` as metadata → the same id opens the api + worker trace in Tempo, and the trace's LogQL returns the line; all 3 datasources healthy after provisioning. Loki distroless, Alloy without `wget` → no healthchecks. Note 05 §5 | centralized logging | 1.5 h | ✅ | 2026-10-13 |
-| D3.5 | SLOs + burn-rate alert rules, Alertmanager → Mailpit; first runbooks in `docs/runbooks/` | SLO/SLI, error budgets | 2.5 h | ☐ | |
+| D3.5 | **3 SLOs** (30 d): api availability 99.5 % (no 5xx), api latency 95 % < 300 ms (the exact `le="0.3"` edge), outbox freshness 99 % < 60 s; recording rules over 5 m / 30 m / 1 h / 6 h; **multi-window burn-rate** alerts — FastBurn 14.4× (1 h AND 5 m) → page, SlowBurn 6× (6 h AND 30 m) → ticket; symptom alerts where the SLI goes NaN: `ServiceDown` (`max by (job)(up)`), `OutboxStalled` (oldest age), `DeadLetters` (outbox or pipeline). **Alertmanager v0.34.1 → Mailpit** (page/ticket routes; inhibition: a down app mutes its SLO echoes, a page mutes its ticket). **`promtool test rules`** (9 cases incl. 4 % → ticket not page, the page *resolves* while the 1 h ratio still remembers, idle → nothing) + `amtool check-config` + **every dashboard query parsed by promtool** (`scripts/dashboards_as_rules.py`; a broken query fails it, checked) = `make obs-check` = new CI job `observability`. SLO dashboard (budget left, burn rates, firing alerts). **6 runbooks** in `docs/runbooks/` linked from every alert. **Verified live:** stopped the worker → `[PAGE] ServiceDown FIRING` in Mailpit after 2.5 min with the runbook URL → restarted → RESOLVED ~4.5 min later (`group_interval`). Note 05 §6–§9; HLD §4 | SLO/SLI, error budgets | 2.5 h | ✅ | 2026-10-13 |
 
 ---
 
@@ -508,7 +508,7 @@ Tick these as they're used *for real* in the project, not just read about.
 
 - [x] multi-stage Dockerfile · [x] layered jars · [x] non-root + healthcheck · [x] compose profiles + healthchecks
 - [x] GitHub Actions (path filters, caching, matrix) · [x] Trivy · [x] Dependabot · [ ] GHCR · [ ] SBOM + cosign · [ ] release automation
-- [x] Prometheus · [x] Grafana · [x] OpenTelemetry · [x] Loki · [ ] SLO alerts
+- [x] Prometheus · [x] Grafana · [x] OpenTelemetry · [x] Loki · [x] SLO alerts
 - [ ] kubectl · [ ] Deployments / Services / Ingress · [ ] probes + limits · [ ] Helm · [ ] operators · [ ] HPA / KEDA · [ ] Argo CD
 - [ ] Terraform · [ ] OIDC to AWS · [ ] ECS / RDS / ElastiCache / CloudFront
 
@@ -534,6 +534,9 @@ Each line is a sentence you can say *and* a file or test you can show.
 
 | Deviation | Why |
 |---|---|
+| D3.1 has no `orders` metric | there are no orders until Phase 9. `outbox.events.written{event.type}` counts every committed business event, so order events show up there with no new code |
+| D3 observability runs as a compose profile (`make obs`), not on Kubernetes | Kubernetes arrives in D4; the configs in `deploy/observability/` carry over (fixed datasource uids, file provisioning) |
+| Tempo, Loki and Alloy have no compose healthchecks | their images are distroless or lack `wget`; Grafana waits for `service_started` and its datasources retry |
 | One `backend/Dockerfile` with `--build-arg APP=api\|worker` instead of one Dockerfile per app | Both apps build identically; one file can't drift from the other |
 | `spring-modulith-starter-jpa` removed from the Initializr selection | Its event-publication table would need a hand-written migration now. Phase 2 hand-rolls the outbox first, then compares (2.5). |
 | No generic `processed_event` table in Phase 4 | email is an external effect; it needs the per-email claim + state machine. A generic table arrives with the first DB-effect consumer (Phase 9). Notification LLD §6. |

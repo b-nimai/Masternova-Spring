@@ -277,6 +277,25 @@ services:
       - '4318:4318' # OTLP/HTTP from apps run on the host (`make api`)
     # no healthcheck: the image is distroless (no shell, no wget). /ready on :3201 from the host.
 
+  alertmanager:
+    profiles: [observability]
+    image: prom/alertmanager:v0.34.1
+    restart: unless-stopped
+    logging: *logging
+    command: ['--config.file=/etc/alertmanager/alertmanager.yml', '--storage.path=/alertmanager']
+    volumes:
+      - ./deploy/observability/alertmanager:/etc/alertmanager:ro
+    ports:
+      - '9094:9093' # http://localhost:9094 — active alerts and silences
+    depends_on:
+      mailpit: # notifications are emails into Mailpit (http://localhost:8026)
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9093/-/ready']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   loki:
     profiles: [observability]
     image: grafana/loki:3.7.8

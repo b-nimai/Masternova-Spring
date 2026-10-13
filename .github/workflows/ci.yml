@@ -33,6 +33,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       workflows: ${{ steps.filter.outputs.workflows }}
       e2e: ${{ steps.filter.outputs.e2e }}
+      observability: ${{ steps.filter.outputs.observability }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -51,6 +52,10 @@ jobs:
               - '.github/workflows/ci.yml'
             workflows:
               - '.github/**'
+            observability:
+              - 'deploy/observability/**'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
             e2e:
               - 'e2e/**'
               - 'compose.yaml'
@@ -103,6 +108,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/check-action-refs.sh
+
+  # Prometheus config, alert-rule unit tests, Alertmanager config, and every dashboard query parsed
+  # by promtool (D3.5). The same command as locally: the Makefile pins the tool images.
+  observability:
+    needs: changes
+    if: needs.changes.outputs.observability == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: make obs-check
 
   patterns-lab:
     needs: changes
@@ -325,7 +340,7 @@ jobs:
   #    single stable status, so the protection rule never needs editing.
   ci-ok:
     if: always()
-    needs: [changes, backend, patterns-lab, frontend, workflows, images, e2e]
+    needs: [changes, backend, patterns-lab, frontend, workflows, observability, images, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Every job succeeded or was skipped

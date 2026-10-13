@@ -1,0 +1,47 @@
+# Alerts that the SLOs can't express (DevOps note 05 §6.3). Each still describes a SYMPTOM someone
+# would notice, never a cause like "CPU high": a busy CPU that serves every request on time is fine.
+groups:
+  - name: availability
+    rules:
+      - alert: ServiceDown
+        # max by (job): the app is down when NO instance answers — one replica restarting isn't
+        expr: max by (job) (up{job=~"api|worker"}) == 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: '{{ $labels.job }} is not answering Prometheus scrapes'
+          description: 'No {{ $labels.job }} instance has answered /actuator/prometheus for 2 minutes.'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/service-down.md
+
+  - name: outbox
+    rules:
+      - alert: OutboxStalled
+        # ⭐ the relay can die silently (no deliveries = no lag samples = the freshness SLO goes
+        #    NaN, not red). The oldest undelivered event, read from the table, keeps ageing.
+        expr: max(outbox_oldest_age_seconds{application="worker"}) > 300
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: 'Outbox events are not being delivered'
+          description: 'The oldest undelivered event is {{ $value | humanizeDuration }} old.'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/outbox-stalled.md
+
+  - name: dead-letters
+    rules:
+      - alert: DeadLetters
+        # something gave up for good: a parked outbox message or a buried pipeline job. Not urgent
+        # (retries already happened), but a user is missing an email or a video
+        expr: |
+          sum by (kind) (
+            label_replace(increase(outbox_messages_total{outcome="dead"}[1h]), "kind", "outbox", "", "")
+            or
+            label_replace(increase(pipeline_job_seconds_count{outcome="dead"}[1h]), "kind", "pipeline", "", "")
+          ) > 0
+        labels:
+          severity: ticket
+        annotations:
+          summary: 'New dead letters ({{ $labels.kind }})'
+          description: '{{ $value | humanize }} {{ $labels.kind }} item(s) gave up in the last hour.'
+          runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/dead-letters.md
