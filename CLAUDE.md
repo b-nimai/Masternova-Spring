@@ -96,6 +96,18 @@ src/app/
 └── features/<f>/  # one folder per feature, lazy-loaded route, its own pages + components
 ```
 
+- **Visual design source: the StudyNotion Figma**
+  (<https://www.figma.com/design/Mikd0FjHKAofUlWQSi70nf/StudyNotion_shared?node-id=1-5&p=f&t=hjcvkL5yTZm66fbT-0>).
+  It was made for another EdTech project but matches ~90% of Masternova's screens. Implement its
+  layouts, spacing, typography and colours, with small changes:
+  - Masternova's name and branding replace StudyNotion's;
+  - screens and fields follow *our* features and API DTOs (drop what we don't have, add what
+    we do: wizard steps, upload progress, undo/redo);
+  - built with Angular Material components themed to the Figma's tokens, not hand-rolled
+    widgets.
+
+  Before building or restyling a screen, open its frame in the Figma. Note each deviation from it
+  in the feature's Angular note.
 - Generate with `pnpm ng g …`; never hand-create.
 - Use signals for state, RxJS for async streams, `toSignal` at the boundary.
 - API interfaces in `core/api/*.ts` mirror the backend DTO records **by name**.
