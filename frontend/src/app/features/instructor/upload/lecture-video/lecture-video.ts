@@ -135,7 +135,11 @@ export class LectureVideo {
           if (e.event === 'progress') {
             this.state.update((s) =>
               s.kind === 'processing'
-                ? { ...s, step: `${titleCase(e.data.job)} ${e.data.rung}`.trim() }
+                ? {
+                    ...s,
+                    step: `${titleCase(e.data.job)} ${e.data.rung}`.trim(),
+                    percent: Math.max(s.percent, Math.min(e.data.percent, 99)), // the bar moves live
+                  }
                 : s,
             );
             return;

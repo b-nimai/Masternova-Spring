@@ -83,6 +83,8 @@ public class JobRunner {
       heartbeat.interrupt();
       fail(job, workerId, e);
     } finally {
+      heartbeat
+          .interrupt(); // ⭐ also on an Error (OOM…): a live heartbeat would hold the lease forever
       publisher.changed(job); // after the commit: subscribers re-read the asset
     }
   }
