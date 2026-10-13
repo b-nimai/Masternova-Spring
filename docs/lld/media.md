@@ -5,7 +5,7 @@
 > with the storage provider (not our database) deciding what was uploaded.
 
 **Module:** `backend/api/src/main/java/com/masternova/api/media` · shared storage library
-`backend/storage` · **Status:** built: storage (7.2), uploads (7.3), progress (7.7), catalog link + uploader (7.8), playback (7.9) · **Last updated:** 2026-10-13
+`backend/storage` · **Status:** built (Phase 7: 7.2, 7.3, 7.7–7.9) · **Last updated:** 2026-10-13
 **Angular:** `frontend/src/app/features/instructor/upload` (7.8), `shared/hls-player` (7.9)
 **Pairs with:** [`video-pipeline.md`](video-pipeline.md) (what happens after the upload) ·
 [ADR-0012](../adr/0012-seaweedfs-as-local-s3.md) (local S3) · [ADR-0013](../adr/0013-hls-for-playback.md) (HLS) ·
@@ -337,4 +337,18 @@ same session when they arrive).
 
 ## 11. Interview notes — 60-second recall
 
-*Written last, with the code.*
+**Problem:** a 10 GiB video from a home connection: resumable, never through the api, and not
+trusting a client about what arrived. Then playback that isn't one permanent shareable url.
+
+**The decision that mattered:** **the storage provider is the source of truth** (ADR-0014). The
+api stores only the plan (≤ 100 whole-MiB parts ≥ 5 MiB). Resume and complete ask S3 `ListParts`,
+the plan is checked against what's *stored*, and `CompleteMultipartUpload` uses the provider's
+ETags. The client never sends one. "S3 completed but our commit didn't" heals on retry (`HEAD`
+the object). Upload sessions are a State machine whose events answer PERFORM / REPLAY / 409, so a
+retried or 10×-concurrent complete is the same 200 and one `MediaUploaded` (row lock + REPLAY).
+Playback is one access check that issues a 6 h HMAC ticket. The playlists are rewritten per
+viewer, and segments are presigned, straight from storage.
+
+**The numbers:** `UploadIT`: an upload interrupted after parts 1 and 3 resumes with exactly part
+2; 10 concurrent completes → 1 event. `PlaybackIT` fetches a presigned segment with no bearer at
+all. In the e2e, a browser upload is playing in hls.js < 10 s later.

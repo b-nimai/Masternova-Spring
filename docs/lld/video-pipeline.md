@@ -4,7 +4,7 @@
 > playlist, poster, scrub sprite) as a **small DAG of leased, retryable jobs** in the worker,
 > where a crash at any moment leads to a rerun that **overwrites** instead of duplicating.
 
-**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** built: ffmpeg tooling (7.5), job DAG (7.4), retries + dead letters + sweeper (7.6), live progress (7.7)
+**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** built (Phase 7: 7.4–7.7, crash proof 7.10)
 **Last updated:** 2026-10-13 · **Angular:** progress over SSE in `features/instructor/upload` (7.7, 7.8)
 **Pairs with:** [`media.md`](media.md) (the upload, the asset, the key layout) ·
 [ADR-0013](../adr/0013-hls-for-playback.md) (HLS, ladder, segment rules) ·
@@ -341,8 +341,6 @@ ADR-0007). That's the largest image change of the project, and D1's Trivy gate a
 
 ## 10. Tests that prove it
 
-*Planned; this section is finished with the code (7.4–7.10).*
-
 - Unit (no Spring, no DB):
   - `FfmpegCommandTest` (argument lists, cross-field rules);
   - `LadderProfileTest` (no upscaling, at least one rung, GOP divides the segment);
@@ -355,10 +353,35 @@ ADR-0007). That's the largest image change of the project, and D1's Trivy gate a
 - `PipelineIT` (Testcontainers Postgres + SeaweedFS, real ffmpeg, `fast` ladder, a 10 s
   `testsrc` clip): upload → `READY`, the object count matches the playlists; `MediaUploaded` ×2
   → one pipeline.
-- **`PipelineCrashIT` (7.10):** start the worker as a child JVM, SIGKILL it after the first
-  segment upload, restart it, and assert the object set and `media_rendition` rows are identical
-  to an uninterrupted run.
+- **`PipelineCrashIT` (7.10):** the real repackaged worker jar runs as a **child JVM** against the
+  test's Postgres, SeaweedFS and Redis (fast ladder, 4 s lease). A control asset goes through
+  uninterrupted. Then the same 120 s clip again: the test watches storage and, the moment a rung
+  has segments but **no `index.m3u8`**, SIGKILLs the JVM and its ffmpeg children (what an OOM kill
+  or an eviction does). It asserts the half-state (no rung playlist, no master), starts a second
+  worker, and waits for READY. Proven:
+  - the object keys, relative to the asset, are **identical** to the control run's;
+  - one rendition row per rung, with the same segment counts;
+  - every job DONE, the killed one with 2 attempts and the others with 1.
+
+  3 of 3 runs green locally (~35 s each).
+- **e2e `media.spec.ts` (7.9):** the real stack (nginx → Angular → api → SeaweedFS → worker with
+  Alpine's ffmpeg): a browser upload becomes a playing HLS preview in < 10 s. It found the two
+  ffmpeg-build differences (§8).
 
 ## 11. Interview notes — 60-second recall
 
-*Written last, with the code.*
+**Problem:** turn an upload into an ABR HLS ladder on workers that get SIGKILLed, rescheduled and
+redeployed, without duplicate renditions, half-written playlists or stuck assets.
+
+**The decision that mattered:** make every output key a **function of ids** (`MediaKeys`) and
+write **commit markers last** (a rung's `index.m3u8`, then `master.m3u8`). A crashed job's rerun
+then *overwrites* instead of duplicating, and a reader can't see anything half-done. It's enforced
+in one place: the `JobProcessor` Template Method's `final run`. The rest is the outbox's proven
+protocol reused for long jobs: `FOR UPDATE SKIP LOCKED` claims, `next_attempt_at` doubling as the
+lease (a dead worker's job just becomes claimable again), a unique `(asset, type, rung)` for
+idempotent enqueue and fan-in, conditional asset updates, and retries as rows (they survive the
+crash) instead of Spring Retry.
+
+**The proof:** `PipelineCrashIT` SIGKILLs a real worker JVM mid-upload; the rerun's object set is
+**identical** to an uninterrupted run, with one rendition per rung and 2 attempts on the killed
+job only. The e2e test plays the result in a browser.
