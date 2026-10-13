@@ -65,6 +65,16 @@ public class MessagingAutoConfiguration {
         repository, json, clock, registry(meters), observations(observations));
   }
 
+  /**
+   * Backlog gauges in EVERY app that writes the outbox — not only with the relay: a worker whose
+   * relay is switched off is exactly the stall they must show. Alerts take the max across apps.
+   */
+  @Bean
+  @ConditionalOnMissingBean
+  OutboxBacklogMetrics outboxBacklogMetrics(OutboxRepository repository, Clock clock) {
+    return new OutboxBacklogMetrics(repository, clock);
+  }
+
   static MeterRegistry registry(ObjectProvider<MeterRegistry> meters) {
     return meters.getIfAvailable(() -> Metrics.globalRegistry);
   }
@@ -90,12 +100,6 @@ public class MessagingAutoConfiguration {
         ObjectProvider<ObservationRegistry> observations) {
       return new OutboxRelay(
           repository, handlers, settings, clock, registry(meters), observations(observations));
-    }
-
-    /** Backlog gauges live with the relay: the process that owes the delivery reports the debt. */
-    @Bean
-    OutboxBacklogMetrics outboxBacklogMetrics(OutboxRepository repository, Clock clock) {
-      return new OutboxBacklogMetrics(repository, clock);
     }
 
     @Bean

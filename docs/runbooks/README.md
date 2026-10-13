@@ -1,5 +1,7 @@
 # Runbooks
 
+**Last updated:** 2026-10-13
+
 One runbook per alert, written in Phase D3 when the alert is created. Each one answers four
 questions:
 

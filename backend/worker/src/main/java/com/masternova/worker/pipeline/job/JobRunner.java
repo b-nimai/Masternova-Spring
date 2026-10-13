@@ -3,11 +3,17 @@ package com.masternova.worker.pipeline.job;
 import com.masternova.worker.pipeline.PipelineProperties;
 import com.masternova.worker.pipeline.PipelineStore;
 import com.masternova.worker.pipeline.ffmpeg.MediaToolException;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.EnumMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
@@ -44,6 +50,7 @@ public class JobRunner {
   private final Clock clock;
   private final ProgressPublisher publisher;
   private final ObservationRegistry observations;
+  private final Map<DeadReason, Counter> dead = new EnumMap<>(DeadReason.class);
   private volatile boolean shuttingDown;
 
   JobRunner(
@@ -54,7 +61,8 @@ public class JobRunner {
       PipelineProperties props,
       Clock clock,
       ProgressPublisher publisher,
-      ObservationRegistry observations) {
+      ObservationRegistry observations,
+      MeterRegistry meters) {
     this.registry = registry;
     this.jobs = jobs;
     this.store = store;
@@ -63,6 +71,23 @@ public class JobRunner {
     this.clock = clock;
     this.publisher = publisher;
     this.observations = observations;
+    // ⭐ created at 0 at startup: Prometheus' increase() can't see a series BORN at 1, so the
+    //    first buried job would never reach the DeadLetters alert
+    for (DeadReason reason : DeadReason.values()) {
+      dead.put(
+          reason,
+          Counter.builder("pipeline.jobs.dead")
+              .description("Pipeline jobs given up on for good (their asset is FAILED)")
+              .tag("reason", tag(reason))
+              .register(meters));
+    }
+  }
+
+  /** Why a job was buried — the {@code reason} tag of {@code pipeline.jobs.dead}. */
+  enum DeadReason {
+    PERMANENT, // the input itself (ffprobe can't read it)
+    ATTEMPTS, // temporary failures until max-attempts
+    ABANDONED // its worker died on the last attempt (OOM-kill, SIGKILL)
   }
 
   /** How a run ended — the {@code outcome} tag of {@code pipeline.job}. */
@@ -71,11 +96,8 @@ public class JobRunner {
     LOST_LEASE,
     RETRY,
     DEAD,
-    RELEASED;
-
-    String tag() {
-      return name().toLowerCase(Locale.ROOT);
-    }
+    RELEASED,
+    ABORTED // an Error, or recording the failure failed too (the database is gone)
   }
 
   public void execute(Job job, String workerId) {
@@ -85,24 +107,39 @@ public class JobRunner {
             .lowCardinalityKeyValue("job.type", job.type().name())
             .highCardinalityKeyValue("asset.id", job.assetId().toString())
             .highCardinalityKeyValue("job.attempt", Integer.toString(job.attempts()))
-            .start();
-    Outcome outcome = Outcome.DONE;
-    try (Observation.Scope scope = observation.openScope()) {
-      outcome = run(job, workerId);
+            // ⭐ replaced only when a path COMPLETES: a run that ends in an Error, or whose
+            //    fail()/release() throws, is never timed as "done"
+            .lowCardinalityKeyValue("outcome", tag(Outcome.ABORTED));
+    try {
+      // observe() records any Throwable (Error included) and stops the observation; its scope
+      // covers the failure handling too, so those log lines carry this run's trace id
+      observation.observe(
+          () ->
+              observation.lowCardinalityKeyValue(
+                  "outcome", tag(attempt(job, workerId, observation))));
+    } finally {
+      publisher.changed(job); // after the commit: subscribers re-read the asset
+    }
+  }
+
+  private Outcome attempt(Job job, String workerId, Observation observation) {
+    try {
+      return run(job, workerId);
     } catch (RuntimeException e) {
       observation.error(e);
       if (shuttingDown) {
         // ⭐ our deploy / scale-in interrupted it, whatever step it was in (ffmpeg, an upload…):
         //    not the media's fault — give it back uncounted, due now
         jobs.release(job.id(), workerId);
-        outcome = Outcome.RELEASED;
-      } else {
-        outcome = fail(job, workerId, e);
+        return Outcome.RELEASED;
       }
-    } finally {
-      observation.lowCardinalityKeyValue("outcome", outcome.tag()).stop();
-      publisher.changed(job); // after the commit: subscribers re-read the asset
+      return fail(job, workerId, e);
     }
+  }
+
+  /** {@code DONE} → {@code "done"}: the tag values of both enums below. */
+  private static String tag(Enum<?> value) {
+    return value.name().toLowerCase(Locale.ROOT);
   }
 
   private Outcome run(Job job, String workerId) {
@@ -152,10 +189,16 @@ public class JobRunner {
    * in {@link #fail} never runs after a SIGKILL).
    */
   public void buryAbandoned() {
-    tx.executeWithoutResult(
-        status ->
-            jobs.buryAbandoned(props.maxAttempts())
-                .forEach(asset -> store.markFailed(asset, "TRANSCODE_FAILED")));
+    List<UUID> buried =
+        tx.execute(
+            status -> {
+              List<UUID> assets = jobs.buryAbandoned(props.maxAttempts());
+              assets.forEach(asset -> store.markFailed(asset, "TRANSCODE_FAILED"));
+              return assets;
+            });
+    if (buried != null) {
+      dead.get(DeadReason.ABANDONED).increment(buried.size()); // counted once committed
+    }
   }
 
   private void heartbeat(Job job, String workerId, AtomicInteger progress) {
@@ -178,12 +221,19 @@ public class JobRunner {
     String error = e.getClass().getSimpleName() + ": " + e.getMessage();
     if (permanent || job.attempts() >= props.maxAttempts()) {
       log.error("job {} ({} {}) is DEAD: {}", job.id(), job.type(), job.rung(), error, e);
-      tx.executeWithoutResult(
-          status -> {
-            if (jobs.bury(job.id(), workerId, error)) {
-              store.markFailed(job.assetId(), permanent ? "MEDIA_UNREADABLE" : "TRANSCODE_FAILED");
-            }
-          });
+      Boolean buried =
+          tx.execute(
+              status -> {
+                if (!jobs.bury(job.id(), workerId, error)) {
+                  return false; // lost the lease: the rerun owns the job now
+                }
+                store.markFailed(
+                    job.assetId(), permanent ? "MEDIA_UNREADABLE" : "TRANSCODE_FAILED");
+                return true;
+              });
+      if (Boolean.TRUE.equals(buried)) { // counted once committed
+        dead.get(permanent ? DeadReason.PERMANENT : DeadReason.ATTEMPTS).increment();
+      }
       return Outcome.DEAD;
     }
     Duration delay = backoff(job.attempts());

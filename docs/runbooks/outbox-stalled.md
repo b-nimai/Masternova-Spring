@@ -1,7 +1,7 @@
 # Runbook — `OutboxStalled`
 
 **Last updated:** 2026-10-13 · **Severity:** page · **Rule:** [`symptoms.rules.yml`](../../deploy/observability/prometheus/rules/symptoms.rules.yml)
-**Fires when:** the oldest undelivered outbox event is older than 5 minutes, for 5 minutes.
+**Fires when:** the most overdue *due* outbox event has waited more than 5 minutes past its due time, for 5 minutes (`max(outbox_overdue_seconds) > 300`; every app reports the gauge). A message waiting out its retry backoff is not due, so one failing message doesn't fire this; see [dead-letters](dead-letters.md).
 
 ## 1. What it means for users
 
@@ -11,8 +11,8 @@ SLO's ratio becomes NaN (silent), not red.
 
 ## 2. Confirm
 
-- **Pipeline & outbox** → *Outbox oldest undelivered* is climbing and *Delivery outcomes / s* is
-  flat at zero.
+- **Pipeline & outbox** → *Outbox overdue* is climbing and *Delivery outcomes / s* is flat at
+  zero.
 - Is the worker up? `docker compose ps worker` / `curl localhost:8090/actuator/health`.
   `ServiceDown{job="worker"}` would fire too, and Alertmanager inhibits this alert when it does.
 - Worker up but not relaying: is `masternova.outbox.relay-enabled` true in its config? Are rows

@@ -47,13 +47,15 @@ interface OutboxRepository {
   Map<String, Long> countByStatus();
 
   /**
-   * What the relay still owes: rows not yet delivered (PENDING or PROCESSING) and when the oldest
-   * of them happened. Served by the partial due-index, so it stays cheap enough for every scrape.
+   * What the relay still owes: rows not yet delivered (PENDING or PROCESSING), and the earliest
+   * {@code next_attempt_at} among those already DUE. Served by the partial due-index, so it stays
+   * cheap enough for every scrape.
    */
   Backlog backlog();
 
   /**
-   * @param oldest {@code null} when nothing is owed
+   * @param oldestDue when the most overdue row became due; {@code null} when nothing is due. A row
+   *     waiting out its retry backoff, or leased by a live relay, is not due yet.
    */
-  record Backlog(long size, Instant oldest) {}
+  record Backlog(long size, Instant oldestDue) {}
 }

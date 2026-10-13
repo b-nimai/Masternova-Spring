@@ -130,11 +130,33 @@ tests:
               description: 'Error ratio over 1h: 50% (budget 1 %). SLO: 99 % of events are handled within 60 s of their commit.'
               runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/outbox-freshness.md
 
-  # ---- a dead relay: no deliveries at all (the freshness SLO goes NaN), but the backlog ages
-  - name: a stalled relay pages through the oldest-age gauge
+  # ---- events given up on (DEAD) burn the budget although every DELIVERED one was fast
+  - name: dead events count against outbox freshness
     interval: 1m
     input_series:
-      - series: 'outbox_oldest_age_seconds{application="worker"}'
+      - series: 'outbox_delivery_lag_seconds_bucket{application="worker",event_type="identity.user-registered.v1",le="60.0"}'
+        values: '0+7x90'
+      - series: 'outbox_delivery_lag_seconds_count{application="worker",event_type="identity.user-registered.v1"}'
+        values: '0+7x90'
+      - series: 'outbox_messages_total{application="worker",event_type="identity.user-registered.v1",outcome="dead"}'
+        values: '0+3x90'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: OutboxFreshnessFastBurn
+        exp_alerts:
+          - exp_labels: { severity: page, slo: outbox-freshness }
+            exp_annotations:
+              summary: 'Outbox freshness SLO is burning its error budget at 14.4× or more (over 1h and 5m)'
+              description: 'Error ratio over 1h: 30% (budget 1 %). SLO: 99 % of events are handled within 60 s of their commit.'
+              runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/outbox-freshness.md
+
+  # ---- a dead relay: no deliveries at all (the freshness SLO goes NaN), but the backlog ages
+  - name: a stalled relay pages through the overdue gauge (reported by every app)
+    interval: 1m
+    input_series:
+      - series: 'outbox_overdue_seconds{application="worker"}'
+        values: '0x5 60+60x20'
+      - series: 'outbox_overdue_seconds{application="api"}'
         values: '0x5 60+60x20'
     alert_rule_test:
       - eval_time: 14m # over 300 s since 11m, but not yet for 5 minutes
@@ -146,7 +168,7 @@ tests:
           - exp_labels: { severity: page }
             exp_annotations:
               summary: 'Outbox events are not being delivered'
-              description: 'The oldest undelivered event is 12m 0s old.'
+              description: 'The most overdue event has waited 12m 0s past its due time.'
               runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/outbox-stalled.md
 
   - name: an app is down only when no instance answers
@@ -168,10 +190,11 @@ tests:
               description: 'No worker instance has answered /actuator/prometheus for 2 minutes.'
               runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/service-down.md
 
+  # the counters start at 0 because the apps register them at startup (see the rule's comment)
   - name: a buried pipeline job opens a ticket
     interval: 1m
     input_series:
-      - series: 'pipeline_job_seconds_count{application="worker",job_type="TRANSCODE",outcome="dead",error="MediaToolException"}'
+      - series: 'pipeline_jobs_dead_total{application="worker",reason="permanent"}'
         values: '0x10 1x50'
       - series: 'outbox_messages_total{application="worker",event_type="x.v1",outcome="delivered"}'
         values: '0+5x60'

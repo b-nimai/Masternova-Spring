@@ -1,7 +1,7 @@
 # Runbook — `DeadLetters`
 
 **Last updated:** 2026-10-13 · **Severity:** ticket · **Rule:** [`symptoms.rules.yml`](../../deploy/observability/prometheus/rules/symptoms.rules.yml)
-**Fires when:** an outbox message was parked as `DEAD`, or a pipeline job was buried, in the last hour (label `kind` = `outbox` | `pipeline`).
+**Fires when:** an outbox message was parked as `DEAD` (`outbox_messages_total{outcome="dead"}`), or a pipeline job was buried (`pipeline_jobs_dead_total{reason}`: permanent / attempts / abandoned), in the last hour. Label `kind` = `outbox` | `pipeline`.
 
 ## 1. What it means for users
 

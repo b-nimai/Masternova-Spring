@@ -12,6 +12,7 @@ import com.masternova.messaging.TestcontainersConfiguration;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
+import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -19,11 +20,13 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
@@ -173,6 +176,7 @@ class TransactionalOutboxIT {
   @Autowired MutableClock clock;
   @Autowired JdbcClient jdbc;
   @Autowired SimpleMeterRegistry meters;
+  @Autowired OutboxProperties settings;
 
   @BeforeEach
   void reset() {
@@ -338,24 +342,78 @@ class TransactionalOutboxIT {
     assertThat(count("outbox.messages", "event.type", type, "outcome", "delivered")).isEqualTo(1);
     var lag = meters.get("outbox.delivery.lag").tag("event.type", type).timer();
     assertThat(lag.count()).isEqualTo(1);
-    assertThat(lag.totalTime(java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(10);
+    assertThat(lag.totalTime(TimeUnit.SECONDS)).isEqualTo(10);
   }
 
   @Test
-  void theBacklogGaugesSeeWhatIsOwedEvenWhenNoRelayRuns() {
+  void theOverdueGaugeGrowsOnlyWhenNobodyRelays() {
     var gauges = new OutboxBacklogMetrics(repository, clock);
     gauges.bindTo(meters);
     assertThat(meters.get("outbox.backlog").gauge().value()).isZero();
-    assertThat(meters.get("outbox.oldest.age").gauge().value()).isZero();
+    assertThat(meters.get("outbox.overdue").gauge().value()).isZero();
 
     courses.draft("m4");
     clock.advance(Duration.ofSeconds(90)); // … and no relay ever comes
     courses.draft("m5");
 
     assertThat(meters.get("outbox.backlog").gauge().value()).isEqualTo(2);
-    assertThat(meters.get("outbox.oldest.age").gauge().value()).isEqualTo(90);
+    assertThat(meters.get("outbox.overdue").gauge().value()).isEqualTo(90);
     relay.relayOnce();
+    clock.advance(Duration.ofSeconds(1)); // past the gauges' 1 s snapshot
     assertThat(meters.get("outbox.backlog").gauge().value()).isZero();
+    assertThat(meters.get("outbox.overdue").gauge().value()).isZero();
+  }
+
+  @Test
+  void aMessageBackingOffIsOwedButNotOverdue() {
+    var gauges = new OutboxBacklogMetrics(repository, clock);
+    gauges.bindTo(meters);
+    handler.failuresLeft.set(1);
+    courses.draft("m6");
+    relay.relayOnce(); // attempt 1 fails → due again in 10 s
+
+    clock.advance(Duration.ofSeconds(5)); // the relay is healthy; the message just waits its turn
+    assertThat(meters.get("outbox.backlog").gauge().value()).isEqualTo(1);
+    assertThat(meters.get("outbox.overdue").gauge().value()).isZero(); // ⭐ no stall to page about
+  }
+
+  @Test
+  void deadCountersExistAtZeroBeforeTheFirstDeadMessage() {
+    // ⭐ Prometheus' increase() can't see a series born at 1: the first DEAD would never alert
+    // (a fresh relay: @BeforeEach cleared the registry the context's relay registered into)
+    new OutboxRelay(
+        repository, List.of(handler), settings, clock, meters, ObservationRegistry.NOOP);
+
+    var dead =
+        meters
+            .find("outbox.messages")
+            .tags("event.type", "test.course-drafted.v1", "outcome", "dead")
+            .counter();
+    assertThat(dead).isNotNull();
+    assertThat(dead.count()).isZero();
+  }
+
+  @Test
+  void aNullHeaderValueIsDroppedInsteadOfFailingTheBatch() {
+    jdbc.sql(
+            """
+            INSERT INTO outbox_message (id, event_type, aggregate_id, payload, occurred_at, status,
+                                        next_attempt_at, headers)
+            VALUES (:id, 'test.course-drafted.v1', 'n1', '{}', :t, 'PENDING', :t,
+                    '{"traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01", "tracestate": null}')
+            """)
+        .param("id", UUID.randomUUID())
+        .param("t", Timestamp.from(T0))
+        .update();
+    courses.draft("n2");
+
+    var claimed = repository.claimDue(10, Duration.ofSeconds(60));
+
+    assertThat(claimed).hasSize(2); // the row with a null value didn't take its batch down
+    assertThat(claimed)
+        .filteredOn(m -> m.aggregateId().equals("n1"))
+        .singleElement()
+        .satisfies(m -> assertThat(m.headers()).containsOnlyKeys("traceparent"));
   }
 
   @Test
@@ -367,8 +425,7 @@ class TransactionalOutboxIT {
             "h1",
             "{}",
             T0,
-            java.util.Map.of(
-                "traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")));
+            Map.of("traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")));
     courses.draft("h2"); // NOOP observations here: no headers written
 
     var claimed = repository.claimDue(10, Duration.ofSeconds(60));

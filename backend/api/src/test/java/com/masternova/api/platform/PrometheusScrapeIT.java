@@ -38,6 +38,8 @@ class PrometheusScrapeIT {
             "http_server_requests_seconds_bucket\\{[^}]*uri=\"/api/v1/meta/ping\",le=\"0\\.3\"}")
         // USE: the JVM and the connection pool
         .contains("jvm_memory_used_bytes{application=\"api\"")
-        .contains("hikaricp_connections_active{application=\"api\"");
+        .contains("hikaricp_connections_active{application=\"api\"")
+        // the outbox debt is reported where events are WRITTEN too, not only where they're relayed
+        .contains("outbox_overdue_seconds{application=\"api\"}");
   }
 }

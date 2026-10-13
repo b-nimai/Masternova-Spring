@@ -248,7 +248,8 @@ services:
     logging: *logging
     command:
       - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.retention.time=7d # a laptop, not a fleet
+      - --storage.tsdb.retention.time=30d # = the SLO window: the budget panels read increase(…[30d])
+      - --storage.tsdb.retention.size=2GB # … but a laptop's disk wins over the window
       - --web.enable-lifecycle # POST /-/reload re-reads the config and rules
     volumes:
       - ./deploy/observability/prometheus:/etc/prometheus:ro
@@ -363,7 +364,7 @@ volumes:
   pgdata:
   mediadata:
   pipelinework: # the worker's scratch space (video-pipeline LLD §9); safe to delete
-  promdata: # Prometheus' 7 days of samples
+  promdata: # Prometheus' 30 days of samples (the SLO window), at most 2 GB
   tempodata: # Tempo's 48 h of traces
   lokidata: # Loki's 72 h of log lines
 

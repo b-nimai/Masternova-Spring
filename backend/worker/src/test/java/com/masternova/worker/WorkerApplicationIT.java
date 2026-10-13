@@ -34,6 +34,6 @@ class WorkerApplicationIT {
     assertThat(scrape).hasStatusOk();
     assertThat(scrape.getResponse().getContentAsString())
         .contains("outbox_backlog{application=\"worker\"}")
-        .contains("outbox_oldest_age_seconds{application=\"worker\"}");
+        .contains("outbox_overdue_seconds{application=\"worker\"}");
   }
 }

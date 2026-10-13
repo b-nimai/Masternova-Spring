@@ -81,8 +81,9 @@ The custom meters added in D3.1, and the question each answers:
 | `outbox_events_written_total` | counter | `event_type` | how many business facts happen (registrations, uploads — orders from Phase 9 with no new code) | `JdbcOutboxWriter` |
 | `outbox_messages_total` | counter | `event_type`, `outcome` = delivered / retried / dead / unhandled | is delivery failing? | `OutboxRelay` |
 | `outbox_delivery_lag_seconds` | histogram | `event_type` | commit → handled: the **outbox lag** (an SLO, D3.5) | `OutboxRelay` |
-| `outbox_backlog`, `outbox_oldest_age_seconds` | gauges | — | is the relay keeping up — or *gone*? | `OutboxBacklogMetrics` |
-| `pipeline_job_seconds` | histogram (an Observation) | `job_type`, `outcome`, `error` | **transcode duration** by step, and how runs end | `JobRunner` |
+| `outbox_backlog`, `outbox_overdue_seconds` | gauges, in **every** app | — | is anyone relaying? (overdue = how long the most overdue *due* row has waited) | `OutboxBacklogMetrics` |
+| `pipeline_job_seconds` | histogram (an Observation) | `job_type`, `outcome` (done / lost_lease / retry / dead / released / aborted), `error` | **transcode duration** by step, and how runs end | `JobRunner` |
+| `pipeline_jobs_dead_total` | counter, **pre-registered at 0** | `reason` = permanent / attempts / abandoned | buried jobs, for `DeadLetters` | `JobRunner` |
 | `pipeline_slots_busy`, `pipeline_slots`, `pipeline_jobs_queued` | gauges | — | saturation: is it time to add workers? | `JobPoller` |
 
 ### 2.3 Cardinality: the one way to break Prometheus ⭐⭐⭐
@@ -121,10 +122,18 @@ maximum is raised to 2 h (the 30 s default would put every transcode in `+Inf`).
 - **Count on commit.** `outbox_events_written_total` increments in an `afterCommit` callback:
   a rolled-back registration wrote no row, so it must not show up as a registration either
   (`TransactionalOutboxIT.onlyCommittedEventsAreCounted`).
-- **Gauges for silent failure.** A stopped relay records *nothing* — its counters just flatline,
-  which looks like a quiet night. `outbox_oldest_age_seconds` is read from the table at scrape
-  time, so it keeps growing when nobody delivers. Its query uses the partial due-index, so it
-  stays cheap at any table size (a `count(*)` over all DONE rows would not).
+- **Gauges for silent failure.** A stopped relay records *nothing*: its counters just flatline,
+  which looks like a quiet night. `outbox_overdue_seconds` is read from the table at scrape time:
+  how long the most overdue **due** row has waited. A working relay claims due rows within a poll,
+  so it stays near 0; a message waiting out its retry backoff isn't due, so one failing message
+  doesn't move it. It is registered in **every** app that writes the outbox, so a worker whose
+  relay is *switched off* still reports the debt. One query per scrape (a 1 s snapshot feeds both
+  gauges), served by the partial due-index.
+- **Counters that can alert must exist at 0.** `increase()` needs an earlier sample: a counter
+  created lazily at its first increment is *born at 1*, and `increase(…[1h])` of it is 0. So the
+  first DEAD message would never alert. The relay registers `outbox.messages{outcome=dead}` for
+  every handled type at startup, and `JobRunner` registers `pipeline.jobs.dead` for every reason.
+  (Found by the phase review; the promtool test had hidden it by starting the series at 0.)
 - **Observations over Timers** for anything with a duration: `Observation.start/stop` gives a
   timer today and, with a tracer on the classpath (D3.3), a span from the same code.
 - **Library meters, app decisions.** The messaging library registers meters but not their buckets:
@@ -161,7 +170,7 @@ portable: a Grafana in Kubernetes (D4) that provisions the same uid renders the 
 | **HTTP (RED)** | RED | 5xx ratio and *share under 300 ms* (the two SLIs of §6), p50/p95/p99 from buckets, slowest routes table |
 | **JVM** | USE | heap used vs max, *live data after GC* (the leak signal), GC pause share, threads by state, CPU |
 | **Connection pool (Hikari)** | USE | in use / max, **threads waiting** (with virtual threads this is the queue that matters), acquire and hold times, timeouts |
-| **Pipeline & outbox** | custom | oldest undelivered event, backlog, commit → delivery quantiles, job duration p95 by step, outcomes, slots and queue |
+| **Pipeline & outbox** | custom | outbox overdue, backlog, dead letters, commit → delivery quantiles, job duration p95 by step, outcomes, slots and queue |
 
 ### 3.2 Details that make a dashboard honest
 
@@ -357,7 +366,7 @@ trace. The api had no lines in it, because a successful signup logs nothing ther
 |---|---|---|---|
 | **api availability** | `http_server_requests` without 5xx, excluding `/actuator` and SSE streams | 99.5 % | 0.5 % |
 | **api latency** | requests in the `le="0.3"` bucket ÷ all, the exact edge from §2.4 | 95 % | 5 % |
-| **outbox freshness** | deliveries in the `le="60.0"` bucket of `outbox_delivery_lag_seconds` | 99 % | 1 % |
+| **outbox freshness** | deliveries in the `le="60.0"` bucket of `outbox_delivery_lag_seconds` ÷ (deliveries **+ DEAD**): a given-up event records no lag, so it must be in the denominator | 99 % | 1 % |
 
 Recording rules compute each error ratio over 5 m, 30 m, 1 h and 6 h
 (`slo:<name>:error_ratio_rate<window>`), so alerts and the **SLOs & error budgets** dashboard
@@ -386,7 +395,7 @@ The SLOs can't express everything, so three **symptom** alerts complete them:
 | Alert | Why the SLOs miss it |
 |---|---|
 | `ServiceDown` (`max by (job)(up) == 0`, 2 m) | an api that's down produces *no* requests, so its SLIs go NaN, not red |
-| `OutboxStalled` (oldest undelivered > 5 min) | a dead relay records no lag samples (§2.5): freshness goes NaN |
+| `OutboxStalled` (`max(outbox_overdue_seconds) > 300`, 5 m) | a dead or switched-off relay records no lag samples (§2.5): freshness goes NaN |
 | `DeadLetters` (outbox DEAD or pipeline job buried in the last hour, ticket) | rare enough to vanish in a ratio, but each one is a user missing an email or a video |
 
 None of them is a *cause* alert ("CPU > 80 %"): a busy machine that answers on time is fine, and a
@@ -404,9 +413,28 @@ cause alert pages people for things users don't feel.
 | errors for an hour, then 10 clean minutes | the page **resolves** though the 1 h ratio is still above 7.2 % |
 | no traffic | nothing fires |
 | 80 % slow / 50 % late deliveries | latency and outbox fast burns |
-| relay stalled | `OutboxStalled` pending at 14 m, firing at 17 m |
+| relay stalled (api and worker both report it) | `OutboxStalled` pending at 14 m, firing at 17 m |
+| fast deliveries but 30 % DEAD | outbox freshness pages: dead events burn the budget |
 | one of two api instances down, the worker down | `ServiceDown` only for the worker |
 | a buried transcode | `DeadLetters{kind="pipeline"}` |
+
+### 6.4b What the phase review found
+
+`code-review` on the whole branch found 10 issues, all fixed, each with a regression test where a
+test could catch it:
+
+| Found | Fix |
+|---|---|
+| `DeadLetters` missed the first dead letter: lazily created counters are born at 1 | counters pre-registered at 0 (`deadCountersExistAtZero…` in `TransactionalOutboxIT` and `JobRunnerTest`) |
+| `JobRunner` timed a run as `done` when `fail()`/`release()` threw or an `Error` escaped | outcome starts as `aborted`, set only when a path completes (2 tests) |
+| backlog gauges existed only with the relay: a switched-off relay was invisible | registered in every app (`MessagingAutoConfigurationTest`, `PrometheusScrapeIT`) |
+| `OutboxStalled` would page for one message in retry backoff | the gauge measures *overdue due* rows (`aMessageBackingOffIsOwedButNotOverdue`) |
+| retry / DEAD log lines were written after the span closed: no `traceId` on exactly the lines that matter | the scope covers the failure handling (relay: the outcome is recorded inside the delivery span; `JobRunner`: same, tested) |
+| DEAD events never counted against outbox freshness | in the SLI's denominator (promtool case *dead events count*) |
+| two identical queries per scrape | one query, a 1 s snapshot for both gauges |
+| 7 d retention under a 30-day budget panel | 30 d retention, 2 GB cap |
+| a `null` header value made `Map.copyOf` throw and failed the whole claimed batch | null values dropped (`aNullHeaderValueIsDropped…`) |
+| the runbooks README had no date | dated |
 
 `make obs-check` (and the CI `observability` job) also runs `promtool check config`, `amtool
 check-config`, and parses **every dashboard query** by turning it into a recording rule
@@ -440,7 +468,9 @@ within a minute and `[PAGE] ServiceDown FIRING` in Mailpit **2.5 minutes** after
 | Averaging percentiles across replicas | export histogram buckets; `histogram_quantile` over `sum by (le)` |
 | A full default histogram on every HTTP series | the bucket edges you'll query (9 here) |
 | Counting an event before its transaction commits | count in `afterCommit` |
-| Trusting a flat-lined counter | a gauge that keeps growing when the work stops (`outbox_oldest_age_seconds`) |
+| Trusting a flat-lined counter | a gauge that keeps growing when the work stops (`outbox_overdue_seconds`) |
+| Counters created at their first increment | register them at 0 at startup, or `increase()` misses the first event |
+| A stall gauge that counts messages in backoff | measure *overdue due* rows: one failing message isn't a stalled relay |
 | Scraping one process through two targets | one target per process; check `count by (job) (up)` |
 | Dashboards edited in the UI | provision from git; `allowUiUpdates: false` |
 | Trace ids as Loki labels | structured metadata (a label per trace = a stream per request) |
@@ -488,7 +518,7 @@ the resolution after restarting it.
 ## 9. 30-second recall
 
 - **RED** for services, **USE** for resources; tags from closed sets; histograms, not percentiles.
-- Count after commit; a gauge for silent failure (`outbox_oldest_age_seconds`).
+- Count after commit; alertable counters exist at 0; a gauge for silent failure (`outbox_overdue_seconds`).
 - Dashboards and datasources provisioned from git; Grafana has no state.
 - One trace from the api request to the worker: `traceparent` stored in `outbox_message.headers`.
 - `traceId` on every JSON log line; in Loki as structured metadata, never a label; Grafana links

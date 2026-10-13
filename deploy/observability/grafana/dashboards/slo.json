@@ -197,7 +197,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "1 - (1 - sum(increase(outbox_delivery_lag_seconds_bucket{application=\"worker\", le=\"60.0\"}[30d])) / sum(increase(outbox_delivery_lag_seconds_count{application=\"worker\"}[30d]))) / 0.01",
+          "expr": "1 - (1 - sum(increase(outbox_delivery_lag_seconds_bucket{application=\"worker\", le=\"60.0\"}[30d])) / (sum(increase(outbox_delivery_lag_seconds_count{application=\"worker\"}[30d])) + (sum(increase(outbox_messages_total{application=\"worker\", outcome=\"dead\"}[30d])) or vector(0)))) / 0.01",
           "legendFormat": "__auto"
         }
       ],

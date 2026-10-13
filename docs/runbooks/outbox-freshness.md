@@ -1,7 +1,7 @@
 # Runbook — `OutboxFreshnessFastBurn` / `OutboxFreshnessSlowBurn`
 
 **Last updated:** 2026-10-13 · **Severity:** fast burn = page, slow burn = ticket · **Rule:** [`slo.rules.yml`](../../deploy/observability/prometheus/rules/slo.rules.yml)
-**SLO:** 99 % of outbox events are handled within 60 s of the commit that wrote them, over 30 days.
+**SLO:** 99 % of outbox events are handled within 60 s of the commit that wrote them, over 30 days. Events given up on (DEAD) count as bad.
 
 ## 1. What it means for users
 
@@ -12,7 +12,7 @@ consequences are queued.
 ## 2. Confirm
 
 - **Pipeline & outbox** → *Commit → delivered* quantiles, *Delivery outcomes / s* (lots of
-  `retried` = a handler's dependency is failing), *Backlog and oldest age*.
+  `retried` = a handler's dependency is failing), *Backlog and overdue*, *Dead letters / h* (DEAD events burn this budget too).
 - Retries: `SELECT event_type, attempts, last_error FROM outbox_message WHERE status = 'PENDING'
   AND attempts > 1 ORDER BY occurred_at LIMIT 20;`
 - One slow delivery: Loki `{service="worker"} |= "failed attempt"` → **Open trace**. The

@@ -16,7 +16,9 @@ import io.micrometer.tracing.handler.PropagatingSenderTracingObservationHandler;
 import io.micrometer.tracing.otel.bridge.OtelCurrentTraceContext;
 import io.micrometer.tracing.otel.bridge.OtelPropagator;
 import io.micrometer.tracing.otel.bridge.OtelTracer;
+import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.propagation.W3CTraceContextPropagator;
 import io.opentelemetry.context.propagation.ContextPropagators;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
@@ -54,6 +56,13 @@ class OutboxTracePropagationTest {
   static final class InMemoryOutbox implements OutboxRepository {
     final List<NewMessage> rows = new ArrayList<>();
 
+    /** The trace id current while the relay recorded each outcome (what its log line carries). */
+    final List<String> traceIdsAtOutcome = new ArrayList<>();
+
+    private void recordCurrentTrace() {
+      traceIdsAtOutcome.add(Span.current().getSpanContext().getTraceId());
+    }
+
     @Override
     public void append(NewMessage m) {
       rows.add(m);
@@ -79,13 +88,19 @@ class OutboxTracePropagationTest {
     }
 
     @Override
-    public void markDone(UUID id) {}
+    public void markDone(UUID id) {
+      recordCurrentTrace();
+    }
 
     @Override
-    public void reschedule(UUID id, Instant nextAttemptAt, String error) {}
+    public void reschedule(UUID id, Instant nextAttemptAt, String error) {
+      recordCurrentTrace();
+    }
 
     @Override
-    public void markDead(UUID id, String error) {}
+    public void markDead(UUID id, String error) {
+      recordCurrentTrace();
+    }
 
     @Override
     public Map<String, Long> countByStatus() {
@@ -205,8 +220,10 @@ class OutboxTracePropagationTest {
                 }))
         .relayOnce();
 
-    assertThat(span("outbox deliver " + TYPE).getStatus().getStatusCode())
-        .isEqualTo(io.opentelemetry.api.trace.StatusCode.ERROR);
+    SpanData deliver = span("outbox deliver " + TYPE);
+    assertThat(deliver.getStatus().getStatusCode()).isEqualTo(StatusCode.ERROR);
+    // ⭐ the retry was recorded (and logged) INSIDE the delivery span: its log line has the trace id
+    assertThat(outbox.traceIdsAtOutcome).containsExactly(deliver.getTraceId());
   }
 
   @Test

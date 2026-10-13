@@ -5,6 +5,7 @@ import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
 import com.masternova.messaging.OutboxWriter;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Meter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
@@ -35,7 +36,7 @@ class JdbcOutboxWriter implements OutboxWriter {
   private final OutboxRepository repository;
   private final JsonMapper json;
   private final Clock clock;
-  private final MeterRegistry meters;
+  private final Meter.MeterProvider<Counter> written;
   private final ObservationRegistry observations;
 
   JdbcOutboxWriter(
@@ -47,7 +48,10 @@ class JdbcOutboxWriter implements OutboxWriter {
     this.repository = repository;
     this.json = json;
     this.clock = clock;
-    this.meters = meters;
+    this.written =
+        Counter.builder("outbox.events.written")
+            .description("Domain events committed to the outbox, by type")
+            .withRegistry(meters);
     this.observations = observations;
   }
 
@@ -78,20 +82,16 @@ class JdbcOutboxWriter implements OutboxWriter {
    * show up in the metric either.
    */
   private void countOnCommit(String type) {
-    Counter written =
-        Counter.builder("outbox.events.written")
-            .description("Domain events committed to the outbox, by type")
-            .tag("event.type", type)
-            .register(meters);
+    Counter counter = written.withTag("event.type", type);
     if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-      written.increment(); // no transaction: the row is already committed (auto-commit)
+      counter.increment(); // no transaction: the row is already committed (auto-commit)
       return;
     }
     TransactionSynchronizationManager.registerSynchronization(
         new TransactionSynchronization() {
           @Override
           public void afterCommit() {
-            written.increment();
+            counter.increment();
           }
         });
   }

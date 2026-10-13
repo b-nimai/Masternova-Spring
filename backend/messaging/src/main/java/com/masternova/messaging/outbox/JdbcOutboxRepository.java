@@ -7,9 +7,11 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.core.type.TypeReference;
@@ -101,8 +103,18 @@ class JdbcOutboxRepository implements OutboxRepository {
         .list();
   }
 
+  /**
+   * ⭐ Cleaned HERE, at the read boundary: a {@code null} value in the JSON (a hand fix-up, another
+   * writer) would make {@code Map.copyOf} in {@link OutboxMessage} throw inside the row mapper —
+   * after the batch was claimed — and fail the whole batch on every retry.
+   */
   private Map<String, String> headers(String text) {
-    return text == null ? Map.of() : json.readValue(text, HEADERS);
+    if (text == null) {
+      return Map.of();
+    }
+    Map<String, String> headers = new HashMap<>(json.readValue(text, HEADERS));
+    headers.values().removeIf(Objects::isNull);
+    return headers;
   }
 
   @Override
@@ -147,14 +159,17 @@ class JdbcOutboxRepository implements OutboxRepository {
   public Backlog backlog() {
     return jdbc.sql(
             """
-            SELECT count(*) AS size, min(occurred_at) AS oldest
+            SELECT count(*) AS size,
+                   min(next_attempt_at) FILTER (WHERE next_attempt_at <= :now) AS oldest_due
               FROM outbox_message
              WHERE status IN ('PENDING', 'PROCESSING')
             """)
+        .param("now", Timestamp.from(clock.instant()))
         .query(
             (rs, row) -> {
-              Timestamp oldest = rs.getTimestamp("oldest");
-              return new Backlog(rs.getLong("size"), oldest == null ? null : oldest.toInstant());
+              Timestamp oldestDue = rs.getTimestamp("oldest_due");
+              return new Backlog(
+                  rs.getLong("size"), oldestDue == null ? null : oldestDue.toInstant());
             })
         .single();
   }

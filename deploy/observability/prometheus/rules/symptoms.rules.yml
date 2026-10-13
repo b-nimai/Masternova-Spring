@@ -18,26 +18,31 @@ groups:
     rules:
       - alert: OutboxStalled
         # ⭐ the relay can die silently (no deliveries = no lag samples = the freshness SLO goes
-        #    NaN, not red). The oldest undelivered event, read from the table, keeps ageing.
-        expr: max(outbox_oldest_age_seconds{application="worker"}) > 300
+        #    NaN, not red). outbox_overdue_seconds is read from the table by EVERY app (so even a
+        #    worker with its relay switched off reports it): how long the most overdue DUE event has
+        #    waited. A working relay keeps it near 0, and a message backing off isn't due — so one
+        #    failing message never pages here (that's DeadLetters' job).
+        expr: max(outbox_overdue_seconds) > 300
         for: 5m
         labels:
           severity: page
         annotations:
           summary: 'Outbox events are not being delivered'
-          description: 'The oldest undelivered event is {{ $value | humanizeDuration }} old.'
+          description: 'The most overdue event has waited {{ $value | humanizeDuration }} past its due time.'
           runbook_url: https://github.com/b-nimai/Masternova-Spring/blob/main/docs/runbooks/outbox-stalled.md
 
   - name: dead-letters
     rules:
       - alert: DeadLetters
         # something gave up for good: a parked outbox message or a buried pipeline job. Not urgent
-        # (retries already happened), but a user is missing an email or a video
+        # (retries already happened), but a user is missing an email or a video.
+        # ⭐ Both counters exist at 0 from startup (OutboxRelay, JobRunner): increase() can't see a
+        #    series that is BORN at 1, so a lazily created counter would hide the first dead letter.
         expr: |
           sum by (kind) (
             label_replace(increase(outbox_messages_total{outcome="dead"}[1h]), "kind", "outbox", "", "")
             or
-            label_replace(increase(pipeline_job_seconds_count{outcome="dead"}[1h]), "kind", "pipeline", "", "")
+            label_replace(increase(pipeline_jobs_dead_total[1h]), "kind", "pipeline", "", "")
           ) > 0
         labels:
           severity: ticket

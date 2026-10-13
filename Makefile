@@ -28,15 +28,17 @@ obs: ## Start observability: Grafana :3001, Prometheus :9091, Alertmanager :9094
 	docker compose --profile observability up -d --wait prometheus alertmanager tempo loki alloy grafana
 
 OBS := $(CURDIR)/deploy/observability
+# keep in step with compose.yaml's prometheus image
+PROM := prom/prometheus:v3.15.0
 obs-check: ## Validate observability config and unit-test the alert rules (promtool, amtool) — also in CI
 	docker run --rm --entrypoint promtool -v $(OBS)/prometheus:/etc/prometheus:ro -w /etc/prometheus \
-	  prom/prometheus:v3.15.0 check config prometheus.yml
+	  $(PROM) check config prometheus.yml
 	docker run --rm --entrypoint promtool -v $(OBS)/prometheus:/etc/prometheus:ro -w /etc/prometheus/tests \
-	  prom/prometheus:v3.15.0 test rules alerts.test.yml
+	  $(PROM) test rules alerts.test.yml
 	docker run --rm --entrypoint amtool -v $(OBS)/alertmanager:/etc/alertmanager:ro \
 	  prom/alertmanager:v0.34.1 check-config /etc/alertmanager/alertmanager.yml
 	@tmp=$$(mktemp -d) && python3 $(OBS)/scripts/dashboards_as_rules.py $(OBS)/grafana/dashboards $$tmp/dashboards.rules.json \
-	  && docker run --rm --entrypoint promtool -v $$tmp:/q:ro prom/prometheus:v3.15.0 check rules /q/dashboards.rules.json; \
+	  && docker run --rm --entrypoint promtool -v $$tmp:/q:ro $(PROM) check rules /q/dashboards.rules.json; \
 	  rc=$$?; rm -rf $$tmp; exit $$rc
 
 api: ## Run the api from source (:8080)

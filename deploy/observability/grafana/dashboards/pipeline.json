@@ -53,8 +53,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Outbox oldest undelivered",
-      "description": "Grows when nobody delivers \u2014 even if the relay died and records nothing.",
+      "title": "Outbox overdue",
+      "description": "How long the most overdue due event has waited. ~0 while a relay runs (backoff isn't due); grows when nobody relays \u2014 even if the relay died or is switched off. Every app reports it: max.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -72,7 +72,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(outbox_oldest_age_seconds{application=\"worker\"})",
+          "expr": "max(outbox_overdue_seconds)",
           "legendFormat": "__auto"
         }
       ],
@@ -92,7 +92,7 @@
               },
               {
                 "color": "red",
-                "value": 60
+                "value": 300
               }
             ]
           }
@@ -116,7 +116,7 @@
       "id": 3,
       "type": "stat",
       "title": "Outbox backlog",
-      "description": "",
+      "description": "Not yet delivered, including messages backing off between retries.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -134,7 +134,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(outbox_backlog{application=\"worker\"})",
+          "expr": "max(outbox_backlog)",
           "legendFormat": "__auto"
         }
       ],
@@ -514,7 +514,7 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Backlog and oldest age",
+      "title": "Backlog and overdue",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -533,7 +533,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(outbox_backlog{application=\"worker\"})",
+          "expr": "max(outbox_backlog)",
           "legendFormat": "backlog"
         },
         {
@@ -542,8 +542,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "max(outbox_oldest_age_seconds{application=\"worker\"})",
-          "legendFormat": "oldest age (s)"
+          "expr": "max(outbox_overdue_seconds)",
+          "legendFormat": "overdue (s)"
         }
       ],
       "fieldConfig": {
@@ -758,8 +758,8 @@
     {
       "id": 16,
       "type": "timeseries",
-      "title": "Failures by error",
-      "description": "",
+      "title": "Dead letters / h",
+      "description": "Given up on for good: a user is missing an email or a video (DeadLetters alert).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -767,6 +767,66 @@
       "gridPos": {
         "x": 12,
         "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (event_type) (increase(outbox_messages_total{outcome=\"dead\"}[1h]))",
+          "legendFormat": "outbox {{event_type}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (reason) (increase(pipeline_jobs_dead_total[1h]))",
+          "legendFormat": "pipeline {{reason}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Failures by error",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
         "w": 12,
         "h": 8
       },

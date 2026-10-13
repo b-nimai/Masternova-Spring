@@ -1,6 +1,7 @@
 package com.masternova.worker.pipeline.job;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -22,6 +23,7 @@ import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
@@ -100,12 +102,17 @@ class JobRunnerTest {
         props(heartbeat),
         clock,
         publisher,
-        observations);
+        observations,
+        meters);
   }
 
-  /** How many {@code pipeline.job} runs ended with this outcome. */
-  long runs(String outcome) {
-    var timer = meters.find("pipeline.job").tag("outcome", outcome).timer();
+  double deadCount(String reason) {
+    return meters.get("pipeline.jobs.dead").tag("reason", reason).counter().count();
+  }
+
+  /** How many {@code pipeline.job} runs ended with this outcome (and these extra tags). */
+  long runs(String outcome, String... tags) {
+    var timer = meters.find("pipeline.job").tag("outcome", outcome).tags(tags).timer();
     return timer == null ? 0 : timer.count();
   }
 
@@ -125,9 +132,7 @@ class JobRunnerTest {
     verify(jobs).enqueue(JobSpec.of(asset, JobType.THUMBNAILS));
     verify(publisher).progress(job, 42); // live tick
     verify(publisher).changed(job); // after the commit
-    assertThat(
-            meters.get("pipeline.job").tags("job.type", "PROBE", "outcome", "done").timer().count())
-        .isEqualTo(1);
+    assertThat(runs("done", "job.type", "PROBE")).isEqualTo(1);
   }
 
   @Test
@@ -156,13 +161,7 @@ class JobRunnerTest {
     Duration delay = Duration.between(clock.instant(), runAfter.getValue());
     assertThat(delay).isBetween(Duration.ofSeconds(96), Duration.ofSeconds(144)); // 2 m ± 20 %
     verify(jobs, never()).bury(any(), any(), any());
-    assertThat(
-            meters
-                .get("pipeline.job")
-                .tags("outcome", "retry", "error", "StorageUnavailableException")
-                .timer()
-                .count())
-        .isEqualTo(1);
+    assertThat(runs("retry", "error", "StorageUnavailableException")).isEqualTo(1);
   }
 
   @Test
@@ -180,6 +179,83 @@ class JobRunnerTest {
     verify(jobs, never()).reschedule(any(), any(), any(), any());
     verify(publisher).changed(any()); // a failure is a change too
     assertThat(runs("dead")).isEqualTo(1);
+    assertThat(deadCount("permanent")).isEqualTo(1);
+  }
+
+  @Test
+  void deadCountersExistAtZeroFromTheStart() {
+    runner(() -> null, Duration.ofMinutes(1));
+
+    // ⭐ Prometheus' increase() can't see a series born at 1: the first burial would never alert
+    for (String reason : List.of("permanent", "attempts", "abandoned")) {
+      assertThat(deadCount(reason)).isZero();
+    }
+  }
+
+  @Test
+  void aBurialThatLostTheLeaseIsNotCountedAsDead() {
+    when(jobs.bury(any(), anyString(), anyString())).thenReturn(false);
+
+    runner(
+            () -> {
+              throw new MediaToolException("x", true);
+            },
+            Duration.ofMinutes(1))
+        .execute(probe(1), "w");
+
+    assertThat(deadCount("permanent")).isZero();
+  }
+
+  @Test
+  void aFailureThatCannotBeRecordedIsTimedAsAbortedNotDone() {
+    when(jobs.reschedule(any(), anyString(), any(), anyString()))
+        .thenThrow(new IllegalStateException("database gone"));
+    JobRunner runner =
+        runner(
+            () -> {
+              throw new StorageUnavailableException("503", null);
+            },
+            Duration.ofMinutes(1));
+
+    assertThatThrownBy(() -> runner.execute(probe(1), "w")).hasMessage("database gone");
+
+    assertThat(runs("aborted")).isEqualTo(1);
+    assertThat(runs("done")).isZero();
+  }
+
+  @Test
+  void anErrorFromTheProcessorIsTimedAsAbortedWithItsType() {
+    JobRunner runner =
+        runner(
+            () -> {
+              throw new StackOverflowError();
+            },
+            Duration.ofMinutes(1));
+
+    assertThatThrownBy(() -> runner.execute(probe(1), "w")).isInstanceOf(StackOverflowError.class);
+
+    assertThat(runs("aborted", "error", "StackOverflowError")).isEqualTo(1);
+  }
+
+  @Test
+  void theFailureIsRecordedInsideTheRunsObservation() {
+    // ⭐ so the "retrying in …" / "is DEAD" log lines carry the run's trace id
+    List<Object> current = new ArrayList<>();
+    when(jobs.reschedule(any(), anyString(), any(), anyString()))
+        .thenAnswer(
+            inv -> {
+              current.add(observations.getCurrentObservation());
+              return true;
+            });
+
+    runner(
+            () -> {
+              throw new StorageUnavailableException("503", null);
+            },
+            Duration.ofMinutes(1))
+        .execute(probe(1), "w");
+
+    assertThat(current).singleElement().isNotNull();
   }
 
   @Test
@@ -270,6 +346,7 @@ class JobRunnerTest {
 
     verify(store).markFailed(asset, "TRANSCODE_FAILED");
     verify(store).markFailed(other, "TRANSCODE_FAILED");
+    assertThat(deadCount("abandoned")).isEqualTo(2);
   }
 
   @Test
