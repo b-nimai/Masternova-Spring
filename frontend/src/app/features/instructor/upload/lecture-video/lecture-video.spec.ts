@@ -68,6 +68,27 @@ describe('LectureVideo', () => {
     expect(html()).toContain('Video ready');
   });
 
+  it('a ready video opens a preview from a playback ticket', async () => {
+    fixture.componentRef.setInput('assetId', 'a1');
+    await fixture.whenStable();
+    http
+      .expectOne('/api/v1/media/assets/a1/stream')
+      .flush(
+        'event:snapshot\ndata:{"status":"READY","percent":100,"failureCode":null,"jobs":[]}\n\n',
+      );
+    await fixture.whenStable();
+
+    (fixture.nativeElement as HTMLElement)
+      .querySelector<HTMLButtonElement>('[data-testid="video-preview"]')!
+      .click();
+    const ticket = http.expectOne('/api/v1/media/assets/a1/playback');
+    expect(ticket.request.method).toBe('POST');
+    ticket.flush({ masterUrl: '/api/v1/media/assets/a1/hls/master.m3u8?t=T', expiresAt: 'x' });
+    await fixture.whenStable();
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('app-hls-player')).toBeTruthy();
+  });
+
   it('explains a failed asset in words, not codes', async () => {
     fixture.componentRef.setInput('assetId', 'a2');
     await fixture.whenStable();

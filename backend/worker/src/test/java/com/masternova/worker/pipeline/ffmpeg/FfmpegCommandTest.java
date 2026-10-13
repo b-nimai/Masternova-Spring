@@ -64,4 +64,12 @@ class FfmpegCommandTest {
     assertThat(Rung.of(720, 2800, 128).bandwidth()).isEqualTo((2996 + 128) * 1000);
     assertThatThrownBy(() -> Rung.of(721, 1, 1)).hasMessageContaining("even height");
   }
+
+  @Test
+  void stillImagesAreConvertedToFullRangeForTheJpegEncoder() { // found by the e2e upload test
+    assertThat(StillCommands.poster("ffmpeg", SOURCE, 1, DIR.resolve("p.jpg")))
+        .anyMatch(a -> a.endsWith(":out_range=full,format=yuvj420p"));
+    assertThat(StillCommands.sprite("ffmpeg", SOURCE, 10, 2, DIR.resolve("s.jpg")))
+        .anyMatch(a -> a.contains(":out_range=full,format=yuvj420p,tile=10x2"));
+  }
 }

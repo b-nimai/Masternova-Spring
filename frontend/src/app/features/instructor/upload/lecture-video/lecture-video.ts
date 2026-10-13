@@ -16,6 +16,7 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { Subscription } from 'rxjs';
 import { MediaApi } from '../../../../core/api/media-api';
 import { asProblem } from '../../../../core/api/problem';
+import { HlsPlayer } from '../../../../shared/hls-player/hls-player';
 import { ChunkedUploader } from '../chunked-uploader';
 
 /** Where one lecture's video is: what the widget shows. */
@@ -41,7 +42,7 @@ const FAILURES: Record<string, string> = {
  *    widget follows it — a stream for the new asset, or nothing.
  */
 @Component({
-  imports: [DecimalPipe, MatButtonModule, MatIconModule, MatProgressBarModule],
+  imports: [DecimalPipe, HlsPlayer, MatButtonModule, MatIconModule, MatProgressBarModule],
   selector: 'app-lecture-video',
   styleUrl: './lecture-video.scss',
   templateUrl: './lecture-video.html',
@@ -57,6 +58,9 @@ export class LectureVideo {
   readonly uploaded = output<string>();
 
   protected readonly state = signal<VideoState>({ kind: 'none' });
+  /** The ticketed master url while the preview is open (7.9). */
+  protected readonly previewUrl = signal<string | null>(null);
+  protected readonly previewError = signal(false);
   private watching: Subscription | null = null;
 
   constructor() {
@@ -96,10 +100,29 @@ export class LectureVideo {
       });
   }
 
+  /** Open the preview: ask for a playback ticket, hand its url to the player. */
+  protected preview(): void {
+    const asset = this.assetId();
+    if (!asset) return;
+    this.previewError.set(false);
+    this.media
+      .playback(asset)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (grant) => this.previewUrl.set(grant.masterUrl),
+        error: () => this.previewError.set(true),
+      });
+  }
+
+  protected closePreview(): void {
+    this.previewUrl.set(null);
+  }
+
   /** Follow an asset's processing until READY / FAILED (the server closes the stream). */
   private watch(assetId: string | null): void {
     this.watching?.unsubscribe();
     this.watching = null;
+    this.previewUrl.set(null);
     if (!assetId) {
       if (this.state().kind !== 'uploading') this.state.set({ kind: 'none' });
       return;

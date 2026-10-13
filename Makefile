@@ -16,7 +16,7 @@ nuke: ## Stop everything AND delete volumes (fresh database)
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
-	@for f in jwt_access_secret notification_token_secret; do \
+	@for f in jwt_access_secret notification_token_secret playback_token_secret; do \
 	  [ -s secrets/$$f ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/$$f; \
 	    chmod 644 secrets/$$f; echo "created secrets/$$f"; }; \
 	done

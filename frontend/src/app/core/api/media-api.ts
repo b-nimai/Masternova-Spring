@@ -38,6 +38,12 @@ export interface AssetProgressResponse {
   jobs: { type: string; rung: string; status: string; percent: number }[];
 }
 
+/** Mirrors `PlaybackResponse`: a ticketed master playlist url (ADR-0013). */
+export interface PlaybackResponse {
+  masterUrl: string;
+  expiresAt: string;
+}
+
 /** One event of the progress stream (API conventions §9). */
 export type AssetEvent =
   | { event: 'snapshot'; data: AssetProgressResponse }
@@ -92,6 +98,11 @@ export class MediaApi {
 
   abort(uploadId: string): Observable<void> {
     return this.http.delete<void>(`${this.base}/uploads/${uploadId}`);
+  }
+
+  /** A playback ticket: the one access check; the player then fetches the playlists itself. */
+  playback(assetId: string): Observable<PlaybackResponse> {
+    return this.http.post<PlaybackResponse>(`${this.base}/assets/${assetId}/playback`, null);
   }
 
   asset(assetId: string): Observable<AssetProgressResponse> {

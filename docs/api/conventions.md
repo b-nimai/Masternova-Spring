@@ -20,7 +20,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | 8 | Client-driven uploads return a plan, not a stream | ✅ Phase 7.3 |
 | 9 | Long-running work streams over SSE | ✅ Phase 7.7 |
 | 10 | Authorization denials carry a reason code | Phase 8 |
-| 11 | Media is bought with a short-lived token | Phase 8 |
+| 11 | Media is played with a ticket, not the session | ✅ ticket 7.9 · entitlement check Phase 8 |
 | 12 | Payment webhooks answer 200 for almost everything | Phase 9 |
 | 13 | Authentication: deny by default, Bearer access token, refresh by cookie | ✅ Phase 3 |
 
@@ -204,9 +204,19 @@ button, a support link, or "no longer available" without parsing English.
 
 ## 11. Media tokens, not the session
 
-`<video>` sends no `Authorization` header. `GET …/playback/lectures/{id}/grant` runs the
-entitlement chain and returns a 5-minute HMAC token. The manifest endpoint takes only that
-token.
+`<video>` and native Safari HLS send no `Authorization` header. `POST
+/api/v1/media/assets/{id}/playback` (bearer) runs the access check once and returns `{masterUrl,
+expiresAt}`; `masterUrl` is `…/hls/master.m3u8?t=<ticket>`. The two playlist routes (`GET
+…/hls/master.m3u8`, `…/hls/{rung}/index.m3u8`) are public and accept **only** that ticket
+(`PlaybackTickets`: HMAC-SHA256 over asset + user + expiry, constant-time check, bound to one
+asset; anything else → 403 `PLAYBACK_TICKET_INVALID`). The rung playlist's segments are
+presigned storage urls, so the bytes never pass through the api.
+
+**Decided in 7.9:** the ticket lives **6 h**, not the 5 minutes first planned. A VOD player
+fetches a *different rung's* playlist whenever ABR switches, which can be an hour into a lecture.
+A 5-minute ticket would break the switch, not the attacker. The access check is owner or admin
+in Phase 7; Phase 8's entitlement chain plugs into the same `PlaybackService.ticket`, and
+revocation shortens the effective lifetime.
 
 ## 12. Payment webhooks
 

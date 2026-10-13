@@ -98,6 +98,27 @@ class JobProcessorTest {
   }
 
   @Test
+  void aDeclaredOutputThatWasNeverWrittenFailsClearlyAndUploadsNothing() {
+    JobProcessor<Void> liar =
+        new JobProcessor<>(storage) {
+          @Override
+          public JobType type() {
+            return JobType.THUMBNAILS;
+          }
+
+          @Override
+          protected Work<Void> process(Job job, Path dir, ProgressSink progress) {
+            return new Work<>(
+                List.of(Output.of(dir.resolve("sprite.jpg"), "k/sprite.jpg", "x")), null);
+          }
+        };
+
+    assertThatThrownBy(() -> liar.run(job, workRoot, ProgressSink.NONE))
+        .hasMessage("THUMBNAILS produced no sprite.jpg");
+    assertThat(uploaded).isEmpty();
+  }
+
+  @Test
   void databaseEffectsAreDeferredToTheCompletion() {
     var completion = new FakeRendition().run(job, workRoot, ProgressSink.NONE);
 

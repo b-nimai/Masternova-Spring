@@ -60,6 +60,9 @@ masternova: # → MasternovaProperties (typed + validated at startup)
   media: # → MediaProperties
     part-url-ttl: 1h
     session-ttl: 24h
+    # signs playback tickets (≥ 32 bytes). Dev-only default; the stack mounts a file secret.
+    playback-secret: ${PLAYBACK_TOKEN_SECRET:dev-only-playback-secret-0123456789abcdef}
+    playback-ttl: 6h
   outbox: # → messaging's OutboxProperties
     # ⭐ The api only WRITES events; the worker relays them (ADR-0008). A relay here would mark the
     #    worker's events as "no handler" and swallow them. (false is also the library default.)

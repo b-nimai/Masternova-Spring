@@ -109,6 +109,25 @@ The lecture's `assetId` (from the server's curriculum) is the source of truth. *
 stream (the request is cancelled) and opens the new one, or shows "Upload video" again. Without
 `untracked`, writing `state` inside the effect would make the effect depend on it.
 
+## 7b. The player: hls.js, lazily, after render (7.9) ⭐⭐⭐
+
+`shared/hls-player` plays the ticketed master url:
+
+- **`afterNextRender`**, not the constructor: the `<video>` exists only once the view is in the
+  DOM, and hls.js touches `window`.
+- **`await import('hls.js')`**: the library (585 kB raw, 150 kB gzipped) is its own lazy chunk,
+  and the initial bundle didn't move (665.65 kB before and after). The `destroyed` flag covers
+  "closed while it was still loading".
+- **hls.js where MSE exists, native HLS where it doesn't** (iPhone Safari: `video.src = url`).
+  Native playback fetches the playlists itself, which is why the url carries a ticket rather than
+  needing a header.
+- **`hls.destroy()` on destroy**, or the instance keeps downloading segments for a player
+  nobody sees.
+- **Fatal errors only** go up (`failed`). hls.js retries recoverable ones (`fragLoadError`) itself.
+
+Spec: `vi.mock('hls.js', …)` with a fake that records `loadSource` / `attachMedia` / `destroy`;
+the native path stubs `canPlayType` and restores it.
+
 ## 8. Testing it ⭐⭐⭐
 
 | Spec | Proves |

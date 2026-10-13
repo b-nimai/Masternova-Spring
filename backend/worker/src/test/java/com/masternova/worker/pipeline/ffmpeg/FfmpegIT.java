@@ -86,6 +86,20 @@ class FfmpegIT {
   }
 
   @Test
+  void aClipShorterThanOneSpriteIntervalStillGetsItsSprite() throws Exception { // found by e2e
+    Path clip = TestClips.mp4(dir, 4, 320, 180, true);
+
+    runner.run(
+        StillCommands.sprite(
+            "ffmpeg", clip.toUri(), StillCommands.spriteInterval(4), 1, dir.resolve("short.jpg")),
+        dir,
+        Duration.ofMinutes(1),
+        l -> {});
+
+    assertThat(dir.resolve("short.jpg")).isNotEmptyFile();
+  }
+
+  @Test
   void aFileThatIsNotAVideoIsAPermanentFailure() throws Exception {
     Path junk = Files.writeString(dir.resolve("notes.mp4"), "this is not a video");
 

@@ -286,6 +286,7 @@ Not used, on purpose:
 | Worker SIGKILLed / OOM / drained mid-job | the lease lapses (no heartbeat for 2 min) | the job is claimable again; the rerun overwrites the same keys | automatic; proven by the 7.10 IT |
 | ffmpeg hangs | timeout `max(10 min, 3 × duration)` | `destroyForcibly`, temporary failure | backoff retry |
 | ffmpeg floods stderr | — | stderr goes to a file, not a pipe (no deadlock); the last 4 KB is kept as `last_error` | — |
+| ffmpeg "succeeds" but writes no file (a sprite of a clip shorter than its interval, on Alpine's ffmpeg 8.1) | the template checks every declared output exists before uploading | `IllegalStateException: THUMBNAILS produced no sprite.jpg` (temporary) | fixed at the source with `select` (7.9); the check keeps the next such case legible |
 | Corrupt / not a video | probe: no video stream; ffmpeg "Invalid data found" | **permanent** → `DEAD` at once, asset `FAILED` (`MEDIA_UNREADABLE`) | instructor re-uploads (an email follows once notification gets a `MediaFailed` template) |
 | Storage down mid-job | `StorageUnavailableException` | temporary → backoff (30 s × 4ⁿ, jitter), max 5 attempts | automatic, then `DEAD` + asset `FAILED` (`TRANSCODE_FAILED`) |
 | `MediaUploaded` redelivered | `ON CONFLICT DO NOTHING` | no new job | — |
@@ -324,8 +325,19 @@ asset + mark the job + asset effects + upsert the rendition + enqueue successors
 transaction). **No transaction is open while ffmpeg runs.**
 
 **Container image:** the worker image gains `ffmpeg` (`apk add ffmpeg` on the Alpine JRE base,
-ADR-0007). That's the largest image change of the project. D1's Trivy gate applies, and the size
-delta is recorded in 7.5.
+ADR-0007). That's the largest image change of the project, and D1's Trivy gate applies.
+
+**Container sizing (found wiring the stack, 7.9):**
+- **Disk:** a rung's segments stay on local disk until ffmpeg has finished that rung, so the work
+  dir needs room for `slots × the largest rung` (a 1-hour 1080p rung at 5 Mb/s ≈ 2.25 GB). The
+  api's read-only root with a 64 MB `/tmp` tmpfs can't hold that. The worker gets a
+  `pipelinework` volume at `/var/lib/pipeline` (created `app`-owned in the image, so the volume
+  inherits the owner).
+- **Memory:** ffmpeg runs **inside the worker container's memory limit**, beside the JVM. The
+  api's `MaxRAMPercentage=75` would leave ffmpeg ~250 MB of a 1 GB limit; a 1080p x264 encode
+  wants more. The worker runs at **2 GB with the heap at 40 %**. An OOM kill of ffmpeg is a
+  temporary failure (retried); an OOM kill of the container is a crash (lease lapse → rerun,
+  7.10).
 
 ## 10. Tests that prove it
 

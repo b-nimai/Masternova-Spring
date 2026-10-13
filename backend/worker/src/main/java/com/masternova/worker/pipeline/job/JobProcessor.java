@@ -77,6 +77,13 @@ public abstract class JobProcessor<R> {
   }
 
   private void upload(List<Output> outputs) {
+    for (Output o : outputs) {
+      // a tool that "succeeded" without writing its file (found in e2e: an empty sprite) must say
+      // so, not surface later as a storage error about a missing path
+      if (!Files.isRegularFile(o.file())) {
+        throw new IllegalStateException(type() + " produced no " + o.file().getFileName());
+      }
+    }
     outputs.stream()
         .sorted(Comparator.comparing(Output::commitMarker)) // false < true: markers go last
         .forEach(o -> storage.put(o.key(), o.file(), o.contentType()));

@@ -25,6 +25,16 @@
       <span class="label ready" data-testid="video-ready">
         <mat-icon aria-hidden="true">check_circle</mat-icon> Video ready
       </span>
+      @if (previewUrl()) {
+        <button mat-button type="button" (click)="closePreview()">Close preview</button>
+      } @else {
+        <button mat-button type="button" (click)="preview()" data-testid="video-preview">
+          <mat-icon aria-hidden="true">play_arrow</mat-icon> Preview
+        </button>
+      }
+      @if (previewError()) {
+        <span class="label failed" role="alert">Couldn't start the preview. Try again.</span>
+      }
     }
     @case ('failed') {
       <span class="label failed" role="alert">{{ s.message }}</span>
@@ -36,3 +46,6 @@
     }
   }
 </div>
+@if (previewUrl(); as url) {
+  <app-hls-player class="player" [src]="url" (failed)="previewError.set(true)" />
+}

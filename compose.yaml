@@ -155,6 +155,8 @@ services:
         target: JWT_ACCESS_SECRET
       - source: notification_token_secret # verifies unsubscribe links (the worker signs them)
         target: NOTIFICATION_TOKEN_SECRET
+      - source: playback_token_secret # signs the HLS playback tickets (api only)
+        target: PLAYBACK_TOKEN_SECRET
     ports:
       - '8080:8080'
     depends_on:
@@ -179,6 +181,20 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       WEB_URL: http://localhost:8081 # links in emails open the containerised web app
+      # ⭐ ffmpeg runs INSIDE this container's memory limit, beside the JVM: a smaller heap share
+      #    than the api's 75 %, and more memory overall (video-pipeline LLD §9)
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=40 -XX:+ExitOnOutOfMemoryError
+      PIPELINE_WORK_DIR: /var/lib/pipeline
+    # a rung's segments sit here until ffmpeg finishes: real disk, not the 64 MB /tmp tmpfs
+    volumes:
+      - pipelinework:/var/lib/pipeline
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+          pids: 512
+    memswap_limit: 2g
     secrets:
       - source: notification_token_secret # signs unsubscribe links; the api verifies them
         target: NOTIFICATION_TOKEN_SECRET
@@ -222,9 +238,12 @@ services:
 volumes:
   pgdata:
   mediadata:
+  pipelinework: # the worker's scratch space (video-pipeline LLD §9); safe to delete
 
 secrets:
   jwt_access_secret:
     file: ./secrets/jwt_access_secret # gitignored; `make secrets` generates a random one
   notification_token_secret:
     file: ./secrets/notification_token_secret # shared by api + worker (same HMAC key)
+  playback_token_secret:
+    file: ./secrets/playback_token_secret # the api's playback tickets

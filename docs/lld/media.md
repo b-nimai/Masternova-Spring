@@ -5,7 +5,7 @@
 > with the storage provider (not our database) deciding what was uploaded.
 
 **Module:** `backend/api/src/main/java/com/masternova/api/media` · shared storage library
-`backend/storage` · **Status:** built: storage (7.2), uploads (7.3), progress (7.7), catalog link + uploader (7.8) · **Last updated:** 2026-10-13
+`backend/storage` · **Status:** built: storage (7.2), uploads (7.3), progress (7.7), catalog link + uploader (7.8), playback (7.9) · **Last updated:** 2026-10-13
 **Angular:** `frontend/src/app/features/instructor/upload` (7.8), `shared/hls-player` (7.9)
 **Pairs with:** [`video-pipeline.md`](video-pipeline.md) (what happens after the upload) ·
 [ADR-0012](../adr/0012-seaweedfs-as-local-s3.md) (local S3) · [ADR-0013](../adr/0013-hls-for-playback.md) (HLS) ·
@@ -323,6 +323,11 @@ same session when they arrive).
   - abort ×2 → 204, 204, then complete → 409;
   - another instructor → 404 everywhere; a wrong type or size → 422 with nothing created; a
     learner → 403.
+- Playback (7.9): `PlaybackTicketsTest` (bound to one asset, expiry, forged / mangled / null,
+  short secret refused), `PlaylistsTest` (master → `?t=`, rung → `EXT-X-MAP` + segments mapped,
+  tags kept), `PlaybackIT` (owner's ticket → master → rung → **a presigned segment fetched from
+  SeaweedFS**, all without a bearer; tampered / other asset → 403; no `t` → 400; someone else's →
+  404; still processing → 409).
 - `LectureMediaIT` (7.8): `MEDIA_NOT_READY` until media says READY, then submit works and the
   lecture takes the probed 512 s; someone else's asset → 400; attaching is undoable.
 - Angular (7.8, [note 06](../../patterns/angular/06-chunked-upload-and-sse.md)): `media-api.spec`
