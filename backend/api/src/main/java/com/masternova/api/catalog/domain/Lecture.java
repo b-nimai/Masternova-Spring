@@ -1,5 +1,6 @@
 package com.masternova.api.catalog.domain;
 
+import com.masternova.api.platform.RuleViolationException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -9,6 +10,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -115,6 +117,20 @@ public class Lecture {
   void update(String newTitle, boolean newPreview) {
     title = requireTitle(newTitle);
     preview = newPreview;
+  }
+
+  /** ATTACH_MEDIA: the video this lecture plays ({@code null} detaches). Only VIDEO lectures. */
+  void attachMedia(UUID newAssetId) {
+    if (newAssetId != null && kind != LectureKind.VIDEO) {
+      throw new RuleViolationException(
+          "LECTURE_NOT_VIDEO", "Only a video lecture can have a video.", Map.of("lectureId", id));
+    }
+    assetId = newAssetId;
+  }
+
+  /** The probed duration replaces the instructor's estimate (media is the truth, 7.8). */
+  void adoptDuration(int seconds) {
+    duration = LectureDuration.ofSeconds(seconds);
   }
 
   /** Re-parents the lecture (MOVE_LECTURE); the owning side, so this is what JPA writes. */

@@ -86,6 +86,13 @@
             }}</mat-icon>
             <span class="lecture-title">{{ lecture.title }}</span>
             <span class="time">{{ lecture.durationSeconds | duration: 'clock' }}</span>
+            @if (lecture.kind === 'VIDEO') {
+              <app-lecture-video
+                [lectureTitle]="lecture.title"
+                [assetId]="lecture.assetId"
+                (uploaded)="attachVideo(lecture, $event)"
+              />
+            }
             <mat-checkbox [checked]="lecture.preview" (change)="togglePreview(lecture)"
               >Preview</mat-checkbox
             >
@@ -116,7 +123,7 @@
         </mat-form-field>
         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
           <mat-label>Type</mat-label>
-          <mat-select name="kind" [(ngModel)]="d.kind">
+          <mat-select name="kind" [(ngModel)]="d.kind" [attr.data-testid]="'lecture-kind-' + i">
             <mat-option value="VIDEO">Video</mat-option>
             <mat-option value="ARTICLE">Article</mat-option>
           </mat-select>

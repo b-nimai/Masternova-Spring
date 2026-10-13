@@ -82,7 +82,7 @@ class CourseStateTest {
   void submittingAnIncompleteCourseReportsEveryMissingRequirement() {
     Course empty = aCourse().description("Too short.").unpriced().build();
 
-    assertThatThrownBy(() -> empty.transition(SUBMIT, NOW))
+    assertThatThrownBy(() -> empty.transition(SUBMIT, NOW, empty.videoAssetIds()))
         .isInstanceOfSatisfying(
             RuleViolationException.class,
             e -> {
@@ -99,10 +99,11 @@ class CourseStateTest {
   void archivingNeedsNoGateAndIsTerminal() {
     Course draft = aCourse().build(); // incomplete — archiving an unfinished draft is fine
 
-    draft.transition(ARCHIVE, NOW);
+    draft.transition(ARCHIVE, NOW, draft.videoAssetIds());
 
     assertThat(draft.status()).isEqualTo(ARCHIVED);
-    assertThatThrownBy(() -> draft.transition(ARCHIVE, NOW)).isInstanceOf(ConflictException.class);
+    assertThatThrownBy(() -> draft.transition(ARCHIVE, NOW, draft.videoAssetIds()))
+        .isInstanceOf(ConflictException.class);
     assertThatThrownBy(draft::requireEditable)
         .isInstanceOfSatisfying(
             ConflictException.class, e -> assertThat(e.code()).isEqualTo("COURSE_ARCHIVED"));
@@ -112,7 +113,7 @@ class CourseStateTest {
   void aTransitionTouchesTheRootSoItsVersionWillMove() {
     Course course = aCourse().createdAt(NOW).submitted().build();
 
-    course.transition(WITHDRAW, NOW.plusSeconds(5));
+    course.transition(WITHDRAW, NOW.plusSeconds(5), course.videoAssetIds());
 
     assertThat(course.status()).isEqualTo(DRAFT);
     assertThat(course.updatedAt()).isEqualTo(NOW.plusSeconds(5));

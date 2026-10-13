@@ -5,7 +5,7 @@
 > with the storage provider (not our database) deciding what was uploaded.
 
 **Module:** `backend/api/src/main/java/com/masternova/api/media` · shared storage library
-`backend/storage` · **Status:** built: storage (7.2), uploads (7.3) · **Last updated:** 2026-10-13
+`backend/storage` · **Status:** built: storage (7.2), uploads (7.3), progress (7.7), catalog link + uploader (7.8) · **Last updated:** 2026-10-13
 **Angular:** `frontend/src/app/features/instructor/upload` (7.8), `shared/hls-player` (7.9)
 **Pairs with:** [`video-pipeline.md`](video-pipeline.md) (what happens after the upload) ·
 [ADR-0012](../adr/0012-seaweedfs-as-local-s3.md) (local S3) · [ADR-0013](../adr/0013-hls-for-playback.md) (HLS) ·
@@ -127,10 +127,15 @@ classDiagram
   MediaApi <|.. MediaQueries
 ```
 
-**Module API** (what catalog may use): `MediaApi` + `AssetReadiness`. Catalog calls `isOwnedBy`
-when a lecture gets an asset, and `readiness` from the publish gate (`MEDIA_NOT_READY`: every
-`VIDEO` lecture has a `READY` asset) and from the submit transition (copy the probed durations
-onto lectures). **No events go from media to catalog:** catalog asks when it decides, so there's
+**Module API** (what catalog may use): `MediaApi` + `AssetReadiness`. Built in 7.8:
+
+- `CurriculumService` calls `isOwnedBy(asset, course's instructor)` before an `ATTACH_MEDIA`
+  command; someone else's asset → 400 `UNKNOWN_ASSET`, even when an admin does the attaching.
+- `CourseLifecycleService` calls `readiness(course.videoAssetIds())` on the gated edges (submit,
+  publish) and for the checklist. It passes the READY set into the **still pure**
+  `PublishGate.evaluate(course, readyAssets)` (`MEDIA_NOT_READY`: every `VIDEO` lecture has a
+  READY asset), and `Course.adoptMediaDurations` replaces the instructor's estimates with the
+  probed lengths. **No events go from media to catalog:** catalog asks when it decides, so there's
 no copy of the status to keep in sync.
 
 **Event** `MediaUploaded(assetId, sourceKey, sizeBytes)` goes into the **outbox**, in the
@@ -318,7 +323,12 @@ same session when they arrive).
   - abort ×2 → 204, 204, then complete → 409;
   - another instructor → 404 everywhere; a wrong type or size → 422 with nothing created; a
     learner → 403.
-- Angular (7.8): uploader service spec (part retry, resume from `localStorage`), component spec.
+- `LectureMediaIT` (7.8): `MEDIA_NOT_READY` until media says READY, then submit works and the
+  lecture takes the probed 512 s; someone else's asset → 400; attaching is undoable.
+- Angular (7.8, [note 06](../../patterns/angular/06-chunked-upload-and-sse.md)): `media-api.spec`
+  (SSE split mid-event), `chunked-uploader.spec` (parallel parts, no bearer to S3, retry with
+  backoff, resume, dead upload → start over), `lecture-video.spec`, `curriculum-editor.spec`
+  (`ATTACH_MEDIA`).
 
 ## 11. Interview notes — 60-second recall
 

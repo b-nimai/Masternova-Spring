@@ -11,6 +11,7 @@ import com.masternova.api.catalog.domain.Course;
 import com.masternova.api.catalog.domain.CourseRepository;
 import com.masternova.api.catalog.domain.Instructor;
 import com.masternova.api.catalog.domain.TestInstructors;
+import com.masternova.api.catalog.domain.TestMedia;
 import com.masternova.api.identity.Role;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,12 +65,15 @@ class CurriculumIT {
     courseId =
         courses
             .save(
-                aCourse()
-                    .by(asha)
-                    .in(categories.findBySlug("ci-cd").orElseThrow())
-                    .withSection("Intro", aLecture("Welcome").preview(), aLecture("Setup"))
-                    .withSection("Core", aLecture("Pods").seconds(600), aLecture("Services"))
-                    .build())
+                new TestMedia(dataSource)
+                    .readyVideos(
+                        aCourse()
+                            .by(asha)
+                            .in(categories.findBySlug("ci-cd").orElseThrow())
+                            .withSection("Intro", aLecture("Welcome").preview(), aLecture("Setup"))
+                            .withSection(
+                                "Core", aLecture("Pods").seconds(600), aLecture("Services"))
+                            .build()))
             .id();
   }
 

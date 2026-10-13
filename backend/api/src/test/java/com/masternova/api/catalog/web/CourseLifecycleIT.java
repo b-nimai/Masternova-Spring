@@ -13,9 +13,11 @@ import com.masternova.api.catalog.domain.CourseBuilder;
 import com.masternova.api.catalog.domain.CourseRepository;
 import com.masternova.api.catalog.domain.Instructor;
 import com.masternova.api.catalog.domain.TestInstructors;
+import com.masternova.api.catalog.domain.TestMedia;
 import com.masternova.api.identity.Role;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.AfterEach;
@@ -67,8 +69,9 @@ class CourseLifecycleIT {
     return aCourse().slug(slug).by(asha).in(categories.findBySlug("ci-cd").orElseThrow());
   }
 
+  /** Saved, with media agreeing its videos are READY (the gate asks, Phase 7). */
   private UUID save(Course course) {
-    return courses.save(course).id();
+    return courses.save(new TestMedia(dataSource).readyVideos(course)).id();
   }
 
   private static RequestPostProcessor as(UUID id, Role role) {
@@ -96,7 +99,8 @@ class CourseLifecycleIT {
             {"ready":false,"requirements":[
               {"code":"DESCRIPTION_TOO_SHORT","satisfied":false},{"code":"PRICE_NOT_SET","satisfied":false},
               {"code":"NO_SECTIONS","satisfied":false},{"code":"EMPTY_SECTION","satisfied":true},
-              {"code":"TOO_FEW_LECTURES","satisfied":false},{"code":"NO_PREVIEW","satisfied":false}]}
+              {"code":"TOO_FEW_LECTURES","satisfied":false},{"code":"NO_PREVIEW","satisfied":false},
+              {"code":"MEDIA_NOT_READY","satisfied":true}]}
             """);
 
     assertThat(post("/api/v1/instructor/courses/{id}/submit", id, as(asha.id(), Role.INSTRUCTOR)))
@@ -207,9 +211,18 @@ class CourseLifecycleIT {
 
     Course stale = tx.execute(s -> courses.findById(id).orElseThrow()); // read: IN_REVIEW, v1
     tx.executeWithoutResult(
-        s -> courses.findById(id).orElseThrow().transition(CourseAction.ARCHIVE, now)); // v2
+        s ->
+            courses
+                .findById(id)
+                .map(
+                    c -> {
+                      c.transition(
+                          CourseAction.ARCHIVE, now, Set.of()); // not gated: no media to ask
+                      return c;
+                    })
+                .orElseThrow()); // v2
 
-    stale.transition(CourseAction.WITHDRAW, now); // legal from what it read…
+    stale.transition(CourseAction.WITHDRAW, now, Set.of()); // legal from what it read…
     assertThatThrownBy(() -> tx.executeWithoutResult(s -> courses.save(stale)))
         .isInstanceOf(ObjectOptimisticLockingFailureException.class); // …but that's history now
     assertThat(courses.findById(id).orElseThrow().status().name()).isEqualTo("ARCHIVED");

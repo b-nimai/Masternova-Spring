@@ -4,6 +4,7 @@ import static com.masternova.api.catalog.domain.CourseBuilder.aCourse;
 import static com.masternova.api.catalog.domain.CourseBuilder.aLecture;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
@@ -50,7 +51,7 @@ class PublishGateTest {
 
   @Test
   void aCompleteCourseHasNoProblems() {
-    assertThat(PublishGate.problems(ready().build())).isEmpty();
+    assertThat(problems(ready().build())).isEmpty();
   }
 
   @Test
@@ -70,15 +71,15 @@ class PublishGateTest {
     Course course = BREAKS_ONLY.get(code).get();
 
     // NO_SECTIONS implies TOO_FEW_LECTURES and NO_PREVIEW too: an empty course fails all three
-    assertThat(PublishGate.problems(course)).extracting(PublishCheck::code).contains(code);
+    assertThat(problems(course)).extracting(PublishCheck::code).contains(code);
     if (!code.equals("NO_SECTIONS")) {
-      assertThat(PublishGate.problems(course)).extracting(PublishCheck::code).containsOnly(code);
+      assertThat(problems(course)).extracting(PublishCheck::code).containsOnly(code);
     }
   }
 
   @Test
   void theChecklistShowsEveryRuleInOrderWithItsResult() {
-    var checklist = PublishGate.evaluate(ready().unpriced().build());
+    var checklist = evaluate(ready().unpriced().build());
 
     assertThat(checklist)
         .extracting(PublishCheck::code)
@@ -88,7 +89,8 @@ class PublishGateTest {
             "NO_SECTIONS",
             "EMPTY_SECTION",
             "TOO_FEW_LECTURES",
-            "NO_PREVIEW");
+            "NO_PREVIEW",
+            "MEDIA_NOT_READY");
     assertThat(checklist)
         .filteredOn(c -> !c.satisfied())
         .extracting(PublishCheck::code)
@@ -97,6 +99,32 @@ class PublishGateTest {
 
   @Test
   void freeIsADecidedPrice() {
-    assertThat(PublishGate.problems(ready().free().build())).isEmpty();
+    assertThat(problems(ready().free().build())).isEmpty();
+  }
+
+  // ⭐ media says every attached video is READY — the media rule has its own tests below
+  static List<PublishCheck> problems(Course course) {
+    return PublishGate.problems(course, course.videoAssetIds());
+  }
+
+  static List<PublishCheck> evaluate(Course course) {
+    return PublishGate.evaluate(course, course.videoAssetIds());
+  }
+
+  @Test
+  void aVideoLectureWithoutAVideoIsNotReady() {
+    Course course = ready().withSection("Extra", aLecture("Coming soon").withoutVideo()).build();
+
+    assertThat(problems(course)).extracting(PublishCheck::code).containsExactly("MEDIA_NOT_READY");
+  }
+
+  @Test
+  void aVideoStillProcessingIsNotReadyButArticlesNeedNone() {
+    Course course = ready().withSection("Reading", aLecture("Notes").article()).build();
+
+    assertThat(PublishGate.problems(course, java.util.Set.of()))
+        .extracting(PublishCheck::code)
+        .containsExactly("MEDIA_NOT_READY"); // media said: nothing READY yet
+    assertThat(problems(course)).isEmpty(); // once every video is READY, the article doesn't matter
   }
 }

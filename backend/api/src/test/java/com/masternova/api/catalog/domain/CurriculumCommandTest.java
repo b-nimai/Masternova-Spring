@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.masternova.api.catalog.domain.CurriculumCommand.AddLecture;
 import com.masternova.api.catalog.domain.CurriculumCommand.AddSection;
+import com.masternova.api.catalog.domain.CurriculumCommand.AttachMedia;
 import com.masternova.api.catalog.domain.CurriculumCommand.MoveLecture;
 import com.masternova.api.catalog.domain.CurriculumCommand.RemoveLecture;
 import com.masternova.api.catalog.domain.CurriculumCommand.RemoveSection;
@@ -95,7 +96,10 @@ class CurriculumCommandTest {
             c -> new UpdateLecture(lecture(c, 0, 1), "Install everything", true),
             c -> new MoveLecture(lecture(c, 1, 0), section(c, 0), 0), // across sections, to the top
             c -> new MoveLecture(lecture(c, 1, 0), section(c, 1), 2), // within a section
-            c -> new RemoveLecture(lecture(c, 0, 0))); // the preview with a media asset
+            c -> new RemoveLecture(lecture(c, 0, 0)), // the preview with a media asset
+            c -> new AttachMedia(lecture(c, 0, 1), UUID.randomUUID()), // a (new) video
+            c -> new AttachMedia(lecture(c, 0, 0), UUID.randomUUID()), // replaces the video
+            c -> new AttachMedia(lecture(c, 0, 0), null)); // detaches it
     return commands.stream().map(Arguments::of);
   }
 
@@ -115,6 +119,23 @@ class CurriculumCommandTest {
     course.apply(inverse, NOW);
 
     assertThat(view(course)).isEqualTo(before);
+  }
+
+  @Test
+  void onlyAVideoLectureTakesAVideo() {
+    Course course = course();
+    UUID article =
+        course.sections().stream()
+            .flatMap(sec -> sec.lectures().stream())
+            .filter(l -> l.kind() == LectureKind.ARTICLE)
+            .findFirst()
+            .orElseThrow()
+            .id();
+
+    assertThatThrownBy(() -> course.apply(new AttachMedia(article, UUID.randomUUID()), NOW))
+        .isInstanceOfSatisfying(
+            com.masternova.api.platform.RuleViolationException.class,
+            e -> assertThat(e.code()).isEqualTo("LECTURE_NOT_VIDEO"));
   }
 
   @Test
@@ -192,7 +213,7 @@ class CurriculumCommandTest {
   @Test
   void anArchivedCourseRefusesEveryEdit() {
     Course course = course();
-    course.transition(CourseAction.ARCHIVE, NOW);
+    course.transition(CourseAction.ARCHIVE, NOW, course.videoAssetIds());
 
     assertThatThrownBy(() -> course.apply(new AddSection(null, "Late").withServerIds(), NOW))
         .isInstanceOfSatisfying(

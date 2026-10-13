@@ -14,11 +14,17 @@ async function signIn(page: Page): Promise<void> {
   await expect(page).not.toHaveURL(/\/login/);
 }
 
+/**
+ * Articles: since Phase 7.8 a VIDEO lecture can't be submitted until its uploaded video is READY
+ * (MEDIA_NOT_READY); the upload itself has its own spec (media.spec.ts).
+ */
 async function addLecture(
   page: Page,
   title: string,
   preview = false,
 ): Promise<void> {
+  await page.getByTestId("lecture-kind-0").click();
+  await page.getByRole("option", { name: "Article" }).click();
   await page.getByTestId("new-lecture-0").fill(title);
   if (preview) {
     await page.getByRole("checkbox", { name: "Free preview" }).check();

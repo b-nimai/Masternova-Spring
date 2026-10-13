@@ -6,6 +6,7 @@ import com.masternova.api.catalog.domain.CourseEditLog.Entry;
 import com.masternova.api.catalog.domain.CourseRepository;
 import com.masternova.api.catalog.domain.CurriculumCommand;
 import com.masternova.api.catalog.domain.Viewer;
+import com.masternova.api.media.MediaApi;
 import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.ValidationException;
 import java.time.Clock;
@@ -30,13 +31,19 @@ public class CurriculumService {
   private final CourseRepository courses;
   private final CourseAccess access;
   private final CourseEditLog history;
+  private final MediaApi media;
   private final Clock clock;
 
   CurriculumService(
-      CourseRepository courses, CourseAccess access, CourseEditLog history, Clock clock) {
+      CourseRepository courses,
+      CourseAccess access,
+      CourseEditLog history,
+      MediaApi media,
+      Clock clock) {
     this.courses = courses;
     this.access = access;
     this.history = history;
+    this.media = media;
     this.clock = clock;
   }
 
@@ -55,6 +62,13 @@ public class CurriculumService {
           "command.kind", "NOT_A_CLIENT_COMMAND", "That kind of edit can only come from undo.");
     }
     Course course = access.forEditing(courseId, actor, expectedVersion);
+    // ⭐ only the course's own instructor's videos — even when an admin does the attaching
+    if (command instanceof CurriculumCommand.AttachMedia(var lectureId, var assetId)
+        && assetId != null
+        && !media.isOwnedBy(assetId, course.instructor().id())) {
+      throw ValidationException.of(
+          "command.assetId", "UNKNOWN_ASSET", "That video doesn't exist or isn't yours.");
+    }
     Instant now = clock.instant();
     CurriculumCommand withIds = command.withServerIds(); // ⭐ stored WITH ids: a redo recreates them
     CurriculumCommand inverse = course.apply(withIds, now);

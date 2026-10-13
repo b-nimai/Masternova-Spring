@@ -1,0 +1,38 @@
+@let s = state();
+<div class="video" [attr.data-testid]="'video-' + lectureTitle()">
+  @switch (s.kind) {
+    @case ('none') {
+      <label class="pick">
+        <input
+          #file
+          type="file"
+          accept="video/mp4,video/quicktime,video/webm,video/x-matroska"
+          (change)="pick(file)"
+          [attr.data-testid]="'video-file-' + lectureTitle()"
+        />
+        <mat-icon aria-hidden="true">upload</mat-icon> Upload video
+      </label>
+    }
+    @case ('uploading') {
+      <span class="label">Uploading {{ s.percent | number: '1.0-0' }}%</span>
+      <mat-progress-bar mode="determinate" [value]="s.percent" />
+    }
+    @case ('processing') {
+      <span class="label">{{ s.step }} · {{ s.percent }}%</span>
+      <mat-progress-bar mode="determinate" [value]="s.percent" />
+    }
+    @case ('ready') {
+      <span class="label ready" data-testid="video-ready">
+        <mat-icon aria-hidden="true">check_circle</mat-icon> Video ready
+      </span>
+    }
+    @case ('failed') {
+      <span class="label failed" role="alert">{{ s.message }}</span>
+      <label class="pick">
+        <input #retry type="file" accept="video/*" (change)="pick(retry)" />
+        <mat-icon aria-hidden="true">refresh</mat-icon>
+        {{ s.resumable ? 'Resume' : 'Choose a file' }}
+      </label>
+    }
+  }
+</div>
