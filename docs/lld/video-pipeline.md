@@ -4,7 +4,7 @@
 > playlist, poster, scrub sprite) as a **small DAG of leased, retryable jobs** in the worker,
 > where a crash at any moment leads to a rerun that **overwrites** instead of duplicating.
 
-**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** draft (7.1)
+**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** built: ffmpeg tooling (7.5), job DAG (7.4)
 **Last updated:** 2026-10-13 · **Angular:** progress over SSE in `features/instructor/upload` (7.7, 7.8)
 **Pairs with:** [`media.md`](media.md) (the upload, the asset, the key layout) ·
 [ADR-0013](../adr/0013-hls-for-playback.md) (HLS, ladder, segment rules) ·
@@ -95,6 +95,20 @@ job comes back, with nothing extra to detect the crash.
 Both drop rungs above the source's height (a 720p source gets no 1080p), and both keep at least
 one rung (a 200p source gets its own height). GOP rules (ADR-0013): 6 s segments, a 2 s closed
 GOP aligned across rungs.
+
+> **Built differently from the 7.1 draft (7.4):**
+> - The heartbeat ticks every **5 s** and carries the progress in the same `UPDATE`. That's one
+>   statement per running job per 5 s, instead of a 30 s lease tick plus a separate progress
+>   write.
+> - The work directory is made **absolute** by the template. ffmpeg runs *in* it, so a relative
+>   `work-dir` resolved twice (`PipelineIT` caught it).
+> - `READY` is decided by a small `Readiness` helper that both `PACKAGE` and `THUMBNAILS` call:
+>   whichever finishes second, under the asset lock, marks the asset ready.
+> - A segment that `PACKAGE` can't find is a **temporary** failure (the rung is rerun or catches
+>   up), not a permanent one.
+> - `has_audio` was missing from V13; V14 adds it (V13 is never edited).
+> - The startup cleanup removes only work directories untouched for longer than a lease, so a
+>   second worker on the same host keeps its running job's files.
 
 ## 4. Class design
 

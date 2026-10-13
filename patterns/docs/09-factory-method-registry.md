@@ -4,8 +4,9 @@
 > runtime key, an event type, a template name or a format, put the implementations in a **map
 > built once** and look the key up. Adding a case means adding a class; the chooser never changes.
 
-**Type:** Creational · **Status:** ✅ in real code · **Last updated:** 2026-10-02
+**Type:** Creational · **Status:** ✅ in real code (Phases 4, 7.4) · **Last updated:** 2026-10-13
 **Real code:** [`OutboxRelay`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/OutboxRelay.java) (`@DesignPattern(FACTORY_METHOD, "Registry")`) dispatches each outbox message to the `OutboxHandler` registered for its event type. *(Email templates deliberately have **no** registry: each handler injects its own typed template. See [06](06-template-method.md) §7.)*
+**Second use (7.4):** [`JobProcessorRegistry`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobProcessorRegistry.java): `JobType` → `JobProcessor`, built from Spring's `List<JobProcessor<?>>` into an `EnumMap`. Unlike the outbox (where an unknown event type is legal, so it's skipped), **every** `JobType` must have exactly one processor, and that's checked in the constructor. A missing or duplicate processor fails the *boot*, not a job at 3 a.m. (`JobProcessorRegistryTest`).
 **Lab:** [`lab/.../patterns/registry/`](../lab/src/main/java/com/masternova/patterns/registry/): `HandlerRegistry` (instances) and `ExporterFactory` (creators, `Supplier` per key), with `RegistryTest`
 
 **Trigger phrase:**

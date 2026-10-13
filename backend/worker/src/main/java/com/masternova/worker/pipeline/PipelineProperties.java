@@ -17,7 +17,8 @@ import org.springframework.validation.annotation.Validated;
  * @param slots jobs run at once in this process. ffmpeg is CPU-bound and multi-threaded: more slots
  *     than ~cores/2 only makes every job slower
  * @param lease how long a claimed job is reserved; a worker that stops heart-beating loses it
- * @param heartbeat how often a running job extends its lease (well under {@code lease})
+ * @param heartbeat how often a running job extends its lease and records its progress (well under
+ *     {@code lease})
  * @param maxAttempts runs before a job is DEAD (permanent failures are DEAD at once)
  * @param baseBackoff first retry delay; × 4 per attempt (30 s, 2 m, 8 m, 32 m)
  */
@@ -32,7 +33,7 @@ public record PipelineProperties(
     @DefaultValue("2") @Min(1) int slots,
     @DefaultValue("2s") @NotNull Duration pollInterval,
     @DefaultValue("2m") @NotNull Duration lease,
-    @DefaultValue("30s") @NotNull Duration heartbeat,
+    @DefaultValue("5s") @NotNull Duration heartbeat,
     @DefaultValue("5") @Min(1) int maxAttempts,
     @DefaultValue("30s") @NotNull Duration baseBackoff,
     @DefaultValue("6h") @NotNull Duration sourceUrlTtl) {}

@@ -5,27 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.masternova.worker.pipeline.PipelineProperties;
-import java.nio.file.Path;
-import java.time.Duration;
+import com.masternova.worker.pipeline.TestPipelineProperties;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 class FfprobeTest {
 
   static PipelineProperties props() {
-    return new PipelineProperties(
-        true,
-        "fast",
-        "ffmpeg",
-        "ffprobe",
-        Path.of("/tmp/pipeline"),
-        1,
-        Duration.ofSeconds(1),
-        Duration.ofMinutes(2),
-        Duration.ofSeconds(30),
-        5,
-        Duration.ofSeconds(30),
-        Duration.ofHours(6));
+    return TestPipelineProperties.defaults();
   }
 
   private final Ffprobe ffprobe = new Ffprobe(mock(ProcessRunner.class), new JsonMapper(), props());

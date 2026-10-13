@@ -11,3 +11,8 @@ management:
   health:
     mail:
       enabled: false # no SMTP server in most ITs
+masternova:
+  pipeline:
+    enabled: false # ITs drive jobs themselves (claim + run), deterministically
+    ladder: fast # 240p/360p ultrafast: a test clip transcodes in about a second
+    work-dir: target/pipeline-work
