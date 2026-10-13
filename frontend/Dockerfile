@@ -14,7 +14,9 @@ RUN pnpm build
 # ---- runtime: nginx serves the files and proxies /api to the backend ----
 FROM nginx:1.31-alpine
 # Base images lag behind Alpine's security fixes; pull them in at build time (Trivy gate in CI).
-RUN apk upgrade --no-cache
+# APK_REFRESH (CI: today's date) re-runs this layer daily — a cached upgrade is a stale upgrade.
+ARG APK_REFRESH=
+RUN echo "packages as of ${APK_REFRESH:-build}" && apk upgrade --no-cache
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 EXPOSE 80
