@@ -51,7 +51,9 @@ class StorageAutoConfigurationTest {
     runner
         .withPropertyValues(
             "masternova.storage.endpoint=http://localhost:9010",
-            "masternova.storage.public-endpoint=")
+            "masternova.storage.public-endpoint=",
+            "masternova.storage.access-key=a", // presigning needs credentials; CI has none ambient
+            "masternova.storage.secret-key=b")
         .run(
             context ->
                 assertThat(
