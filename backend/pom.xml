@@ -48,6 +48,7 @@
 		<tomcat.version>11.0.26</tomcat.version>
 		<jackson-bom.version>3.1.7</jackson-bom.version>
 		<aws-sdk.version>2.55.15</aws-sdk.version>
+		<shedlock.version>7.10.1</shedlock.version>
 	</properties>
 
 	<dependencyManagement>
@@ -72,6 +73,13 @@
 				<artifactId>storage</artifactId>
 				<version>${project.version}</version>
 				<type>test-jar</type>
+			</dependency>
+			<dependency>
+				<groupId>net.javacrumbs.shedlock</groupId>
+				<artifactId>shedlock-bom</artifactId>
+				<version>${shedlock.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
 			</dependency>
 			<dependency>
 				<groupId>software.amazon.awssdk</groupId>

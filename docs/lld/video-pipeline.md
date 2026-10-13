@@ -4,7 +4,7 @@
 > playlist, poster, scrub sprite) as a **small DAG of leased, retryable jobs** in the worker,
 > where a crash at any moment leads to a rerun that **overwrites** instead of duplicating.
 
-**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** built: ffmpeg tooling (7.5), job DAG (7.4)
+**Module:** `backend/worker/src/main/java/com/masternova/worker/pipeline` · **Status:** built: ffmpeg tooling (7.5), job DAG (7.4), retries + dead letters + sweeper (7.6)
 **Last updated:** 2026-10-13 · **Angular:** progress over SSE in `features/instructor/upload` (7.7, 7.8)
 **Pairs with:** [`media.md`](media.md) (the upload, the asset, the key layout) ·
 [ADR-0013](../adr/0013-hls-for-playback.md) (HLS, ladder, segment rules) ·
@@ -299,9 +299,18 @@ Not used, on purpose:
   - CHECKs on `type` and `status`.
 - **Index:** `(next_attempt_at) WHERE status IN ('PENDING', 'RUNNING')`: the claim query only,
   partial like the outbox's (DONE rows pile up, the index doesn't).
-- `shedlock (name PK, lock_until, locked_at, locked_by)` for the scheduled sweepers (7.6): orphan
-  uploads and dead-job reports. The claim loop doesn't need ShedLock: `SKIP LOCKED` already lets
-  N workers share it.
+- `shedlock (name PK, lock_until, locked_at, locked_by)` (`V15`) for the scheduled
+  `UploadSweeper` (7.6), every 15 min, `lockAtMostFor 10m`, `lockAtLeastFor 1m`, lock times from
+  the **database's** clock (`usingDbTime`). The claim loop doesn't need ShedLock: `SKIP LOCKED`
+  already lets N workers share it.
+
+**Retries are rows, not Spring Retry / Resilience4j (7.6).** A temporary failure writes
+`next_attempt_at = now + 30 s × 4ⁿ ± 20 %` and the job goes back to `PENDING`. An in-process
+retry library keeps its state on the stack, so a crash loses it, and the thread sleeps between
+attempts while holding a slot. The row survives the crash, frees the slot, and any worker can take
+the retry. After `max-attempts` (5) the job is `DEAD`; `GET /api/v1/admin/media/jobs/dead` lists
+it with its `last_error`, and `POST …/{id}/replay` requeues it with a fresh budget (a second
+replay → 409 `JOB_NOT_DEAD`).
 
 **Transactions:** claim (one statement); heartbeat (one statement per 30 s); completion = lock the
 asset + mark the job + asset effects + upsert the rendition + enqueue successors (one

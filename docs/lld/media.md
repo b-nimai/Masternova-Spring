@@ -287,7 +287,8 @@ same session when they arrive).
 | Writer | Writes |
 |---|---|
 | api | `media_asset` insert + `→ UPLOADED`; all of `upload_session` |
-| worker | `media_asset` `UPLOADED → PROCESSING → READY \| FAILED` + probe columns, each a conditional `UPDATE … WHERE id = ? AND status = ?` (a stale or duplicate job changes 0 rows); all of `media_rendition` |
+| worker | `media_asset` `UPLOADED → PROCESSING → READY \| FAILED` + probe columns, each a conditional `UPDATE … WHERE id = ? AND status = ?` (a stale or duplicate job changes 0 rows); all of `media_rendition`; the sweeper's `upload_session OPEN → EXPIRED` + `media_asset AWAITING_UPLOAD → FAILED (UPLOAD_EXPIRED)` (7.6) |
+| api (admin replay, 7.6) | `pipeline_job DEAD → PENDING` + `media_asset FAILED → UPLOADED \| PROCESSING`, both conditional |
 
 **Transactions:**
 
