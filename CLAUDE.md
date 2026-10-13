@@ -30,7 +30,7 @@ seam: use a concrete class until a second implementation is real or planned.
 ## 2. Commands
 
 ```bash
-make up          # infra: postgres :5433, redis :6380, mailpit :8026 (S3/SeaweedFS :9010: opt-in `media` profile, ADR-0012)
+make up          # infra: postgres :5433, redis :6380, mailpit :8026, S3 (SeaweedFS) :9010 (ADR-0012)
 make api         # run the api from source (Boot reuses the compose infra)
 make web         # Angular dev server :4200, proxies /api → :8080
 make seed        # dev catalog data (200 courses; COURSES=10000 for measurements)

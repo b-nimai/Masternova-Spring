@@ -1,5 +1,6 @@
 package com.masternova.storage;
 
+import com.github.dockerjava.api.command.InspectContainerResponse;
 import java.net.URI;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -26,11 +27,20 @@ public class SeaweedFsContainer extends GenericContainer<SeaweedFsContainer> {
     waitingFor(Wait.forHttp("/healthz").forPort(S3_PORT));
   }
 
+  /** ⭐ The bucket exists as soon as the container does, as {@code media-init} does in compose. */
+  @Override
+  protected void containerIsStarted(InspectContainerResponse info) {
+    var props = storageProperties();
+    try (var s3 = new StorageAutoConfiguration().s3Client(props)) {
+      s3.createBucket(b -> b.bucket(props.bucket()));
+    }
+  }
+
   public URI endpoint() {
     return URI.create("http://" + getHost() + ":" + getMappedPort(S3_PORT));
   }
 
-  /** Path-style, static credentials, the media bucket name — create the bucket with the client. */
+  /** Path-style, static credentials, the media bucket (already created). */
   public StorageProperties storageProperties() {
     return new StorageProperties(
         endpoint(), null, "us-east-1", BUCKET, true, ACCESS_KEY, SECRET_KEY);

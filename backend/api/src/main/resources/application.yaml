@@ -46,6 +46,18 @@ masternova: # → MasternovaProperties (typed + validated at startup)
   notification: # → NotificationProperties
     # verifies unsubscribe links; MUST equal the worker's value. Dev-only default (≥ 32 bytes).
     token-secret: ${NOTIFICATION_TOKEN_SECRET:dev-only-unsubscribe-secret-0123456789abcdef}
+  storage: # → storage's StorageProperties (ADR-0012: SeaweedFS in dev, S3 in prod)
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9010} # empty in AWS: the SDK picks the regional one
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:} # the host browsers reach, when it differs (compose)
+    region: ${STORAGE_REGION:us-east-1}
+    bucket: ${STORAGE_BUCKET:masternova-media}
+    path-style: ${STORAGE_PATH_STYLE:true}
+    # dev-only credentials (compose.yaml). Blank in AWS: the default chain (IRSA, instance role).
+    access-key: ${STORAGE_ACCESS_KEY:masternova}
+    secret-key: ${STORAGE_SECRET_KEY:masternova-dev-secret}
+  media: # → MediaProperties
+    part-url-ttl: 1h
+    session-ttl: 24h
   outbox: # → messaging's OutboxProperties
     # ⭐ The api only WRITES events; the worker relays them (ADR-0008). A relay here would mark the
     #    worker's events as "no handler" and swallow them. (false is also the library default.)

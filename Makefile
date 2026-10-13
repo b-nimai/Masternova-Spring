@@ -5,8 +5,8 @@ MVN := cd backend && ./mvnw -B
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start infra (postgres, redis, mailpit); S3 storage is the opt-in `media` profile until Phase 7
-	docker compose up -d --wait postgres redis mailpit
+up: ## Start infra (postgres, redis, mailpit, SeaweedFS S3 + its bucket/CORS init job)
+	docker compose up -d --wait postgres redis mailpit seaweedfs media-init
 
 down: ## Stop everything (volumes kept)
 	docker compose --profile app down

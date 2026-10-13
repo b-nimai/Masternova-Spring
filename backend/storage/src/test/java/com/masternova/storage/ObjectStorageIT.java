@@ -45,7 +45,6 @@ class ObjectStorageIT {
     var props = SEAWEED.storageProperties();
     s3 = config.s3Client(props);
     storage = config.objectStorage(s3, props);
-    s3.createBucket(b -> b.bucket(props.bucket()));
   }
 
   @AfterAll

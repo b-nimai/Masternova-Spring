@@ -47,6 +47,21 @@ class StorageAutoConfigurationTest {
   }
 
   @Test
+  void anEmptyPublicEndpointMeansTheSameHost() { // what `${STORAGE_PUBLIC_ENDPOINT:}` binds to
+    runner
+        .withPropertyValues(
+            "masternova.storage.endpoint=http://localhost:9010",
+            "masternova.storage.public-endpoint=")
+        .run(
+            context ->
+                assertThat(
+                        context
+                            .getBean(ObjectStorage.class)
+                            .presignDownload("k", java.time.Duration.ofMinutes(1)))
+                    .hasPort(9010));
+  }
+
+  @Test
   void aBlankBucketFailsStartup() {
     runner
         .withPropertyValues("masternova.storage.bucket= ")

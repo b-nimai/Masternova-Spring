@@ -5,7 +5,7 @@ UploadPart from a browser origin, tampered signatures rejected, ListParts (resum
 provider, ADR-0014), CompleteMultipartUpload, ranged presigned GET (HLS players), and
 ListMultipartUploads + Abort (the orphan sweeper, 7.6).
 
-usage:  docker compose --profile media up -d seaweedfs media-init
+usage:  docker compose up -d seaweedfs media-init
         python3 -m venv .venv && .venv/bin/pip install boto3 requests
         .venv/bin/python docs/media/s3_probe.py seaweedfs http://localhost:9010 masternova masternova-dev-secret
 

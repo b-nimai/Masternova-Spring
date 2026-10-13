@@ -5,7 +5,7 @@
 > with the storage provider (not our database) deciding what was uploaded.
 
 **Module:** `backend/api/src/main/java/com/masternova/api/media` · shared storage library
-`backend/storage` · **Status:** draft (7.1) · **Last updated:** 2026-10-13
+`backend/storage` · **Status:** built: storage (7.2), uploads (7.3) · **Last updated:** 2026-10-13
 **Angular:** `frontend/src/app/features/instructor/upload` (7.8), `shared/hls-player` (7.9)
 **Pairs with:** [`video-pipeline.md`](video-pipeline.md) (what happens after the upload) ·
 [ADR-0012](../adr/0012-seaweedfs-as-local-s3.md) (local S3) · [ADR-0013](../adr/0013-hls-for-playback.md) (HLS) ·
@@ -70,15 +70,22 @@ stateDiagram-v2
 
 | Event \ state | `OPEN` | `COMPLETED` | `ABORTED` | `EXPIRED` |
 |---|---|---|---|---|
-| resume | missing parts + URLs | 409 `UPLOAD_ALREADY_COMPLETED` | 409 `UPLOAD_ABORTED` | 410 `UPLOAD_EXPIRED` |
-| complete | check plan → `COMPLETED` (or 422 `UPLOAD_INCOMPLETE`) | **200, same body** | 409 `UPLOAD_ABORTED` | 410 `UPLOAD_EXPIRED` |
+| resume | missing parts + URLs | 409 `UPLOAD_ALREADY_COMPLETED` | 409 `UPLOAD_ABORTED` | 409 `UPLOAD_EXPIRED` |
+| complete | check plan → `COMPLETED` (or 422 `UPLOAD_INCOMPLETE`) | **200, same body** | 409 `UPLOAD_ABORTED` | 409 `UPLOAD_EXPIRED` |
 | abort | `ABORTED` | 409 `UPLOAD_ALREADY_COMPLETED` | **204** | **204** |
 | expire (sweeper) | `EXPIRED` | no-op | no-op | no-op |
 
-**Part plan:** `partSize = max(5 MiB, roundUpToMiB(ceil(size / 100)))`. So 200 MB → 40 × 5 MiB
-and 10 GiB → 100 × 103 MiB. Limits: `size ≤ 10 GiB` (else 422 `UPLOAD_TOO_LARGE`); the content
-type must be in an allowlist (`video/mp4`, `video/quicktime`, `video/webm`, `video/x-matroska`;
-else 415 `UNSUPPORTED_MEDIA_TYPE`). The **real** container is checked by the worker's probe; the
+**Part plan:** `partSize = max(5 MiB, roundUpToMiB(ceil(size / 100)))`. So 200 MB → 39 × 5 MiB,
+500 MiB → 100 × 5 MiB, 500 MiB + 1 B → 84 × 6 MiB, and 10 GiB → 100 × 103 MiB (`PartPlanTest`).
+Limits: `size ≤ 10 GiB` (else 422 `UPLOAD_TOO_LARGE`); the content type must be in an allowlist
+(`video/mp4`, `video/quicktime`, `video/webm`, `video/x-matroska`; else 422
+`UNSUPPORTED_MEDIA_TYPE`).
+
+> **Built differently from the 7.1 draft:** expired is **409**, not 410, and a disallowed type is
+> **422**, not 415. The platform's error kinds are a sealed set (`DomainException`): an expired
+> session is a state conflict, and the declared type lives in the JSON body, so it's a rule
+> violation. HTTP 415 is about the *request's* `Content-Type`. Storage being down is the one new
+> status: 503 `STORAGE_UNAVAILABLE` with `Retry-After`, from `StorageExceptionHandler`. The **real** container is checked by the worker's probe; the
 declared type is only a first filter.
 
 ## 4. Class design
@@ -210,8 +217,11 @@ sequenceDiagram
   A-->>B: 200 {assetId, status: UPLOADED}
 ```
 
-If the `HEAD` is 404, the upload is really gone (aborted or swept). The session becomes `EXPIRED`
-and the client gets 410 `UPLOAD_EXPIRED` and starts a new upload.
+If the `HEAD` is 404, the upload is really gone (aborted or swept). The client gets 409
+`UPLOAD_EXPIRED` and starts a new upload; the row itself is marked `EXPIRED` by the sweeper (7.6).
+A throw rolls the transaction back, so the complete request can't record it. **Resume** in the
+same situation (`NoSuchUpload`) returns *no missing parts* and writes nothing: a `GET` changes no
+state. The uploader then calls complete, which decides.
 
 ## 6. Patterns used
 
@@ -249,7 +259,7 @@ same session when they arrive).
 | Complete with a part missing / wrong size | `PartPlan.check` | 422 `UPLOAD_INCOMPLETE` + `{missing: [n], wrongSize: [n]}` | uploader re-sends those parts |
 | Complete double-clicked / retried / 10 concurrent | row lock on `upload_session` | first one completes; the rest see `COMPLETED` → same 200 | — (one `MediaUploaded`, proven by IT) |
 | S3 completed, our commit failed | next complete: `NoSuchUpload` | `HEAD` the source → finish our side | the retry heals it (§5) |
-| Storage down during create/complete | `StorageUnavailableException` | 503 `STORAGE_UNAVAILABLE`, `Retry-After`; session unchanged | client retries |
+| Storage down during create/complete | `StorageUnavailableException` | 503 `STORAGE_UNAVAILABLE`, `Retry-After: 5`; session unchanged | client retries |
 | Abandoned upload (never completed) | sweeper: `OPEN` and `expires_at < now` | `AbortMultipartUpload` → `EXPIRED` | automatic (7.6); S3 stops billing for the parts |
 | S3 upload with no session row (crash between create and insert) | sweeper: `ListMultipartUploads` older than 24 h with no session | abort | automatic (7.6) |
 | Ticket leaked | — | valid ≤ 6 h for one asset; segment URLs expire too | Phase 8 adds revocation via entitlement |
@@ -289,16 +299,25 @@ same session when they arrive).
 
 ## 10. Tests that prove it
 
-*Planned; this section is finished with the code (7.2, 7.3).*
-
-- Unit: `PartPlanTest` (boundaries: 1 B, 5 MiB, 5 MiB + 1, 500 MiB, 10 GiB, 10 GiB + 1; `check`
-  finds every missing or wrong-sized part); `UploadStateTest` (every event × state cell of §3);
-  `ObjectStorageTest` (exception translation over a stubbed `S3Client`).
-- `ObjectStorageIT`: Testcontainers SeaweedFS 4.48, the probe's flow in Java.
-- `UploadIT`: create → upload parts with plain HTTP → kill halfway → resume returns exactly the
-  missing parts → complete; **10 concurrent completes → 1 `MediaUploaded` outbox row**; the
-  "S3 completed, our commit didn't" path (§5).
-- Angular: uploader service spec (part retry, resume from `localStorage`), component spec.
+- Unit (no Spring, no DB):
+  - `PartPlanTest`: boundaries 1 B, 5 MiB, 5 MiB + 1, 200 MB, 500 MiB, 500 MiB + 1, 10 GiB
+    (parts always add up to the size), 10 GiB + 1 → `UPLOAD_TOO_LARGE`; `check` finds missing,
+    wrong-sized and unexpected parts.
+  - `UploadStateTest`: all 16 event × state cells of §3, plus the effective `Expired`.
+  - `ObjectStorageTest`: exception translation over a stubbed `S3Client`.
+  - `MediaKeysTest`, `StorageAutoConfigurationTest` (browser urls use `public-endpoint`).
+- `ObjectStorageIT` (SeaweedFS Testcontainer, shared as the storage test-jar): resume from
+  `ListParts`, a tampered url → 403, idempotent abort, overwrite, ranged GET → 206.
+- `UploadIT` (MockMvc + plain-HTTP part PUTs + SeaweedFS + Postgres):
+  - an upload interrupted after parts 1 and 3 resumes with exactly part 2, then completes; a
+    retried complete replays;
+  - a missing part → 422 listing it;
+  - **10 concurrent completes → all 200, 1 `MediaUploaded` outbox row**;
+  - S3 completed but our commit didn't → the retry heals;
+  - abort ×2 → 204, 204, then complete → 409;
+  - another instructor → 404 everywhere; a wrong type or size → 422 with nothing created; a
+    learner → 403.
+- Angular (7.8): uploader service spec (part retry, resume from `localStorage`), component spec.
 
 ## 11. Interview notes — 60-second recall
 
