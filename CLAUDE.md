@@ -43,8 +43,9 @@ make e2e         # Playwright browser tests against the running stack
 make release VERSION=X.Y.Z  # tag a release from a clean main (release.yml promotes the images)
 ```
 
-The JDK lives in SDKMAN (`~/.sdkman/candidates/java/current`). A non-login shell may need
-`export JAVA_HOME=$HOME/.sdkman/candidates/java/current PATH=$JAVA_HOME/bin:$PATH`.
+The JDK is Homebrew's OpenJDK 26 (the build targets `release 25`; CI uses Temurin 25). A
+non-login shell may need
+`export JAVA_HOME=/opt/homebrew/opt/openjdk@26/libexec/openjdk.jdk/Contents/Home PATH=$JAVA_HOME/bin:$PATH`.
 
 ## 3. Backend structure — package by module, layered inside
 
