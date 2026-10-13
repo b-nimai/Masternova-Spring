@@ -5,12 +5,13 @@
 > request, the response **and the failures**, so the rest of the code never learns the vendor
 > exists.
 
-**Type:** Structural · **Status:** ✅ in real code · **Last updated:** 2026-10-02
+**Type:** Structural · **Status:** ✅ in real code · **Last updated:** 2026-10-13
 **Real code:**
 - [`MailProvider`](../../backend/worker/src/main/java/com/masternova/worker/notification/mail/MailProvider.java) (`@DesignPattern(ADAPTER, "Target")`) plus our message shape [`OutboundEmail`](../../backend/worker/src/main/java/com/masternova/worker/notification/mail/OutboundEmail.java).
 - [`SmtpMailProvider`](../../backend/worker/src/main/java/com/masternova/worker/notification/mail/SmtpMailProvider.java) adapts Spring's `JavaMailSender` / Jakarta Mail (Mailpit in dev).
 - [`ResendMailProvider`](../../backend/worker/src/main/java/com/masternova/worker/notification/mail/ResendMailProvider.java) adapts Resend's JSON-over-HTTP API.
 - The client: [`NotificationService`](../../backend/worker/src/main/java/com/masternova/worker/notification/NotificationService.java), which only knows `MailProvider`.
+- [`ObjectStorage`](../../backend/storage/src/main/java/com/masternova/storage/ObjectStorage.java) (Phase 7): the AWS SDK v2 (`S3Client`, `S3Presigner`) adapted to what media and the pipeline need, with **no Target interface** (§1b). Proof: `ObjectStorageTest` (translation over a stubbed `S3Client`), `ObjectStorageIT` (real SeaweedFS). Lab: [`adapter/storage/BlobStore`](../lab/src/main/java/com/masternova/patterns/adapter/storage/BlobStore.java).
 
 **Proof:** `SmtpMailProviderTest`, `ResendMailProviderTest` (`MockRestServiceServer`), `SmtpMailProviderIT` (real Mailpit container) · **Lab:** [`lab/.../patterns/adapter/`](../lab/src/main/java/com/masternova/patterns/adapter/): `Mailer` + `SmtpMailer` / `AcmeMailer` over two fake vendors, with one contract test run against both (`AdapterTest`) · **Design:** [`docs/lld/notification.md`](../../docs/lld/notification.md)
 
@@ -37,6 +38,30 @@ Without an adapter, `NotificationService` would contain both: an `if (provider =
 MIME building, another around error handling. Worse, the **retry decision** (suppress the address
 vs. try again later) would be smeared across vendor-specific `catch` blocks. That decision is the
 one that protects the sender's reputation: retrying a 550 forever gets you blocklisted.
+
+## 1b. Second use: storage, an adapter without an interface (Phase 7)
+
+The api presigns and completes uploads; the worker reads sources and writes HLS. Both need "a
+bucket". The AWS SDK is the only API we'll call: S3 in production, SeaweedFS in dev through the
+same API ([ADR-0012](../../docs/adr/0012-seaweedfs-as-local-s3.md)). So there's **no second
+implementation** and no `StorageProvider` interface (CLAUDE.md §0). Then why is `ObjectStorage`
+still an Adapter and not "just a helper"?
+
+| It translates | SDK side (Adaptee) | Our side |
+|---|---|---|
+| requests | builder lambdas, `CompletedPart`, `PresignedUploadPartRequest` | `(key, uploadId, partNumber, ttl)` |
+| responses | `ListPartsResponse` pages, `HeadObjectResponse` | `List<StoredPart>` (every page), `Optional<StoredObject>` |
+| **failures** | `S3Exception` (status + `errorCode`), `SdkClientException` | `StorageUnavailableException` (5xx/429/no answer: retry, 503) · `NoSuchUploadException` (its own recovery path) · `StorageException` (permanent) |
+| "not there" | a 404 on `HEAD` (no body, so no `NoSuchKey` code) | `Optional.empty()`; aborting a forgotten upload is success |
+
+The failure column is the force: `UploadService` answers 503 vs 422, and the pipeline retries vs
+buries, **by our exception type**. Without the adapter every caller would inspect
+`s3e.awsErrorDetails().errorCode()`.
+
+**Why no interface:** the ITs run the real S3 API in a container, so a fake isn't needed for
+testing. If a GCS backend ever becomes real, extracting `interface ObjectStorage` from the class is
+a mechanical refactor that no caller notices. The interface is created when that day comes, not
+before.
 
 ## 2. Structure
 
@@ -234,6 +259,11 @@ What the tests prove:
 - **Q: What belongs in an adapter besides the method call?**
   **A:** Request mapping, response mapping and **error translation** into the target's failure
   contract. Without the last one the vendor still leaks through every `catch`.
+- **Q: Is it still an Adapter without a Target interface?**
+  **A:** Yes. The pattern is the *translation* (request, response, failure) between an interface
+  you can't change and the one your callers want. With one vendor, the class's public methods
+  *are* the target. `ObjectStorage` is that: it turns `S3Exception` codes into temporary,
+  "no such upload" and permanent. Add the interface when a second implementation is real.
 - **Q: How do you test adapters?**
   **A:** Unit-test the mapping against a fake transport (`MockRestServiceServer`), integration-test
   one real round trip (Mailpit in Testcontainers), and run one shared contract test against every
@@ -249,6 +279,8 @@ What the tests prove:
   types.
 - **Proof:** `MockRestServiceServer` mapping tests, a Mailpit IT, a lab contract test run on both
   adapters.
+- **Storage (Phase 7):** `ObjectStorage` adapts the AWS SDK with **no interface** (one vendor
+  API): `S3Exception` → unavailable / no-such-upload / permanent; a 404 on `HEAD` → `Optional.empty()`.
 - **Spring's flavour:** `HandlerAdapter`, `SQLExceptionTranslator`, `JavaMailSender`.
 - **Not to confuse with:** Decorator/Proxy (same interface), Facade (a new interface over a
   subsystem).

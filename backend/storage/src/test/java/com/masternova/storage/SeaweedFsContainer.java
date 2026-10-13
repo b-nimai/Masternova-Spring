@@ -1,0 +1,38 @@
+package com.masternova.storage;
+
+import java.net.URI;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+/**
+ * SeaweedFS's S3 API in a container (the image compose.yaml runs, ADR-0012), shared with the api
+ * and worker ITs through this module's test-jar. {@link #storageProperties()} gives the values to
+ * register under {@code masternova.storage.*}.
+ */
+public class SeaweedFsContainer extends GenericContainer<SeaweedFsContainer> {
+
+  public static final String ACCESS_KEY = "test";
+  public static final String SECRET_KEY = "test-secret";
+  public static final String BUCKET = "masternova-media";
+  private static final int S3_PORT = 8333;
+
+  public SeaweedFsContainer() {
+    super(DockerImageName.parse("chrislusf/seaweedfs:4.48"));
+    withCommand("server", "-s3", "-dir=/data", "-volume.max=0");
+    withEnv("AWS_ACCESS_KEY_ID", ACCESS_KEY);
+    withEnv("AWS_SECRET_ACCESS_KEY", SECRET_KEY);
+    withExposedPorts(S3_PORT);
+    waitingFor(Wait.forHttp("/healthz").forPort(S3_PORT));
+  }
+
+  public URI endpoint() {
+    return URI.create("http://" + getHost() + ":" + getMappedPort(S3_PORT));
+  }
+
+  /** Path-style, static credentials, the media bucket name — create the bucket with the client. */
+  public StorageProperties storageProperties() {
+    return new StorageProperties(
+        endpoint(), null, "us-east-1", BUCKET, true, ACCESS_KEY, SECRET_KEY);
+  }
+}

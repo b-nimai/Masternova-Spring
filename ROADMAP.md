@@ -121,7 +121,7 @@ Phases are listed **in the order you do them**.
 | 7 | [4 — Notification + worker](#phase-4--notification--worker) | 8 | 8 | 14 h | ~14 h | ✅ |
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 8 | 22 h | ~21 h | ✅ |
-| 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 1 | 30 h | ~2.5 h | 🔨 |
+| 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 2 | 30 h | ~5 h | 🔨 |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 0 | 28 h | — | ☐ |
@@ -130,7 +130,7 @@ Phases are listed **in the order you do them**.
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **76** | **~326 h** | ~136.5 h | |
+| | **Total** | **137** | **77** | **~326 h** | ~139 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -338,7 +338,7 @@ duplicates.
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
 | 7.1 | [`docs/lld/media.md`](docs/lld/media.md) (§1–§9: upload-session state table incl. replays, `PartPlan` ≤ 100 parts ≥ 5 MiB, deterministic `MediaKeys` in a shared `backend/storage` module, catalog asks `MediaApi.readiness` at the gate instead of keeping a copy, playback ticket because native Safari HLS can't send a bearer) + [`video-pipeline.md`](docs/lld/video-pipeline.md) (§1–§9: `pipeline_job` DAG PROBE → TRANSCODE×rung + THUMBNAILS → PACKAGE, outbox-style lease, commit markers written last, conditional asset updates) + [ADR-0012](docs/adr/0012-seaweedfs-as-local-s3.md) local S3 (**4 servers probed**: LocalStack needs a licence, Garage allows foreign-origin preflights with `*`, RustFS too young → **SeaweedFS**; compose `seaweedfs` + `media-init` via aws-cli, verified end to end) + [ADR-0013](docs/adr/0013-hls-for-playback.md) HLS/fMP4 + [ADR-0014](docs/adr/0014-upload-progress-from-the-provider.md) provider truth (server completes from `ListParts`; the client never sends ETags) | — | — | — | 2.5 h | ✅ | 2026-10-13 |
-| 7.2 | `StorageClient` over AWS SDK v2 (MinIO in dev): presign, multipart, list parts | AWS SDK v2, `S3Presigner` | — | **Adapter** | 2.5 h | ☐ | |
+| 7.2 | New library module `backend/storage` (auto-configured like `messaging`): `ObjectStorage` adapts the AWS SDK v2 (create/presign/list/complete/abort multipart, `listMultipartUploads`, head, put, presigned GETs) with **no interface** (one vendor API, a real container in tests); SDK failures → `StorageUnavailableException` / `NoSuchUploadException` / `StorageException`; **two presigners** (SigV4 signs the host: browser urls use `public-endpoint`, worker urls the internal one); SDK 2.30+ default checksums switched to `WHEN_REQUIRED` (else presigned urls demand headers browsers never send); `MediaKeys` key layout. `ObjectStorageTest` (translation over a stubbed `S3Client`), `ObjectStorageIT` (SeaweedFS Testcontainer, shared as a test-jar: resume from `ListParts`, tampered url → 403, idempotent abort, overwrite, ranged GET 206). 98 % lines. Pattern note 12 §1b + lab `adapter/storage` | AWS SDK v2, `S3Presigner`, test-jars, auto-configuration | — | **Adapter**: catalog row 12 | 2.5 h | ✅ | 2026-10-13 |
 | 7.3 | Upload sessions: plan of ≤100 presigned parts, resume = ask the provider; `UploadSession` lifecycle | — | — | **State** | 3 h | ☐ | |
 | 7.4 | Worker job DAG: probe → transcode rungs (fan-out) → package HLS → poster/sprite | abstract base processor, registry from `List<JobProcessor>` | — | **Template Method** + **Factory Method** | 4 h | ☐ | |
 | 7.5 | ffmpeg via `ProcessBuilder`; command builder; ABR ladder profiles | processes, streams, timeouts | — | **Builder** + **Strategy** | 3 h | ☐ | |
