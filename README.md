@@ -57,6 +57,7 @@ make obs     # Prometheus + Grafana for whichever of the two is running (DevOps 
 | Postgres | `localhost:5433` (masternova / masternova) |
 | Grafana (`make obs`) | http://localhost:3001 — dashboards in the *Masternova* folder, provisioned from `deploy/observability/` |
 | Prometheus (`make obs`) | http://localhost:9091 |
+| Alloy pipeline (`make obs`) | http://localhost:12345 — logs of every compose container → Loki (query in Grafana → Explore) |
 
 ## Test
 

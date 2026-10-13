@@ -277,6 +277,36 @@ services:
       - '4318:4318' # OTLP/HTTP from apps run on the host (`make api`)
     # no healthcheck: the image is distroless (no shell, no wget). /ready on :3201 from the host.
 
+  loki:
+    profiles: [observability]
+    image: grafana/loki:3.7.8
+    restart: unless-stopped
+    logging: *logging
+    command: ['-config.file=/etc/loki/loki.yaml']
+    volumes:
+      - ./deploy/observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - lokidata:/loki
+    ports:
+      - '3101:3100' # LogQL API (Grafana uses it inside the network)
+    # no healthcheck: distroless image. /ready on :3101 from the host.
+
+  alloy: # the log collector: tails every container of this project through the Docker API
+    profiles: [observability]
+    image: grafana/alloy:v1.20.1
+    restart: unless-stopped
+    logging: *logging
+    command: ['run', '--server.http.listen-addr=0.0.0.0:12345', '/etc/alloy/config.alloy']
+    volumes:
+      - ./deploy/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # ⭐ read access to the Docker API = root-equivalent on the host. Fine for a laptop; on
+      #    Kubernetes Alloy reads /var/log/pods from a DaemonSet instead (D4).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - '12345:12345' # Alloy's UI: the pipeline graph and each component's health
+    depends_on:
+      loki:
+        condition: service_started
+
   grafana:
     profiles: [observability]
     image: grafana/grafana:13.2.3
@@ -302,6 +332,8 @@ services:
         condition: service_healthy
       tempo:
         condition: service_started
+      loki:
+        condition: service_started
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/api/health']
       interval: 5s
@@ -314,6 +346,7 @@ volumes:
   pipelinework: # the worker's scratch space (video-pipeline LLD §9); safe to delete
   promdata: # Prometheus' 7 days of samples
   tempodata: # Tempo's 48 h of traces
+  lokidata: # Loki's 72 h of log lines
 
 secrets:
   jwt_access_secret:

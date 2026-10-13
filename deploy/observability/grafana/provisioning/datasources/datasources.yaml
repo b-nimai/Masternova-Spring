@@ -19,3 +19,29 @@ datasources:
     access: proxy
     url: http://tempo:3200
     editable: false
+    jsonData:
+      # trace → logs: a span's "Logs for this span" button runs this LogQL in Loki
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: -5m
+        spanEndTimeShift: 5m
+        customQuery: true
+        query: '{service="$${__span.tags["service.name"]}"} | traceId="$${__trace.traceId}"'
+      nodeGraph:
+        enabled: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      # log → trace: the traceId structured-metadata field becomes a link that opens Tempo
+      derivedFields:
+        - name: traceId
+          matcherType: label
+          matcherRegex: traceId
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+          urlDisplayLabel: Open trace

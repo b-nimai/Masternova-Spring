@@ -15,6 +15,7 @@
 | 2 | [Metrics: Micrometer → Prometheus](#2-metrics-micrometer--prometheus-) | ⭐⭐⭐ | D3.1 |
 | 3 | [Dashboards as code](#3-dashboards-as-code-) | ⭐⭐ | D3.2 |
 | 4 | [Distributed tracing, through the outbox](#4-distributed-tracing-through-the-outbox-) | ⭐⭐⭐ | D3.3 |
+| 5 | [Centralized logs, and the jump between log and trace](#5-centralized-logs-and-the-jump-between-log-and-trace-) | ⭐⭐ | D3.4 |
 
 ---
 
@@ -263,3 +264,71 @@ shows the same ids.
 
 **Try it:** `make stack && make obs`, sign up, then open Grafana → Explore → Tempo → *Search*,
 service `api`: the trace shows both services.
+
+---
+
+## 5. Centralized logs, and the jump between log and trace ⭐⭐
+
+### 5.1 The pipeline
+
+```mermaid
+flowchart LR
+  A[api / worker<br/>ECS JSON on stdout] --> D[Docker json-file log]
+  D -- Docker API --> Al[Alloy<br/>discovery.docker → loki.process]
+  Al -- push --> L[(Loki)]
+  L --> G[Grafana]
+```
+
+The apps only **write lines to stdout** (twelve-factor); they know nothing about Loki. Collecting
+logs is the platform's job: here **Grafana Alloy** discovers this compose project's containers
+through the Docker socket (`deploy/observability/alloy/config.alloy`), and on Kubernetes (D4) it
+runs as a DaemonSet reading `/var/log/pods`. The apps don't change between the two.
+
+### 5.2 Labels vs structured metadata: cardinality again ⭐⭐⭐
+
+Loki indexes **labels only**; each distinct label set is a *stream*. So:
+
+| Field | Stored as | Why |
+|---|---|---|
+| `service` (compose service) | **label** | ~10 values, and every query starts from it |
+| `level` (from the JSON's `log.level`) | **label** | 5 values; "errors of the worker" is a common query |
+| `traceId`, `spanId` | **structured metadata** | one value per request. As labels they would make a stream per request, which is Loki's cardinality explosion |
+| everything else (message, logger, thread) | the line itself | searched with `\|=` / `\| json` at query time |
+
+A trace's logs are then one query, even across services:
+
+```logql
+{service=~"api|worker"} | traceId="4ab014d438c35439a90683497e22a316"
+```
+
+### 5.3 Jumping between signals
+
+| From → to | How (provisioned in `datasources.yaml`) |
+|---|---|
+| **log → trace** | Loki's `derivedFields`: the `traceId` metadata field (`matcherType: label`) becomes an *Open trace* link to the Tempo datasource |
+| **trace → logs** | Tempo's `tracesToLogsV2` with a custom query: `{service="${__span.tags["service.name"]}"} \| traceId="${__trace.traceId}"`, ± 5 min around the span |
+
+(`$$` in the provisioning file escapes Grafana's own `$ENV` interpolation, so the literal `${…}`
+reaches the datasource.)
+
+Verified on the running stack: a signup's trace id `4ab014d4…` opened 8 spans in Tempo (api +
+worker), and the LogQL above returned the worker's `verify-email … sent` line from the same
+trace. The api had no lines in it, because a successful signup logs nothing there.
+
+### 5.4 Found while wiring it
+
+- **The worker logged nothing when it sent an email.** An external side effect with no log line
+  can only be traced through the database. `NotificationService` now logs
+  `<template> for event <id> sent, provider id <…>`, with ids only (an email address in a log is
+  personal data that spreads to every log store).
+- **Loki's and Tempo's images are distroless and Alloy has no `wget`**, so none of them has a
+  compose healthcheck. Grafana waits for `service_started` and its datasources retry.
+- **Alloy reads the Docker socket**: read access to the Docker API is root-equivalent on the host.
+  That's acceptable on a laptop but not on a shared machine; the Kubernetes DaemonSet reads files
+  instead.
+- Lines that aren't JSON (the JVM's own startup warnings) still arrive, without a `level`
+  label: the `stage.match` only parses the Spring apps' streams.
+
+**Try it:** `make stack && make obs` → <http://localhost:3001> → Explore → Loki →
+`{service="worker"}`, open a line, click **Open trace**. Alloy's pipeline graph is at
+<http://localhost:12345>.

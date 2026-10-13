@@ -1,0 +1,60 @@
+// Grafana Alloy: ships the compose containers' stdout to Loki (DevOps note 05 §5).
+// The apps only write JSON lines to stdout (twelve-factor); collecting them is the platform's job.
+
+// 1. Find this project's containers through the Docker API.
+discovery.docker "compose" {
+  host = "unix:///var/run/docker.sock"
+  filter {
+    name   = "label"
+    values = ["com.docker.compose.project=masternova-spring"]
+  }
+}
+
+// 2. Labels = the few things you SELECT streams by: the compose service, and nothing per request.
+discovery.relabel "compose" {
+  targets = []
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+}
+
+loki.source.docker "compose" {
+  host          = "unix:///var/run/docker.sock"
+  targets       = discovery.docker.compose.targets
+  relabel_rules = discovery.relabel.compose.rules
+  forward_to    = [loki.process.apps.receiver]
+}
+
+// 3. The Spring apps log ECS JSON: lift the level into a label (a handful of values) and the trace
+//    ids into structured metadata (one value per request: never a label).
+loki.process "apps" {
+  stage.match {
+    selector = "{service=~\"api|worker\"}"
+
+    stage.json {
+      expressions = {
+        level   = "log.level",
+        traceId = "traceId",
+        spanId  = "spanId",
+      }
+    }
+
+    stage.labels {
+      values = { level = "" }
+    }
+
+    stage.structured_metadata {
+      values = { traceId = "", spanId = "" }
+    }
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

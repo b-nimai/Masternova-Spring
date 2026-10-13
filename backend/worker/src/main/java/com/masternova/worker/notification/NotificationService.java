@@ -81,7 +81,7 @@ public class NotificationService {
             unsubscribe.map(UnsubscribeLinks.Link::headers).orElse(Map.of()));
 
     switch (deliveries.claim(key)) {
-      case Claim.Claimed claimed -> deliver(claimed, outbound);
+      case Claim.Claimed claimed -> deliver(key, claimed, outbound);
       case Claim.AlreadySent sent ->
           log.info(
               "{} for event {} was already sent; nothing to do", key.template(), key.eventId());
@@ -101,10 +101,13 @@ public class NotificationService {
     return Optional.empty();
   }
 
-  private void deliver(Claim.Claimed claimed, OutboundEmail outbound) {
+  private void deliver(DeliveryKey key, Claim.Claimed claimed, OutboundEmail outbound) {
     try {
       String providerMessageId = mail.send(outbound);
       deliveries.markSent(claimed.deliveryId(), providerMessageId);
+      // an external side effect leaves a line (with the trace id, D3.4); ids only, no address
+      log.info(
+          "{} for event {} sent, provider id {}", key.template(), key.eventId(), providerMessageId);
     } catch (PermanentDeliveryException e) {
       // retrying can never succeed: record it, stop mailing the address, and return normally —
       // the outbox message is DONE
