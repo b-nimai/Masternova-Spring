@@ -8,6 +8,10 @@ import com.masternova.messaging.OutboxProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.observation.transport.Kind;
+import io.micrometer.observation.transport.ReceiverContext;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -22,6 +26,9 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Deliberately NOT @Transactional: handlers may be slow (email, HTTP). Each repository call is
  * its own short statement, so no database connection is held while a handler runs.
+ *
+ * <p>Each delivery is a CONSUMER observation whose parent is read from the message's headers: the
+ * worker's span joins the trace of the api request that wrote the event (ADR-0015).
  */
 @DesignPattern(
     value = Pattern.TRANSACTIONAL_OUTBOX,
@@ -48,18 +55,21 @@ public class OutboxRelay {
   private final OutboxProperties settings;
   private final Clock clock;
   private final MeterRegistry meters;
+  private final ObservationRegistry observations;
 
   OutboxRelay(
       OutboxRepository repository,
       List<OutboxHandler> handlers,
       OutboxProperties settings,
       Clock clock,
-      MeterRegistry meters) {
+      MeterRegistry meters,
+      ObservationRegistry observations) {
     this.repository = repository;
     this.handlersByType = index(handlers);
     this.settings = settings;
     this.clock = clock;
     this.meters = meters;
+    this.observations = observations;
   }
 
   /**
@@ -93,7 +103,7 @@ public class OutboxRelay {
         continue;
       }
       try {
-        handler.handle(message);
+        deliver(handler, message);
         repository.markDone(message.id());
         count(message, "delivered");
         recordLag(message);
@@ -125,6 +135,19 @@ public class OutboxRelay {
       }
     }
     return new BatchResult(delivered, retried, dead, unhandled);
+  }
+
+  /** The handler call as a CONSUMER observation continuing the writer's trace. */
+  private void deliver(OutboxHandler handler, OutboxMessage message) {
+    ReceiverContext<Map<String, String>> context = new ReceiverContext<>(Map::get, Kind.CONSUMER);
+    context.setCarrier(message.headers());
+    context.setRemoteServiceName("outbox");
+    Observation.createNotStarted("outbox.deliver", () -> context, observations)
+        .contextualName("outbox deliver " + message.type())
+        .lowCardinalityKeyValue("event.type", message.type())
+        .highCardinalityKeyValue("outbox.message.id", message.id().toString())
+        .highCardinalityKeyValue("outbox.attempt", Integer.toString(message.attempts()))
+        .observe(() -> handler.handle(message));
   }
 
   // ⭐ Tags are the event TYPE (a closed set, ~10) and the outcome (4) — never an id: every distinct

@@ -19,9 +19,14 @@ import java.util.UUID;
     note = "patterns/docs/16-repository-unit-of-work.md")
 interface OutboxRepository {
 
-  /** A row to append — in the caller's transaction. */
+  /** A row to append — in the caller's transaction. {@code headers} may be empty. */
   record NewMessage(
-      UUID id, String type, String aggregateId, String payloadJson, Instant occurredAt) {}
+      UUID id,
+      String type,
+      String aggregateId,
+      String payloadJson,
+      Instant occurredAt,
+      Map<String, String> headers) {}
 
   void append(NewMessage message);
 

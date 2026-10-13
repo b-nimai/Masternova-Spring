@@ -24,8 +24,8 @@ secrets: ## Generate the local secret files the container stack mounts (gitignor
 stack: secrets ## Build images and run the whole app in containers (web on :8081)
 	docker compose --profile app up -d --build --wait postgres redis mailpit api worker web
 
-obs: ## Start observability: Prometheus :9091, Grafana :3001 (works with `make stack` or `make api`/`worker`)
-	docker compose --profile observability up -d --wait prometheus grafana
+obs: ## Start observability: Grafana :3001, Prometheus :9091, Tempo (works with `make stack` or `make api`/`worker`)
+	docker compose --profile observability up -d --wait prometheus tempo grafana
 
 obs-check: ## Validate the observability config (promtool) — also runs in CI
 	docker run --rm --entrypoint promtool -v $(CURDIR)/deploy/observability/prometheus:/etc/prometheus:ro \

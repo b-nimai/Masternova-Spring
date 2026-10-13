@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The outbox in plain SQL (JdbcClient, not JPA): the claim query needs Postgres-specific {@code FOR
@@ -43,29 +45,39 @@ class JdbcOutboxRepository implements OutboxRepository {
                        ORDER BY next_attempt_at, occurred_at
                        LIMIT :batchSize
                          FOR UPDATE SKIP LOCKED)
-      RETURNING m.id, m.event_type, m.aggregate_id, m.payload::text AS payload, m.occurred_at, m.attempts
+      RETURNING m.id, m.event_type, m.aggregate_id, m.payload::text AS payload, m.occurred_at, m.attempts,
+                m.headers::text AS headers
       """;
+
+  private static final TypeReference<Map<String, String>> HEADERS = new TypeReference<>() {};
 
   private final JdbcClient jdbc;
   private final Clock clock;
+  private final JsonMapper json;
 
-  JdbcOutboxRepository(JdbcClient jdbc, Clock clock) {
+  JdbcOutboxRepository(JdbcClient jdbc, Clock clock, JsonMapper json) {
     this.jdbc = jdbc;
     this.clock = clock;
+    this.json = json;
   }
 
   @Override
   public void append(NewMessage message) {
     jdbc.sql(
             """
-            INSERT INTO outbox_message (id, event_type, aggregate_id, payload, occurred_at, status, next_attempt_at)
-            VALUES (:id, :type, :aggregateId, CAST(:payload AS jsonb), :occurredAt, 'PENDING', :occurredAt)
+            INSERT INTO outbox_message (id, event_type, aggregate_id, payload, occurred_at, status, next_attempt_at,
+                                        headers)
+            VALUES (:id, :type, :aggregateId, CAST(:payload AS jsonb), :occurredAt, 'PENDING', :occurredAt,
+                    CAST(:headers AS jsonb))
             """)
         .param("id", message.id())
         .param("type", message.type())
         .param("aggregateId", message.aggregateId())
         .param("payload", message.payloadJson())
         .param("occurredAt", Timestamp.from(message.occurredAt()))
+        .param(
+            "headers",
+            message.headers().isEmpty() ? null : json.writeValueAsString(message.headers()))
         .update();
   }
 
@@ -84,8 +96,13 @@ class JdbcOutboxRepository implements OutboxRepository {
                     rs.getString("aggregate_id"),
                     rs.getString("payload"),
                     rs.getTimestamp("occurred_at").toInstant(),
-                    rs.getInt("attempts")))
+                    rs.getInt("attempts"),
+                    headers(rs.getString("headers"))))
         .list();
+  }
+
+  private Map<String, String> headers(String text) {
+    return text == null ? Map.of() : json.readValue(text, HEADERS);
   }
 
   @Override

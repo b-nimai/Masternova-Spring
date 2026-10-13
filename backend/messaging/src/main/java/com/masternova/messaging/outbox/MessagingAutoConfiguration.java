@@ -5,6 +5,7 @@ import com.masternova.messaging.OutboxProperties;
 import com.masternova.messaging.OutboxWriter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Metrics;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Clock;
 import java.util.List;
 import org.springframework.beans.factory.ObjectProvider;
@@ -48,8 +49,8 @@ public class MessagingAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  OutboxRepository outboxRepository(JdbcClient jdbc, Clock clock) {
-    return new JdbcOutboxRepository(jdbc, clock);
+  OutboxRepository outboxRepository(JdbcClient jdbc, Clock clock, JsonMapper json) {
+    return new JdbcOutboxRepository(jdbc, clock, json);
   }
 
   @Bean
@@ -58,12 +59,19 @@ public class MessagingAutoConfiguration {
       OutboxRepository repository,
       JsonMapper json,
       Clock clock,
-      ObjectProvider<MeterRegistry> meters) {
-    return new JdbcOutboxWriter(repository, json, clock, registry(meters));
+      ObjectProvider<MeterRegistry> meters,
+      ObjectProvider<ObservationRegistry> observations) {
+    return new JdbcOutboxWriter(
+        repository, json, clock, registry(meters), observations(observations));
   }
 
   static MeterRegistry registry(ObjectProvider<MeterRegistry> meters) {
     return meters.getIfAvailable(() -> Metrics.globalRegistry);
+  }
+
+  /** No registry (no actuator): observations are no-ops and the headers stay empty. */
+  static ObservationRegistry observations(ObjectProvider<ObservationRegistry> observations) {
+    return observations.getIfAvailable(() -> ObservationRegistry.NOOP);
   }
 
   /** The consuming side. Nested so ONE property switches the relay and its schedule together. */
@@ -78,8 +86,10 @@ public class MessagingAutoConfiguration {
         List<OutboxHandler> handlers,
         OutboxProperties settings,
         Clock clock,
-        ObjectProvider<MeterRegistry> meters) {
-      return new OutboxRelay(repository, handlers, settings, clock, registry(meters));
+        ObjectProvider<MeterRegistry> meters,
+        ObjectProvider<ObservationRegistry> observations) {
+      return new OutboxRelay(
+          repository, handlers, settings, clock, registry(meters), observations(observations));
     }
 
     /** Backlog gauges live with the relay: the process that owes the delivery reports the debt. */

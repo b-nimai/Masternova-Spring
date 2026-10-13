@@ -14,6 +14,7 @@
 | 1 | [The three signals at a glance](#1-the-three-signals-at-a-glance-) | ⭐⭐⭐ | — |
 | 2 | [Metrics: Micrometer → Prometheus](#2-metrics-micrometer--prometheus-) | ⭐⭐⭐ | D3.1 |
 | 3 | [Dashboards as code](#3-dashboards-as-code-) | ⭐⭐ | D3.2 |
+| 4 | [Distributed tracing, through the outbox](#4-distributed-tracing-through-the-outbox-) | ⭐⭐⭐ | D3.3 |
 
 ---
 
@@ -181,3 +182,84 @@ check `count by (job) (up)` when you add a target.
 
 Every panel's query was run against the live stack with real traffic before commit; the only empty
 ones are for events that hadn't happened (5xx, failed jobs).
+
+---
+
+## 4. Distributed tracing, through the outbox ⭐⭐⭐
+
+Decision record: [ADR-0015](../../docs/adr/0015-tracing-with-micrometer-observation-and-otlp.md).
+
+### 4.1 Vocabulary
+
+- **Trace:** one unit of work end to end, identified by a 128-bit **trace id**.
+- **Span:** one timed step in it (an HTTP request, a publish, a delivery). It has a span id, a
+  parent span id, a **kind** (SERVER, CLIENT, PRODUCER, CONSUMER, INTERNAL), attributes and a
+  status.
+- **Context propagation:** carrying `(trace id, parent span id, sampled flag)` across a process
+  boundary. The W3C format is one header,
+  `traceparent: 00-<trace id>-<span id>-<flags>`.
+- **Sampling:** deciding which traces to keep. **Parent-based**: the root decides, and every
+  downstream hop obeys the flag, so a trace is never half-kept.
+
+### 4.2 The path here
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant A as api
+  participant DB as outbox_message
+  participant W as worker (relay)
+  participant T as Tempo
+  B->>A: POST /api/v1/auth/signup
+  Note over A: SERVER span (trace T1)
+  A->>DB: INSERT … headers = {traceparent: 00-T1-P-03}
+  Note over A: PRODUCER span "outbox publish …" (parent: SERVER)
+  A-->>T: OTLP (batched, async)
+  W->>DB: claim (FOR UPDATE SKIP LOCKED)
+  Note over W: CONSUMER span "outbox deliver …" parent = P, from the row
+  W-->>T: OTLP
+```
+
+Verified on the running stack: one `POST /api/v1/auth/signup` gave one trace in Tempo with 8
+spans from **two services**: the api's SERVER span, Spring Security's filter-chain spans, the
+Modulith span `Identity > AuthController.signup`, the PRODUCER `outbox publish
+identity.user-registered.v1`, and the worker's CONSUMER `outbox deliver
+identity.user-registered.v1`.
+
+### 4.3 Why the table needs headers
+
+HTTP clients and message brokers carry `traceparent` for you. An outbox has no wire: the api
+**writes a row** and a different process **polls** for it later. So the context has to be stored
+with the event. The writer and relay use the Observation API's transport contexts:
+
+| Side | Context | Carrier | What Boot's handler does |
+|---|---|---|---|
+| `JdbcOutboxWriter` | `SenderContext<Map>` (PRODUCER) | a `HashMap`, then saved as `headers` JSONB | **injects** the producer span's `traceparent` |
+| `OutboxRelay` | `ReceiverContext<Map>` (CONSUMER) | `message.headers()` | **extracts** it and makes the delivery span a child |
+
+The messaging library depends only on `micrometer-observation`, not on OpenTelemetry. Without a
+tracer the observations are no-ops and `headers` stays empty
+(`OutboxTracePropagationTest.withTracingOffTheHeadersStayEmptyAndDeliveryStillWorks`).
+
+### 4.4 Settings, and the traps found
+
+| Setting | Why |
+|---|---|
+| `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT` as an **env var** (compose), not a YAML default | the exporter switches on when the property merely *exists*; a `${X:}` empty default would create one with no endpoint |
+| `management.tracing.sampling.probability: ${TRACING_SAMPLING_PROBABILITY:1.0}` | everything locally; ~0.1 in production. Boot's own default, 0.1, would drop 9 of 10 local requests |
+| `management.observations.enable.tasks.scheduled.execution: false` | Spring observes every `@Scheduled` run: a root trace per relay poll (1 s) and job poll (2 s) |
+| the starter's `micrometer-registry-otlp` excluded | Prometheus already scrapes the metrics; pushing them over OTLP too would be a second, unused path |
+| Tempo has no compose healthcheck | the image is distroless: no shell, no `wget`. Grafana waits for `service_started` and retries |
+
+### 4.5 Trace id in every log line
+
+With a tracer present, Boot puts `traceId` and `spanId` in the logging MDC. The containers log
+**ECS JSON** (`LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs`), and Boot's ECS writer emits them as
+**top-level `traceId` / `spanId` fields**, *not* ECS's nested `trace.id` (found by
+`TraceCorrelationIT`, which first looked for the nested one). That IT signs up, finds the JSON log
+line written during the request, and checks that its `traceId` is the trace id in the outbox
+row's `traceparent`: one id from the log line to the worker. From source, the console pattern
+shows the same ids.
+
+**Try it:** `make stack && make obs`, sign up, then open Grafana → Explore → Tempo → *Search*,
+service `api`: the trace shows both services.

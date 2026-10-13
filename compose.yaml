@@ -22,6 +22,9 @@ x-app-env: &app-env
   STORAGE_ENDPOINT: http://seaweedfs:8333 # how the containers reach storage …
   STORAGE_PUBLIC_ENDPOINT: http://localhost:9010 # … and how the browser does (presigned urls)
   LOG_VERIFICATION_LINKS: 'false' # never log live tokens outside a developer's own terminal
+  # spans → Tempo (profile `observability`). Without it running the exporter only logs that it
+  # couldn't send; the apps never wait on it (batched, in the background).
+  MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
 
 # Without rotation the json-file log of a chatty container grows until the disk is full.
 x-logging: &logging
@@ -260,6 +263,20 @@ services:
       timeout: 3s
       retries: 20
 
+  tempo:
+    profiles: [observability]
+    image: grafana/tempo:2.10.8
+    restart: unless-stopped
+    logging: *logging
+    command: ['-config.file=/etc/tempo/tempo.yaml']
+    volumes:
+      - ./deploy/observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempodata:/var/tempo
+    ports:
+      - '3201:3200' # Tempo's query API (Grafana uses it inside the network)
+      - '4318:4318' # OTLP/HTTP from apps run on the host (`make api`)
+    # no healthcheck: the image is distroless (no shell, no wget). /ready on :3201 from the host.
+
   grafana:
     profiles: [observability]
     image: grafana/grafana:13.2.3
@@ -283,6 +300,8 @@ services:
     depends_on:
       prometheus:
         condition: service_healthy
+      tempo:
+        condition: service_started
     healthcheck:
       test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/api/health']
       interval: 5s
@@ -294,6 +313,7 @@ volumes:
   mediadata:
   pipelinework: # the worker's scratch space (video-pipeline LLD §9); safe to delete
   promdata: # Prometheus' 7 days of samples
+  tempodata: # Tempo's 48 h of traces
 
 secrets:
   jwt_access_secret:

@@ -11,6 +11,7 @@ import com.masternova.messaging.OutboxWriter;
 import com.masternova.messaging.TestcontainersConfiguration;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -160,7 +161,8 @@ class TransactionalOutboxIT {
         OutboxProperties settings,
         MutableClock clock,
         MeterRegistry meters) {
-      return new OutboxRelay(repository, List.of(handler), settings, clock, meters);
+      return new OutboxRelay(
+          repository, List.of(handler), settings, clock, meters, ObservationRegistry.NOOP);
     }
   }
 
@@ -354,5 +356,30 @@ class TransactionalOutboxIT {
     assertThat(meters.get("outbox.oldest.age").gauge().value()).isEqualTo(90);
     relay.relayOnce();
     assertThat(meters.get("outbox.backlog").gauge().value()).isZero();
+  }
+
+  @Test
+  void headersSurviveTheTableAndRowsWithoutThemReadAsEmpty() {
+    repository.append(
+        new OutboxRepository.NewMessage(
+            UUID.randomUUID(),
+            "test.course-drafted.v1",
+            "h1",
+            "{}",
+            T0,
+            java.util.Map.of(
+                "traceparent", "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01")));
+    courses.draft("h2"); // NOOP observations here: no headers written
+
+    var claimed = repository.claimDue(10, Duration.ofSeconds(60));
+
+    assertThat(claimed)
+        .filteredOn(m -> m.aggregateId().equals("h1"))
+        .singleElement()
+        .satisfies(m -> assertThat(m.headers()).containsKey("traceparent"));
+    assertThat(claimed)
+        .filteredOn(m -> m.aggregateId().equals("h2"))
+        .singleElement()
+        .satisfies(m -> assertThat(m.headers()).isEmpty());
   }
 }

@@ -48,6 +48,20 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
+		<!--
+			Tracing (D3.3, ADR-0015): Micrometer Tracing over the OpenTelemetry SDK, spans exported over
+			OTLP. Its OTLP *metrics* registry is excluded: Prometheus already scrapes the meters (D3.1).
+		-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-opentelemetry</artifactId>
+			<exclusions>
+				<exclusion>
+					<groupId>io.micrometer</groupId>
+					<artifactId>micrometer-registry-otlp</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
 		<!-- /actuator/prometheus: Micrometer's meters in Prometheus' text format (D3.1) -->
 		<dependency>
 			<groupId>io.micrometer</groupId>

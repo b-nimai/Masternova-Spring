@@ -122,7 +122,7 @@ Phases are listed **in the order you do them**.
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 8 | 22 h | ~21 h | ✅ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
-| 11 | [D3 — Observability](#phase-d3--observability) | 5 | 2 | 12 h | ~5 h | 🔨 |
+| 11 | [D3 — Observability](#phase-d3--observability) | 5 | 3 | 12 h | ~8 h | 🔨 |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 0 | 28 h | — | ☐ |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
@@ -359,7 +359,7 @@ with alerts that mean something.
 |---|---|---|---|---|---|
 | D3.1 | Micrometer → Prometheus: `micrometer-registry-prometheus` in both apps, `/actuator/prometheus` (public on the app port; nginx only forwards `/api/`), `application` tag on every series. HTTP latency as **9 chosen SLO buckets** incl. 300 ms (the full histogram measured ~54 buckets per uri × method × status series). Custom: `outbox.events.written{event.type}` (business facts, **counted after commit**; orders arrive with Phase 9's events, no new code), `outbox.messages{event.type,outcome}` + `outbox.delivery.lag` (commit → handled, 60 s SLO edge) in `OutboxRelay`, `OutboxBacklogMetrics` gauges (backlog + oldest age: a *stopped* relay still shows), `pipeline.job` **Observation** (timer by `job.type` × `outcome`; ids as high-cardinality → spans only) = the transcode duration, `JobPoller` as a `MeterBinder` (slots busy/total, queued). `TransactionalOutboxIT` (+3: rollback not counted, outcomes + 10 s lag, gauges see a backlog with no relay), `JobRunnerTest` (outcome tags), `JobPollerTest` (saturation), `JobRepositoryIT` (`countDue`), `PrometheusScrapeIT` + `WorkerApplicationIT` (`@AutoConfigureMetrics`: the real scrape). [DevOps note 05](patterns/devops/05-observability.md) §1–§2 | RED/USE metrics, cardinality | 2.5 h | ✅ | 2026-10-13 |
 | D3.2 | Compose profile **`observability`** (`make obs`): Prometheus v3.15.0 (:9091, 7 d retention, `--web.enable-lifecycle`) + Grafana 13.2.3 (:3001, anonymous **Viewer** + `viewers_can_edit` for Explore: Grafana 13 refuses other anonymous roles; **no state volume**). `deploy/observability/`: `prometheus.yml`, datasource with a fixed `uid`, a file provider (`allowUiUpdates: false`) and **4 dashboards** — HTTP (RED: 5xx ratio, share under 300 ms, quantiles from buckets, slowest routes; `/actuator` + SSE streams excluded), JVM (heap vs max, live data after GC, GC pause share, threads, CPU), Hikari (USE: in use / max, threads waiting, acquire + hold time, timeouts), Pipeline & outbox. `make obs-check` (promtool). **Found:** listing each app as container *and* host target scraped the container twice (the host port is its published port) → every `sum()` doubled; now one target via `host.docker.internal`, which reaches `make stack` and `make api` alike. Every panel query run against the live stack with traffic. Note 05 §3 | dashboards-as-code | 2.5 h | ✅ | 2026-10-13 |
-| D3.3 | OpenTelemetry traces → Tempo; trace id in every log line; api → worker propagation through the outbox | distributed tracing, context propagation | 3 h | ☐ | |
+| D3.3 | `spring-boot-starter-opentelemetry` in both apps (Micrometer Tracing → OTel SDK → **OTLP/HTTP → Tempo 2.10.8**, its OTLP-metrics registry excluded). **Through the outbox** (ADR-0015): `V16` `outbox_message.headers JSONB`; `JdbcOutboxWriter.append` = PRODUCER observation (`SenderContext` → Boot injects `traceparent`), `OutboxRelay` delivers in a CONSUMER observation (`ReceiverContext` from the row) → the worker's span is the api request's grandchild. `OutboxMessage` gains `headers` (old constructor kept). `@Scheduled` observations off (a root trace per poll otherwise). Sampling 1.0 locally via `TRACING_SAMPLING_PROBABILITY`; the endpoint is an **env var only** (the property's presence turns the exporter on). **Verified live:** one signup = one Tempo trace, 8 spans, api + worker. `OutboxTracePropagationTest` (real OTel SDK + in-memory exporter, no Spring/DB: one trace id, CONSUMER's parent = PRODUCER; error status; tracing off → empty headers, fresh trace), `TransactionalOutboxIT` (headers round-trip, NULL → empty), **`TraceCorrelationIT`** (ECS JSON log line of the request has the trace id that's in the outbox row's `traceparent`; **found**: Boot's ECS writer emits top-level `traceId`, not ECS `trace.id`). Tempo is distroless → no compose healthcheck. ADR-0015 (rejected: OTel Java agent, id columns, span links). Note 05 §4 | distributed tracing, context propagation | 3 h | ✅ | 2026-10-13 |
 | D3.4 | Logs → Loki (Grafana Alloy); jump log ↔ trace | centralized logging | 1.5 h | ☐ | |
 | D3.5 | SLOs + burn-rate alert rules, Alertmanager → Mailpit; first runbooks in `docs/runbooks/` | SLO/SLI, error budgets | 2.5 h | ☐ | |
 
@@ -508,7 +508,7 @@ Tick these as they're used *for real* in the project, not just read about.
 
 - [x] multi-stage Dockerfile · [x] layered jars · [x] non-root + healthcheck · [x] compose profiles + healthchecks
 - [x] GitHub Actions (path filters, caching, matrix) · [x] Trivy · [x] Dependabot · [ ] GHCR · [ ] SBOM + cosign · [ ] release automation
-- [ ] Prometheus · [ ] Grafana · [ ] OpenTelemetry · [ ] Loki · [ ] SLO alerts
+- [x] Prometheus · [x] Grafana · [x] OpenTelemetry · [ ] Loki · [ ] SLO alerts
 - [ ] kubectl · [ ] Deployments / Services / Ingress · [ ] probes + limits · [ ] Helm · [ ] operators · [ ] HPA / KEDA · [ ] Argo CD
 - [ ] Terraform · [ ] OIDC to AWS · [ ] ECS / RDS / ElastiCache / CloudFront
 
@@ -526,7 +526,7 @@ Each line is a sentence you can say *and* a file or test you can show.
 - [ ] "I can show p95 under load." → k6 report (D5.1)
 - [ ] "Deploys are git commits." → Argo CD sync history (D4.7)
 - [ ] "Images are scanned, signed and have SBOMs." → CI run (D2.3)
-- [ ] "I can trace one request across api → outbox → worker." → Tempo screenshot (D3.3)
+- [x] "I can trace one request across api → outbox → worker." → `OutboxTracePropagationTest` + `TraceCorrelationIT`; live: one signup = one Tempo trace across both services (D3.3)
 
 ---
 
