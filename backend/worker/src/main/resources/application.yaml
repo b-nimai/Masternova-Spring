@@ -63,11 +63,23 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
         enabled: true
+  metrics: # D3.1 — devops note 05
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        pipeline.job: true # the transcode-duration histogram, by job type and outcome
+        outbox.delivery.lag: true
+      maximum-expected-value:
+        pipeline.job: 2h # a 1080p rung of a long lecture takes many minutes; the 30 s default cuts it off
+        outbox.delivery.lag: 1h
+      slo:
+        outbox.delivery.lag: 5s,60s # the outbox SLO (D3.5) counts deliveries under 60 s
 
 info:
   app:

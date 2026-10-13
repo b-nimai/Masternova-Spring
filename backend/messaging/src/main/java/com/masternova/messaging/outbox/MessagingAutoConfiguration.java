@@ -3,8 +3,11 @@ package com.masternova.messaging.outbox;
 import com.masternova.messaging.OutboxHandler;
 import com.masternova.messaging.OutboxProperties;
 import com.masternova.messaging.OutboxWriter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Metrics;
 import java.time.Clock;
 import java.util.List;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBooleanProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -29,6 +32,9 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * Auto-configurations run AFTER the app's own configuration, which is what makes {@code
  * ConditionalOnMissingBean} a safe default: the api's own {@code Clock} wins over the fallback.
+ *
+ * <p>Meters go to the app's {@link MeterRegistry} (Prometheus, with actuator) or, in an app without
+ * one, to Micrometer's global registry, which drops them: metrics are never required to run.
  */
 @AutoConfiguration
 @EnableConfigurationProperties(OutboxProperties.class)
@@ -48,8 +54,16 @@ public class MessagingAutoConfiguration {
 
   @Bean
   @ConditionalOnMissingBean
-  OutboxWriter outboxWriter(OutboxRepository repository, JsonMapper json, Clock clock) {
-    return new JdbcOutboxWriter(repository, json, clock);
+  OutboxWriter outboxWriter(
+      OutboxRepository repository,
+      JsonMapper json,
+      Clock clock,
+      ObjectProvider<MeterRegistry> meters) {
+    return new JdbcOutboxWriter(repository, json, clock, registry(meters));
+  }
+
+  static MeterRegistry registry(ObjectProvider<MeterRegistry> meters) {
+    return meters.getIfAvailable(() -> Metrics.globalRegistry);
   }
 
   /** The consuming side. Nested so ONE property switches the relay and its schedule together. */
@@ -63,8 +77,15 @@ public class MessagingAutoConfiguration {
         OutboxRepository repository,
         List<OutboxHandler> handlers,
         OutboxProperties settings,
-        Clock clock) {
-      return new OutboxRelay(repository, handlers, settings, clock);
+        Clock clock,
+        ObjectProvider<MeterRegistry> meters) {
+      return new OutboxRelay(repository, handlers, settings, clock, registry(meters));
+    }
+
+    /** Backlog gauges live with the relay: the process that owes the delivery reports the debt. */
+    @Bean
+    OutboxBacklogMetrics outboxBacklogMetrics(OutboxRepository repository, Clock clock) {
+      return new OutboxBacklogMetrics(repository, clock);
     }
 
     @Bean

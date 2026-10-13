@@ -11,5 +11,6 @@ Priority marks: **⭐⭐⭐** must know · **⭐⭐** use daily · **⭐** good 
 | 02 | The JVM in containers: cgroup awareness, `MaxRAMPercentage` + non-heap budget, the Serial-GC surprise, JVM OOM vs kernel OOM kill, Java 25 AOT cache (12.5 → 7 s) | [02-jvm-in-containers.md](02-jvm-in-containers.md) | `backend/Dockerfile` | D1.3 | ✅ |
 | 03 | Runtime hardening: memory/swap/CPU/pids limits, restart policies, read-only FS + tmpfs, capabilities, secrets as files (`configtree`), log rotation, graceful stop; the Compose → Kubernetes mapping | [03-compose-hardening.md](03-compose-hardening.md) | `compose.yaml`, `Makefile`, api `application.yaml` | D1.4 | ✅ |
 | 04 | CI/CD: GHCR publishing (immutable tags, least-privilege tokens, push-after-scan), tag-driven releases, SBOM + signing, quality gates, branch protection, e2e | [04-ci-cd-pipeline.md](04-ci-cd-pipeline.md) | `.github/workflows/` | D2 | ✅ |
+| 05 | Observability: RED/USE, cardinality, histograms vs percentiles, metrics that tell the truth (count on commit, gauges for silent failure); later dashboards as code, tracing through the outbox, logs, SLO burn-rate alerts | [05-observability.md](05-observability.md) | `messaging/…/outbox/`, `worker/…/pipeline/job/`, `application.yaml` (`management.*`) | D3 | 🔨 |
 
 **Try it:** `make images` builds all three images · `make scan` runs Trivy on them.

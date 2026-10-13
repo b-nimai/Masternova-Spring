@@ -125,4 +125,20 @@ class JdbcOutboxRepository implements OutboxRepository {
         .list();
     return counts;
   }
+
+  @Override
+  public Backlog backlog() {
+    return jdbc.sql(
+            """
+            SELECT count(*) AS size, min(occurred_at) AS oldest
+              FROM outbox_message
+             WHERE status IN ('PENDING', 'PROCESSING')
+            """)
+        .query(
+            (rs, row) -> {
+              Timestamp oldest = rs.getTimestamp("oldest");
+              return new Backlog(rs.getLong("size"), oldest == null ? null : oldest.toInstant());
+            })
+        .single();
+  }
 }

@@ -38,6 +38,17 @@ interface OutboxRepository {
 
   void markDead(UUID id, String error);
 
-  /** Row counts per status — for metrics (D3) and tests. */
+  /** Row counts per status — for tests (a full scan: never on a scrape path). */
   Map<String, Long> countByStatus();
+
+  /**
+   * What the relay still owes: rows not yet delivered (PENDING or PROCESSING) and when the oldest
+   * of them happened. Served by the partial due-index, so it stays cheap enough for every scrape.
+   */
+  Backlog backlog();
+
+  /**
+   * @param oldest {@code null} when nothing is owed
+   */
+  record Backlog(long size, Instant oldest) {}
 }

@@ -68,6 +68,17 @@ class JobRepositoryIT {
   }
 
   @Test
+  void theQueueCountsDuePendingJobsOnly() {
+    UUID asset = assets.uploadedAsset();
+    jobs.enqueue(JobSpec.of(asset, JobType.PROBE));
+    jobs.enqueue(JobSpec.of(asset, JobType.THUMBNAILS));
+    assertThat(jobs.countDue()).isEqualTo(2);
+
+    jobs.claim(1, LEASE, "w1"); // running now: no longer queued
+    assertThat(jobs.countDue()).isEqualTo(1);
+  }
+
+  @Test
   void concurrentWorkersNeverClaimTheSameJob() throws Exception {
     UUID asset = assets.uploadedAsset();
     for (String rung : List.of("240p", "360p", "480p", "720p", "1080p", "1440p")) {

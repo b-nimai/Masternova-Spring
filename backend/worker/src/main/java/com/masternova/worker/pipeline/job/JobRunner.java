@@ -3,8 +3,11 @@ package com.masternova.worker.pipeline.job;
 import com.masternova.worker.pipeline.PipelineProperties;
 import com.masternova.worker.pipeline.PipelineStore;
 import com.masternova.worker.pipeline.ffmpeg.MediaToolException;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import java.time.Clock;
 import java.time.Duration;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
@@ -24,6 +27,9 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>failure: permanent (the input) → DEAD at once, asset FAILED; temporary → back to PENDING
  *       with backoff (30 s × 4ⁿ ± 20 %) until {@code max-attempts}, then DEAD.
  * </ul>
+ *
+ * <p>Every run is one {@code pipeline.job} observation: a timer by job type and outcome (the
+ * transcode-duration metric) and, with tracing on, a span.
  */
 @Component
 public class JobRunner {
@@ -37,6 +43,7 @@ public class JobRunner {
   private final PipelineProperties props;
   private final Clock clock;
   private final ProgressPublisher publisher;
+  private final ObservationRegistry observations;
   private volatile boolean shuttingDown;
 
   JobRunner(
@@ -46,7 +53,8 @@ public class JobRunner {
       TransactionTemplate tx,
       PipelineProperties props,
       Clock clock,
-      ProgressPublisher publisher) {
+      ProgressPublisher publisher,
+      ObservationRegistry observations) {
     this.registry = registry;
     this.jobs = jobs;
     this.store = store;
@@ -54,31 +62,63 @@ public class JobRunner {
     this.props = props;
     this.clock = clock;
     this.publisher = publisher;
+    this.observations = observations;
+  }
+
+  /** How a run ended — the {@code outcome} tag of {@code pipeline.job}. */
+  enum Outcome {
+    DONE,
+    LOST_LEASE,
+    RETRY,
+    DEAD,
+    RELEASED;
+
+    String tag() {
+      return name().toLowerCase(Locale.ROOT);
+    }
   }
 
   public void execute(Job job, String workerId) {
-    try {
-      JobProcessor.Completion completion = runWithHeartbeat(job, workerId);
-      tx.executeWithoutResult(
-          status -> {
-            store.lockAsset(job.assetId()); // ⭐ siblings finishing at once serialise here
-            if (!jobs.complete(job.id(), workerId)) {
-              log.warn("job {} finished after losing its lease; its rerun owns it now", job.id());
-              return;
-            }
-            completion.apply(store).forEach(jobs::enqueue);
-          });
+    // ⭐ low cardinality (type, outcome) → metric tags; high cardinality (ids) → span only
+    Observation observation =
+        Observation.createNotStarted("pipeline.job", observations)
+            .lowCardinalityKeyValue("job.type", job.type().name())
+            .highCardinalityKeyValue("asset.id", job.assetId().toString())
+            .highCardinalityKeyValue("job.attempt", Integer.toString(job.attempts()))
+            .start();
+    Outcome outcome = Outcome.DONE;
+    try (Observation.Scope scope = observation.openScope()) {
+      outcome = run(job, workerId);
     } catch (RuntimeException e) {
+      observation.error(e);
       if (shuttingDown) {
         // ⭐ our deploy / scale-in interrupted it, whatever step it was in (ffmpeg, an upload…):
         //    not the media's fault — give it back uncounted, due now
         jobs.release(job.id(), workerId);
+        outcome = Outcome.RELEASED;
       } else {
-        fail(job, workerId, e);
+        outcome = fail(job, workerId, e);
       }
     } finally {
+      observation.lowCardinalityKeyValue("outcome", outcome.tag()).stop();
       publisher.changed(job); // after the commit: subscribers re-read the asset
     }
+  }
+
+  private Outcome run(Job job, String workerId) {
+    JobProcessor.Completion completion = runWithHeartbeat(job, workerId);
+    Boolean completed =
+        tx.execute(
+            status -> {
+              store.lockAsset(job.assetId()); // ⭐ siblings finishing at once serialise here
+              if (!jobs.complete(job.id(), workerId)) {
+                log.warn("job {} finished after losing its lease; its rerun owns it now", job.id());
+                return false;
+              }
+              completion.apply(store).forEach(jobs::enqueue);
+              return true;
+            });
+    return Boolean.TRUE.equals(completed) ? Outcome.DONE : Outcome.LOST_LEASE;
   }
 
   /** The processor's work, with the lease kept alive meanwhile — stopped on EVERY exit path. */
@@ -133,7 +173,7 @@ public class JobRunner {
     }
   }
 
-  private void fail(Job job, String workerId, RuntimeException e) {
+  private Outcome fail(Job job, String workerId, RuntimeException e) {
     boolean permanent = e instanceof MediaToolException m && m.permanent();
     String error = e.getClass().getSimpleName() + ": " + e.getMessage();
     if (permanent || job.attempts() >= props.maxAttempts()) {
@@ -144,12 +184,13 @@ public class JobRunner {
               store.markFailed(job.assetId(), permanent ? "MEDIA_UNREADABLE" : "TRANSCODE_FAILED");
             }
           });
-      return;
+      return Outcome.DEAD;
     }
     Duration delay = backoff(job.attempts());
     log.warn(
         "job {} failed (attempt {}), retrying in {}: {}", job.id(), job.attempts(), delay, error);
     jobs.reschedule(job.id(), workerId, clock.instant().plus(delay), error);
+    return Outcome.RETRY;
   }
 
   /** 30 s, 2 m, 8 m, 32 m … ± 20 % jitter, so a storage outage doesn't retry every job at once. */

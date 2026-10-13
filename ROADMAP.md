@@ -122,7 +122,7 @@ Phases are listed **in the order you do them**.
 | 8 | [5 — Catalog](#phase-5--catalog) | 9 | 9 | 20 h | ~20.5 h | ✅ |
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 8 | 22 h | ~21 h | ✅ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
-| 11 | [D3 — Observability](#phase-d3--observability) | 5 | 0 | 12 h | — | ☐ |
+| 11 | [D3 — Observability](#phase-d3--observability) | 5 | 1 | 12 h | ~2.5 h | 🔨 |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 0 | 18 h | — | ☐ |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 0 | 28 h | — | ☐ |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
@@ -357,7 +357,7 @@ with alerts that mean something.
 
 | # | Task | DevOps concept | Est | Status | Date |
 |---|---|---|---|---|---|
-| D3.1 | Micrometer → Prometheus (`/actuator/prometheus`), custom metrics (orders, transcode duration, outbox lag) | RED/USE metrics, cardinality | 2.5 h | ☐ | |
+| D3.1 | Micrometer → Prometheus: `micrometer-registry-prometheus` in both apps, `/actuator/prometheus` (public on the app port; nginx only forwards `/api/`), `application` tag on every series. HTTP latency as **9 chosen SLO buckets** incl. 300 ms (the full histogram measured ~54 buckets per uri × method × status series). Custom: `outbox.events.written{event.type}` (business facts, **counted after commit**; orders arrive with Phase 9's events, no new code), `outbox.messages{event.type,outcome}` + `outbox.delivery.lag` (commit → handled, 60 s SLO edge) in `OutboxRelay`, `OutboxBacklogMetrics` gauges (backlog + oldest age: a *stopped* relay still shows), `pipeline.job` **Observation** (timer by `job.type` × `outcome`; ids as high-cardinality → spans only) = the transcode duration, `JobPoller` as a `MeterBinder` (slots busy/total, queued). `TransactionalOutboxIT` (+3: rollback not counted, outcomes + 10 s lag, gauges see a backlog with no relay), `JobRunnerTest` (outcome tags), `JobPollerTest` (saturation), `JobRepositoryIT` (`countDue`), `PrometheusScrapeIT` + `WorkerApplicationIT` (`@AutoConfigureMetrics`: the real scrape). [DevOps note 05](patterns/devops/05-observability.md) §1–§2 | RED/USE metrics, cardinality | 2.5 h | ✅ | 2026-10-13 |
 | D3.2 | Grafana dashboards **provisioned as code** (JVM, HTTP, Hikari, pipeline); compose `observability` profile | dashboards-as-code | 2.5 h | ☐ | |
 | D3.3 | OpenTelemetry traces → Tempo; trace id in every log line; api → worker propagation through the outbox | distributed tracing, context propagation | 3 h | ☐ | |
 | D3.4 | Logs → Loki (Grafana Alloy); jump log ↔ trace | centralized logging | 1.5 h | ☐ | |

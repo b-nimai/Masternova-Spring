@@ -40,6 +40,11 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+		<!-- the relay's meters and observations (D3); the app decides where they go (Prometheus, OTLP) -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-core</artifactId>
+		</dependency>
 
 		<!-- tests: a minimal Boot app + real Postgres, Flyway running this module's own migration -->
 		<dependency>

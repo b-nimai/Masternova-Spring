@@ -1,6 +1,9 @@
 package com.masternova.worker.pipeline.job;
 
 import com.masternova.worker.pipeline.PipelineProperties;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.util.UUID;
@@ -15,10 +18,13 @@ import org.springframework.stereotype.Component;
  * Claims due jobs into FREE slots, one virtual thread per job. ⭐ Claims only what it can run now
  * ({@code slots} permits): a claimed-but-queued job would hold a lease it can't renew while it
  * waits — no different from a dead worker to everyone else.
+ *
+ * <p>It also reports its own saturation (busy slots of all slots, USE) and the queue it drains —
+ * the two numbers that say "add workers".
  */
 @Component
 @ConditionalOnBooleanProperty(name = "masternova.pipeline.enabled", matchIfMissing = true)
-class JobPoller implements AutoCloseable {
+class JobPoller implements AutoCloseable, MeterBinder {
 
   private final JobRepository jobs;
   private final JobRunner runner;
@@ -54,6 +60,19 @@ class JobPoller implements AutoCloseable {
             }
           });
     }
+  }
+
+  @Override
+  public void bindTo(MeterRegistry registry) {
+    Gauge.builder("pipeline.slots.busy", slots, s -> props.slots() - s.availablePermits())
+        .description("Pipeline jobs running in this worker now")
+        .register(registry);
+    Gauge.builder("pipeline.slots", props, PipelineProperties::slots)
+        .description("Pipeline jobs this worker may run at once")
+        .register(registry);
+    Gauge.builder("pipeline.jobs.queued", jobs, JobRepository::countDue)
+        .description("Pipeline jobs due and waiting for a free slot (all workers)")
+        .register(registry);
   }
 
   /**

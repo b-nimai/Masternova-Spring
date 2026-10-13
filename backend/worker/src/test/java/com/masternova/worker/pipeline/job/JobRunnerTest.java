@@ -16,6 +16,9 @@ import com.masternova.worker.MutableClock;
 import com.masternova.worker.pipeline.PipelineProperties;
 import com.masternova.worker.pipeline.PipelineStore;
 import com.masternova.worker.pipeline.ffmpeg.MediaToolException;
+import io.micrometer.core.instrument.observation.DefaultMeterObservationHandler;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.observation.ObservationRegistry;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,6 +41,13 @@ class JobRunnerTest {
   final MutableClock clock = new MutableClock();
   final UUID asset = UUID.randomUUID();
   final ProgressPublisher publisher = mock(ProgressPublisher.class);
+  final SimpleMeterRegistry meters = new SimpleMeterRegistry();
+  final ObservationRegistry observations = ObservationRegistry.create();
+
+  {
+    // what Boot wires in the app: every observation also becomes a timer
+    observations.observationConfig().observationHandler(new DefaultMeterObservationHandler(meters));
+  }
 
   PipelineProperties props(Duration heartbeat) {
     return new PipelineProperties(
@@ -89,7 +99,14 @@ class JobRunnerTest {
         new TransactionTemplate(mock(PlatformTransactionManager.class)),
         props(heartbeat),
         clock,
-        publisher);
+        publisher,
+        observations);
+  }
+
+  /** How many {@code pipeline.job} runs ended with this outcome. */
+  long runs(String outcome) {
+    var timer = meters.find("pipeline.job").tag("outcome", outcome).timer();
+    return timer == null ? 0 : timer.count();
   }
 
   Job probe(int attempt) {
@@ -108,6 +125,9 @@ class JobRunnerTest {
     verify(jobs).enqueue(JobSpec.of(asset, JobType.THUMBNAILS));
     verify(publisher).progress(job, 42); // live tick
     verify(publisher).changed(job); // after the commit
+    assertThat(
+            meters.get("pipeline.job").tags("job.type", "PROBE", "outcome", "done").timer().count())
+        .isEqualTo(1);
   }
 
   @Test
@@ -117,6 +137,7 @@ class JobRunnerTest {
     runner(() -> null, Duration.ofMinutes(1)).execute(probe(1), "w");
 
     verify(jobs, never()).enqueue(any());
+    assertThat(runs("lost_lease")).isEqualTo(1);
   }
 
   @Test
@@ -135,6 +156,13 @@ class JobRunnerTest {
     Duration delay = Duration.between(clock.instant(), runAfter.getValue());
     assertThat(delay).isBetween(Duration.ofSeconds(96), Duration.ofSeconds(144)); // 2 m ± 20 %
     verify(jobs, never()).bury(any(), any(), any());
+    assertThat(
+            meters
+                .get("pipeline.job")
+                .tags("outcome", "retry", "error", "StorageUnavailableException")
+                .timer()
+                .count())
+        .isEqualTo(1);
   }
 
   @Test
@@ -151,6 +179,7 @@ class JobRunnerTest {
     verify(store).markFailed(asset, "MEDIA_UNREADABLE");
     verify(jobs, never()).reschedule(any(), any(), any(), any());
     verify(publisher).changed(any()); // a failure is a change too
+    assertThat(runs("dead")).isEqualTo(1);
   }
 
   @Test
@@ -229,6 +258,7 @@ class JobRunnerTest {
     verify(jobs).release(job.id(), "w");
     verify(jobs, never()).reschedule(any(), any(), any(), any());
     verify(jobs, never()).bury(any(), any(), any());
+    assertThat(runs("released")).isEqualTo(1);
   }
 
   @Test

@@ -9,6 +9,8 @@ import com.masternova.messaging.OutboxMessage;
 import com.masternova.messaging.OutboxProperties;
 import com.masternova.messaging.OutboxWriter;
 import com.masternova.messaging.TestcontainersConfiguration;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -134,6 +136,12 @@ class TransactionalOutboxIT {
       return new MutableClock();
     }
 
+    /** The writer (auto-configured) and the relay (below) both report here. */
+    @Bean
+    SimpleMeterRegistry meterRegistry() {
+      return new SimpleMeterRegistry();
+    }
+
     @Bean
     FlakyHandler flakyHandler() {
       return new FlakyHandler();
@@ -150,8 +158,9 @@ class TransactionalOutboxIT {
         OutboxRepository repository,
         FlakyHandler handler,
         OutboxProperties settings,
-        MutableClock clock) {
-      return new OutboxRelay(repository, List.of(handler), settings, clock);
+        MutableClock clock,
+        MeterRegistry meters) {
+      return new OutboxRelay(repository, List.of(handler), settings, clock, meters);
     }
   }
 
@@ -161,9 +170,11 @@ class TransactionalOutboxIT {
   @Autowired FlakyHandler handler;
   @Autowired MutableClock clock;
   @Autowired JdbcClient jdbc;
+  @Autowired SimpleMeterRegistry meters;
 
   @BeforeEach
   void reset() {
+    meters.clear();
     jdbc.sql("DELETE FROM outbox_message").update();
     clock.reset();
     handler.received.clear();
@@ -295,5 +306,53 @@ class TransactionalOutboxIT {
     assertThat(relay.backoff(2)).isEqualTo(Duration.ofSeconds(20));
     assertThat(relay.backoff(3)).isEqualTo(Duration.ofSeconds(40));
     assertThat(relay.backoff(40)).isEqualTo(Duration.ofHours(1)); // capped at max-backoff
+  }
+
+  private double count(String name, String... tags) {
+    var counter = meters.find(name).tags(tags).counter();
+    return counter == null ? 0 : counter.count();
+  }
+
+  @Test
+  void onlyCommittedEventsAreCounted() {
+    courses.draft("m1");
+    assertThatThrownBy(() -> courses.draftThenFail("m2")).isInstanceOf(IllegalStateException.class);
+
+    // ⭐ the rolled-back event wrote no row — the metric agrees with the table
+    assertThat(count("outbox.events.written", "event.type", "test.course-drafted.v1")).isEqualTo(1);
+  }
+
+  @Test
+  void theRelayCountsOutcomesAndRecordsTheLagFromCommitToDelivery() {
+    handler.failuresLeft.set(1);
+    courses.draft("m3");
+
+    relay.relayOnce(); // attempt 1 fails
+    clock.advance(Duration.ofSeconds(10));
+    relay.relayOnce(); // attempt 2 delivers, 10 s after the commit
+
+    String type = "test.course-drafted.v1";
+    assertThat(count("outbox.messages", "event.type", type, "outcome", "retried")).isEqualTo(1);
+    assertThat(count("outbox.messages", "event.type", type, "outcome", "delivered")).isEqualTo(1);
+    var lag = meters.get("outbox.delivery.lag").tag("event.type", type).timer();
+    assertThat(lag.count()).isEqualTo(1);
+    assertThat(lag.totalTime(java.util.concurrent.TimeUnit.SECONDS)).isEqualTo(10);
+  }
+
+  @Test
+  void theBacklogGaugesSeeWhatIsOwedEvenWhenNoRelayRuns() {
+    var gauges = new OutboxBacklogMetrics(repository, clock);
+    gauges.bindTo(meters);
+    assertThat(meters.get("outbox.backlog").gauge().value()).isZero();
+    assertThat(meters.get("outbox.oldest.age").gauge().value()).isZero();
+
+    courses.draft("m4");
+    clock.advance(Duration.ofSeconds(90)); // … and no relay ever comes
+    courses.draft("m5");
+
+    assertThat(meters.get("outbox.backlog").gauge().value()).isEqualTo(2);
+    assertThat(meters.get("outbox.oldest.age").gauge().value()).isEqualTo(90);
+    relay.relayOnce();
+    assertThat(meters.get("outbox.backlog").gauge().value()).isZero();
   }
 }

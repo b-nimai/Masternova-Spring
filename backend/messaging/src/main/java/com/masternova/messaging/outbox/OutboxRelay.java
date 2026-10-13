@@ -5,6 +5,9 @@ import com.masternova.kernel.pattern.Pattern;
 import com.masternova.messaging.OutboxHandler;
 import com.masternova.messaging.OutboxMessage;
 import com.masternova.messaging.OutboxProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -33,7 +36,7 @@ public class OutboxRelay {
   private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
   private static final int MAX_ERROR_LENGTH = 1_000;
 
-  /** What one batch did — returned for tests and, later, metrics. */
+  /** What one batch did — returned for tests; the same numbers go to {@code outbox.messages}. */
   public record BatchResult(int delivered, int retried, int dead, int unhandled) {
     public int total() {
       return delivered + retried + dead + unhandled;
@@ -44,16 +47,19 @@ public class OutboxRelay {
   private final Map<String, OutboxHandler> handlersByType;
   private final OutboxProperties settings;
   private final Clock clock;
+  private final MeterRegistry meters;
 
   OutboxRelay(
       OutboxRepository repository,
       List<OutboxHandler> handlers,
       OutboxProperties settings,
-      Clock clock) {
+      Clock clock,
+      MeterRegistry meters) {
     this.repository = repository;
     this.handlersByType = index(handlers);
     this.settings = settings;
     this.clock = clock;
+    this.meters = meters;
   }
 
   /**
@@ -82,17 +88,21 @@ public class OutboxRelay {
       if (handler == null) {
         // no consumer in this process (yet) — nothing to deliver; done, not failed
         repository.markDone(message.id());
+        count(message, "unhandled");
         unhandled++;
         continue;
       }
       try {
         handler.handle(message);
         repository.markDone(message.id());
+        count(message, "delivered");
+        recordLag(message);
         delivered++;
       } catch (RuntimeException e) {
         String error = describe(e);
         if (message.attempts() >= settings.maxAttempts()) {
           repository.markDead(message.id(), error);
+          count(message, "dead");
           log.error(
               "Outbox message {} ({}) is DEAD after {} attempts: {}",
               message.id(),
@@ -103,6 +113,7 @@ public class OutboxRelay {
         } else {
           Duration delay = backoff(message.attempts());
           repository.reschedule(message.id(), clock.instant().plus(delay), error);
+          count(message, "retried");
           log.warn(
               "Outbox message {} ({}) failed attempt {}; retrying in {}",
               message.id(),
@@ -114,6 +125,29 @@ public class OutboxRelay {
       }
     }
     return new BatchResult(delivered, retried, dead, unhandled);
+  }
+
+  // ⭐ Tags are the event TYPE (a closed set, ~10) and the outcome (4) — never an id: every distinct
+  //    tag value is a new time series in Prometheus, kept for weeks (cardinality, devops note 05).
+  private void count(OutboxMessage message, String outcome) {
+    Counter.builder("outbox.messages")
+        .description("Outbox messages the relay finished an attempt on, by outcome")
+        .tag("event.type", message.type())
+        .tag("outcome", outcome)
+        .register(meters)
+        .increment();
+  }
+
+  /**
+   * End-to-end lag: the business change committed → its handler finished. The SLO is on this; its
+   * buckets are the app's choice ({@code management.metrics.distribution.*}).
+   */
+  private void recordLag(OutboxMessage message) {
+    Timer.builder("outbox.delivery.lag")
+        .description("Time from the event's commit to its successful delivery")
+        .tag("event.type", message.type())
+        .register(meters)
+        .record(Duration.between(message.occurredAt(), clock.instant()));
   }
 
   /** ⭐ Exponential backoff: base × 2^(attempt−1), capped — 1s, 2s, 4s, 8s … up to maxBackoff. */
