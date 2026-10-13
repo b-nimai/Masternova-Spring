@@ -185,7 +185,7 @@ jobs:
         id: day
         run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - name: Build ${{ matrix.name }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           build-args: |
@@ -215,7 +215,7 @@ jobs:
       - name: Push ${{ matrix.name }}
         if: env.PUBLISH == 'true'
         id: push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           build-args: |
@@ -254,7 +254,7 @@ jobs:
       - uses: docker/setup-buildx-action@v4
       # The images job just built these; with the same inputs every layer comes from its cache.
       - name: Load api image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: backend
           build-args: |
@@ -265,7 +265,7 @@ jobs:
           load: true
           cache-from: type=gha,scope=api
       - name: Load worker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: backend
           build-args: |
@@ -277,7 +277,7 @@ jobs:
           load: true
           cache-from: type=gha,scope=worker
       - name: Load web image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: frontend
           build-args: |
