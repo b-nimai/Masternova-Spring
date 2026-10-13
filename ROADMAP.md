@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-13 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ on `phase-7/media-pipeline` (PR pending).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-13 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -548,6 +548,7 @@ Each line is a sentence you can say *and* a file or test you can show.
 | App packages are `com.masternova.api.*` / `com.masternova.worker.*` (not `com.masternova.*`) | Keeps Modulith from treating the shared `kernel` package as an api module |
 | Phase 6 order: 6.1 → 6.3 → 6.2 → 6.6 → 6.4 → 6.5 → 6.7 → 6.8 | the state machine's gated edges need the gate (6.3); every content write and command needs the versioned access (6.6) |
 | Phase 7 runs on JDK 26 locally (Homebrew), CI stays on Temurin 25 | SDKMAN's Temurin 25 was gone from the dev machine on 2026-10-13; the build targets `release 25`, so the bytecode is identical |
+| Phase 7 PR CI caught 3 things local runs couldn't | a storage test borrowed the dev machine's AWS credentials (now static keys); CodeQL `java/xss` on the playlist routes, which echo the ticket (now `produces` HLS only + url-encoded ticket); Trivy found libtiff CVE-2026-4775 in the web image because CI served `apk upgrade` from a stale cached layer (now `APK_REFRESH` = the UTC day busts it daily) |
 | Phase 7 order: 7.1 → 7.2 → 7.3 → 7.5 → 7.4 → … | the job processors (7.4) run ffmpeg, so its builder, ladder and runner (7.5) came first |
 | 5.3 done before 5.2 | the entities embed `Money` and `LectureDuration`, so the value objects came first |
 | Phase 7 review (`code-review` on the whole branch) found 10 bugs, all fixed with a regression test: a JVM `Error` left the heartbeat holding a lease forever (interrupt in `finally`); a job that OOM-kills its worker was reclaimed forever (`buryAbandoned` at max attempts); a deploy's interruption counted as a failed attempt (`JobInterruptedException` → `release`, uncounted); startup cleanup judged a running job by its dir's own mtime (newest change in the tree); a source < 16 px or 0 high made an invalid rung after 5 encodes (permanent at probe; rung names `[0-9]{2,4}p`); the sweeper's two updates weren't atomic (one transaction); expired presigned part urls were retried blindly (403 → fresh url from the api); a 409 on complete kept the dead upload for resume (forgotten); the progress bar ignored live ticks; a server-closed stream (30 min) left the widget stuck (reconnect) | review findings |
