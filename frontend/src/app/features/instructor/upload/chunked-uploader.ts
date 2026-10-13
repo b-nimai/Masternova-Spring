@@ -14,6 +14,7 @@ import {
   scan,
   switchMap,
   tap,
+  throwError,
   timer,
 } from 'rxjs';
 import { MediaApi, UploadResponse } from '../../../core/api/media-api';
@@ -53,7 +54,13 @@ export class ChunkedUploader {
           this.sendParts(file, plan),
           of<UploadProgress>({ phase: 'completing', assetId: plan.assetId }),
           defer(() => this.api.complete(plan.uploadId)).pipe(
-            tap(() => forget(key)),
+            tap({
+              next: () => forget(key),
+              // a 409 (expired, aborted) means this upload is over: the next pick starts fresh
+              error: (e: unknown) => {
+                if (e instanceof HttpErrorResponse && e.status === 409) forget(key);
+              },
+            }),
             map((): UploadProgress => ({ phase: 'done', assetId: plan.assetId })),
           ),
         ),
@@ -115,12 +122,18 @@ export class ChunkedUploader {
     );
   }
 
-  /** One part: the bytes of its slice, with its own retries. Emits bytes sent so far. */
+  /**
+   * One part: the bytes of its slice, with its own retries. Emits bytes sent so far.
+   *
+   * ⭐ A 403 means the presigned url EXPIRED (they live an hour; a 10 GiB upload takes longer):
+   *    retrying it is pointless, so ask the api for a fresh one, once (found in review).
+   */
   private putPart(
     file: File,
     plan: UploadResponse,
     number: number,
     url: string,
+    refreshed = false,
   ): Observable<number> {
     const start = (number - 1) * plan.partSizeBytes;
     const blob = file.slice(start, Math.min(start + plan.partSizeBytes, file.size));
@@ -129,9 +142,26 @@ export class ChunkedUploader {
     ).pipe(
       filter((e) => e.type === HttpEventType.UploadProgress || e.type === HttpEventType.Response),
       map((e) => (e.type === HttpEventType.UploadProgress ? e.loaded : blob.size)),
-      retry({ count: PART_RETRIES, delay: (_e, attempt) => timer(250 * 2 ** attempt) }),
+      retry({
+        count: PART_RETRIES,
+        delay: (e, attempt) => (isExpired(e) ? throwError(() => e) : timer(250 * 2 ** attempt)),
+      }),
+      catchError((e: unknown) => {
+        if (refreshed || !isExpired(e)) throw e;
+        return this.api.upload(plan.uploadId).pipe(
+          switchMap((fresh) => {
+            const part = fresh.parts.find((p) => p.number === number);
+            // not listed as missing: storage already has it (an earlier attempt landed)
+            return part ? this.putPart(file, plan, number, part.url, true) : of(blob.size);
+          }),
+        );
+      }),
     );
   }
+}
+
+function isExpired(e: unknown): boolean {
+  return e instanceof HttpErrorResponse && e.status === 403;
 }
 
 /** Which file this is, across reloads: the same file picked again resumes. */

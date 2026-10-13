@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
 
 /**
  * A SIGKILL skips the template's {@code finally}, so a job's work directory can outlive it. On
- * startup, remove job directories untouched for longer than a lease — a running job (another
- * process on the same host) keeps touching its own.
+ * startup, remove job directories in which nothing changed for longer than a lease — a running job
+ * (another process on the same host) keeps writing files somewhere under its own.
  */
 @Component
 class WorkDirCleanup {
@@ -38,11 +38,28 @@ class WorkDirCleanup {
     FileTime cutoff = FileTime.from(clock.instant().minus(props.lease()));
     try (Stream<Path> dirs = Files.list(root)) {
       for (Path dir : dirs.toList()) {
-        if (Files.getLastModifiedTime(dir).compareTo(cutoff) < 0) {
+        if (newestChange(dir).compareTo(cutoff) < 0) {
           log.info("removing a crashed job's work directory {}", dir);
           deleteTree(dir);
         }
       }
+    }
+  }
+
+  /**
+   * ⭐ The newest change ANYWHERE under the job's directory: ffmpeg writes into {@code <rung>/}, so
+   * the job directory's own mtime stops moving while a transcode runs (found in review).
+   */
+  static FileTime newestChange(Path dir) throws IOException {
+    try (Stream<Path> paths = Files.walk(dir)) {
+      FileTime newest = Files.getLastModifiedTime(dir);
+      for (Path p : paths.toList()) {
+        FileTime t = Files.getLastModifiedTime(p);
+        if (t.compareTo(newest) > 0) {
+          newest = t;
+        }
+      }
+      return newest;
     }
   }
 

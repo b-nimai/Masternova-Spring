@@ -16,6 +16,9 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class Ffprobe {
 
+  /** Smaller than this on either side isn't a lecture video (and makes no valid rung name). */
+  static final int MIN_SIDE = 16;
+
   private final ProcessRunner runner;
   private final JsonMapper json;
   private final String ffprobe;
@@ -61,12 +64,18 @@ public class Ffprobe {
     if (video == null) {
       throw new MediaToolException("the file has no video stream", true); // ⭐ permanent
     }
+    int width = video.path("width").asInt(0);
+    int height = video.path("height").asInt(0);
+    if (width < MIN_SIDE || height < MIN_SIDE) {
+      // ⭐ permanent: nothing playable to make of it (found in review: height 0 became a '2p' rung
+      //    that failed only after five full encodes)
+      throw new MediaToolException("the video is too small: " + width + "x" + height, true);
+    }
     double duration = root.path("format").path("duration").asDouble(0);
     if (duration <= 0) {
       throw new MediaToolException("the file has no duration", true);
     }
-    return new SourceInfo(
-        duration, video.path("width").asInt(0), video.path("height").asInt(0), audio);
+    return new SourceInfo(duration, width, height, audio);
   }
 
   /** An MP3/M4A's album art is a one-frame "video" stream; it isn't the video we want. */

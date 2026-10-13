@@ -13,7 +13,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { Subscription } from 'rxjs';
+import { Subscription, timer } from 'rxjs';
 import { MediaApi } from '../../../../core/api/media-api';
 import { asProblem } from '../../../../core/api/problem';
 import { HlsPlayer } from '../../../../shared/hls-player/hls-player';
@@ -161,6 +161,17 @@ export class LectureVideo {
         },
         error: () =>
           this.state.set({ kind: 'processing', percent: 0, step: 'Reconnect to see progress' }),
+        // ⭐ the server also closes a stream that has been open a long time (30 min): if the asset
+        //    isn't finished yet, open a new one (found in review)
+        complete: () => {
+          if (this.state().kind === 'processing' && this.assetId() === assetId) {
+            timer(1000)
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe(() => {
+                if (this.assetId() === assetId) this.watch(assetId);
+              });
+          }
+        },
       });
   }
 }

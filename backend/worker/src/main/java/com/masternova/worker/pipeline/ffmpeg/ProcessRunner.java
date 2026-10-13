@@ -86,7 +86,7 @@ public class ProcessRunner {
     } catch (InterruptedException e) {
       process.destroyForcibly();
       Thread.currentThread().interrupt();
-      throw new MediaToolException(command.getFirst() + " was interrupted", false);
+      throw new JobInterruptedException(command.getFirst() + " was interrupted");
     }
     if (process.exitValue() != 0) {
       String tail = tail(stderr);

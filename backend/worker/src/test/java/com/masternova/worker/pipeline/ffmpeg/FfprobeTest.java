@@ -46,6 +46,18 @@ class FfprobeTest {
   }
 
   @Test
+  void aVideoWithNoUsableSizeFailsAtOnce() {
+    assertThatThrownBy(
+            () ->
+                ffprobe.parse(
+                    """
+                    {"streams": [{"codec_type": "video", "width": 0, "height": 0}],
+                     "format": {"duration": "10"}}
+                    """))
+        .isInstanceOfSatisfying(MediaToolException.class, e -> assertThat(e.permanent()).isTrue());
+  }
+
+  @Test
   void aSilentVideoHasNoAudio() {
     SourceInfo info =
         ffprobe.parse(

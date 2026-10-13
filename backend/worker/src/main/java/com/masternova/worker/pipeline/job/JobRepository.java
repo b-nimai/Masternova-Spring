@@ -96,6 +96,45 @@ public class JobRepository {
         == 1;
   }
 
+  /** RUNNING → PENDING with the attempt NOT counted: this process is shutting down. */
+  public boolean release(UUID jobId, String workerId) {
+    return jdbc.sql(
+                """
+                UPDATE pipeline_job
+                   SET status = 'PENDING', attempts = attempts - 1, next_attempt_at = :now,
+                       worker_id = NULL, updated_at = :now
+                 WHERE id = :id AND worker_id = :worker AND status = 'RUNNING'
+                """)
+            .param("now", Timestamp.from(clock.instant()))
+            .param("id", jobId)
+            .param("worker", workerId)
+            .update()
+        == 1;
+  }
+
+  /**
+   * ⭐ A job whose worker DIED (lease lapsed) on its last allowed attempt is buried, not claimed
+   * again: a source that OOM-kills every worker would otherwise take them down forever, because the
+   * attempt limit in {@code JobRunner.fail} never runs after a SIGKILL (found in review).
+   *
+   * @return the assets of the jobs buried
+   */
+  public List<UUID> buryAbandoned(int maxAttempts) {
+    Instant now = clock.instant();
+    return jdbc.sql(
+            """
+            UPDATE pipeline_job
+               SET status = 'DEAD', updated_at = :now,
+                   last_error = 'the worker was lost on every one of ' || attempts || ' attempts'
+             WHERE status = 'RUNNING' AND next_attempt_at <= :now AND attempts >= :max
+            RETURNING asset_id
+            """)
+        .param("now", Timestamp.from(now))
+        .param("max", maxAttempts)
+        .query(UUID.class)
+        .list();
+  }
+
   /** RUNNING → DONE, only while still holding the lease. */
   public boolean complete(UUID jobId, String workerId) {
     return finish(jobId, workerId, "DONE", null, clock.instant(), 100);

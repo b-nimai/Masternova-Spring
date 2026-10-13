@@ -2,6 +2,7 @@ package com.masternova.worker.pipeline.job;
 
 import com.masternova.worker.pipeline.PipelineProperties;
 import com.masternova.worker.pipeline.PipelineStore;
+import com.masternova.worker.pipeline.ffmpeg.JobInterruptedException;
 import com.masternova.worker.pipeline.ffmpeg.MediaToolException;
 import java.time.Clock;
 import java.time.Duration;
@@ -79,6 +80,9 @@ public class JobRunner {
             }
             completion.apply(store).forEach(jobs::enqueue);
           });
+    } catch (JobInterruptedException e) {
+      // ⭐ our shutdown, not the media's fault: give the job back as it was, due now
+      jobs.release(job.id(), workerId);
     } catch (RuntimeException e) {
       heartbeat.interrupt();
       fail(job, workerId, e);

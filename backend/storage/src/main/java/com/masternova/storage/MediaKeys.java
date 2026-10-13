@@ -44,7 +44,7 @@ public final class MediaKeys {
   }
 
   public static String rung(UUID assetId, String rung) {
-    if (!rung.matches("[0-9]{3,4}p")) {
+    if (!rung.matches("[0-9]{2,4}p")) {
       throw new IllegalArgumentException("rung must look like 720p: " + rung);
     }
     return hls(assetId) + rung + "/";

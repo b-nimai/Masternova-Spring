@@ -1,6 +1,7 @@
 package com.masternova.worker.pipeline.job;
 
 import com.masternova.worker.pipeline.PipelineProperties;
+import com.masternova.worker.pipeline.PipelineStore;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.util.UUID;
@@ -22,14 +23,16 @@ class JobPoller implements AutoCloseable {
 
   private final JobRepository jobs;
   private final JobRunner runner;
+  private final PipelineStore store;
   private final PipelineProperties props;
   private final Semaphore slots;
   private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
   private final String workerId = workerId();
 
-  JobPoller(JobRepository jobs, JobRunner runner, PipelineProperties props) {
+  JobPoller(JobRepository jobs, JobRunner runner, PipelineStore store, PipelineProperties props) {
     this.jobs = jobs;
     this.runner = runner;
+    this.store = store;
     this.props = props;
     this.slots = new Semaphore(props.slots());
   }
@@ -38,6 +41,9 @@ class JobPoller implements AutoCloseable {
       fixedDelayString = "${masternova.pipeline.poll-interval:2s}",
       initialDelayString = "${masternova.pipeline.poll-interval:2s}")
   void poll() {
+    for (UUID asset : jobs.buryAbandoned(props.maxAttempts())) {
+      store.markFailed(asset, "TRANSCODE_FAILED");
+    }
     int free = slots.availablePermits();
     if (free == 0) {
       return;
@@ -55,7 +61,10 @@ class JobPoller implements AutoCloseable {
     }
   }
 
-  /** On shutdown running ffmpeg children are interrupted (killed); their leases lapse → rerun. */
+  /**
+   * On shutdown, running jobs are interrupted (their ffmpeg killed) and handed back uncounted
+   * ({@code JobRunner}: {@code release}); another worker picks them up at once.
+   */
   @Override
   public void close() {
     executor.shutdownNow();

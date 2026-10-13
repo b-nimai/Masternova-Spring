@@ -89,6 +89,24 @@ describe('LectureVideo', () => {
     expect((fixture.nativeElement as HTMLElement).querySelector('app-hls-player')).toBeTruthy();
   });
 
+  it('reconnects when the server closes the stream before the asset is finished', async () => {
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('assetId', 'a1');
+      await fixture.whenStable();
+      http
+        .expectOne('/api/v1/media/assets/a1/stream')
+        .flush(
+          'event:snapshot\ndata:{"status":"PROCESSING","percent":30,"failureCode":null,"jobs":[]}\n\n',
+        );
+
+      vi.advanceTimersByTime(1100);
+      http.expectOne('/api/v1/media/assets/a1/stream'); // ⭐ a new stream, not a stuck widget
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('explains a failed asset in words, not codes', async () => {
     fixture.componentRef.setInput('assetId', 'a2');
     await fixture.whenStable();

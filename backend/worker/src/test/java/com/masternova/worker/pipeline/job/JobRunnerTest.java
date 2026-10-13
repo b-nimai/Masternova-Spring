@@ -214,6 +214,22 @@ class JobRunnerTest {
   }
 
   @Test
+  void anInterruptionByOurOwnShutdownHandsTheJobBackUncounted() {
+    Job job = probe(2);
+
+    runner(
+            () -> {
+              throw new com.masternova.worker.pipeline.ffmpeg.JobInterruptedException("deploy");
+            },
+            Duration.ofMinutes(1))
+        .execute(job, "w");
+
+    verify(jobs).release(job.id(), "w"); // ⭐ not reschedule (an attempt + backoff), not bury
+    verify(jobs, never()).reschedule(any(), any(), any(), any());
+    verify(jobs, never()).bury(any(), any(), any());
+  }
+
+  @Test
   void backoffQuadruplesPerAttempt() {
     JobRunner runner = runner(() -> null, Duration.ofMinutes(1));
     assertThat(runner.backoff(1)).isBetween(Duration.ofSeconds(24), Duration.ofSeconds(36));

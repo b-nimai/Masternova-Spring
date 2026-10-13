@@ -81,6 +81,31 @@ describe('ChunkedUploader', () => {
     expect(seen.at(-1)?.phase).toBe('done');
   });
 
+  it('an expired part url is replaced by a fresh one from the api, not retried', () => {
+    uploader.upload(file).subscribe((p) => seen.push(p));
+    http.expectOne('/api/v1/media/uploads').flush(plan([1]));
+
+    http.expectOne('http://storage/part-1').flush('', { status: 403, statusText: 'Expired' });
+    const fresh = http.expectOne('/api/v1/media/uploads/u1'); // no blind retry of the dead url
+    fresh.flush({ ...plan([1]), parts: [{ number: 1, url: 'http://storage/part-1-fresh' }] });
+    http.expectOne('http://storage/part-1-fresh').flush('');
+    http.expectOne('/api/v1/media/uploads/u1/complete').flush(plan([]));
+
+    expect(seen.at(-1)?.phase).toBe('done');
+  });
+
+  it('a complete refused with 409 forgets the upload, so the next pick starts fresh', () => {
+    let failed = false;
+    uploader.upload(file).subscribe({ error: () => (failed = true) });
+    http.expectOne('/api/v1/media/uploads').flush(plan([]));
+    http
+      .expectOne('/api/v1/media/uploads/u1/complete')
+      .flush({ code: 'UPLOAD_EXPIRED' }, { status: 409, statusText: 'Conflict' });
+
+    expect(failed).toBe(true);
+    expect(localStorage.getItem(fingerprint(file))).toBeNull();
+  });
+
   it('resumes the same file from what storage already holds', () => {
     localStorage.setItem(fingerprint(file), 'u1');
 

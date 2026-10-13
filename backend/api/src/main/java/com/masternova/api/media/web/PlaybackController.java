@@ -42,7 +42,7 @@ class PlaybackController {
     return playlist(playback.master(id, ticket));
   }
 
-  @GetMapping("/hls/{rung:[0-9]{3,4}p}/index.m3u8")
+  @GetMapping("/hls/{rung:[0-9]{2,4}p}/index.m3u8")
   ResponseEntity<String> rung(
       @PathVariable UUID id, @PathVariable String rung, @RequestParam("t") String ticket) {
     return playlist(playback.rung(id, rung, ticket));
