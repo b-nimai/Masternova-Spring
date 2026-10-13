@@ -1,0 +1,23 @@
+# Prometheus for the local stack (compose profile `observability`, `make obs`). DevOps note 05 §2–§3.
+#
+# ⭐ One target per app, through the HOST's port: `make api` (from source) listens there, and so does
+#    the `make stack` container (published 8080/8090). Listing both `api:8080` and the host would
+#    scrape the container twice in stack mode and double every sum().
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s # how often the rules below run
+
+scrape_configs:
+  - job_name: api
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+
+  - job_name: worker
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['host.docker.internal:8090']
+
+  - job_name: prometheus # its own health: rule evaluation failures, TSDB size
+    static_configs:
+      - targets: ['localhost:9090']

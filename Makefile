@@ -9,10 +9,10 @@ up: ## Start infra (postgres, redis, mailpit, SeaweedFS S3 + its bucket/CORS ini
 	docker compose up -d --wait postgres redis mailpit seaweedfs media-init
 
 down: ## Stop everything (volumes kept)
-	docker compose --profile app down
+	docker compose --profile app --profile observability down
 
 nuke: ## Stop everything AND delete volumes (fresh database)
-	docker compose --profile app down -v
+	docker compose --profile app --profile observability down -v
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
@@ -23,6 +23,13 @@ secrets: ## Generate the local secret files the container stack mounts (gitignor
 
 stack: secrets ## Build images and run the whole app in containers (web on :8081)
 	docker compose --profile app up -d --build --wait postgres redis mailpit api worker web
+
+obs: ## Start observability: Prometheus :9091, Grafana :3001 (works with `make stack` or `make api`/`worker`)
+	docker compose --profile observability up -d --wait prometheus grafana
+
+obs-check: ## Validate the observability config (promtool) — also runs in CI
+	docker run --rm --entrypoint promtool -v $(CURDIR)/deploy/observability/prometheus:/etc/prometheus:ro \
+	  prom/prometheus:v3.15.0 check config /etc/prometheus/prometheus.yml
 
 api: ## Run the api from source (:8080)
 	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && ./mvnw -pl api spring-boot:run
@@ -68,4 +75,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack api worker web test format images scan e2e release
+.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e release

@@ -1,0 +1,14 @@
+# Datasources as code: Grafana reads this at startup. Fixed `uid`s let dashboards (and the
+# cross-links between traces, logs and metrics) refer to a datasource without knowing its id.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy # Grafana's server queries it, the browser never talks to Prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s # = the scrape interval: $__rate_interval is never shorter than 4 scrapes

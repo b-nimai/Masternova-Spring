@@ -44,6 +44,7 @@ Or everything in containers:
 
 ```bash
 make stack   # http://localhost:8081
+make obs     # Prometheus + Grafana for whichever of the two is running (DevOps note 05)
 ```
 
 | Service | URL |
@@ -54,6 +55,8 @@ make stack   # http://localhost:8081
 | Mailpit (every dev email) | http://localhost:8026 |
 | S3 (SeaweedFS) | http://localhost:9010 (masternova / masternova-dev-secret), started by `make up`; bucket `masternova-media` + CORS created by `media-init` ([ADR-0012](docs/adr/0012-seaweedfs-as-local-s3.md)) |
 | Postgres | `localhost:5433` (masternova / masternova) |
+| Grafana (`make obs`) | http://localhost:3001 — dashboards in the *Masternova* folder, provisioned from `deploy/observability/` |
+| Prometheus (`make obs`) | http://localhost:9091 |
 
 ## Test
 

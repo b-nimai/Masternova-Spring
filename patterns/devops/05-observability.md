@@ -5,7 +5,7 @@
 > written against **user-visible objectives**, not against CPU graphs.
 
 **Roadmap:** D3.1–D3.5 · **Last updated:** 2026-10-13
-**Real files:** [`backend/messaging/…/outbox/`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/) (outbox meters), [`JobRunner`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobRunner.java) + [`JobPoller`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobPoller.java) (pipeline meters), api + worker `application.yaml` (`management.*`)
+**Real files:** [`deploy/observability/`](../../deploy/observability/) (Prometheus, Grafana provisioning + dashboards), `compose.yaml` (profile `observability`), [`backend/messaging/…/outbox/`](../../backend/messaging/src/main/java/com/masternova/messaging/outbox/) (outbox meters), [`JobRunner`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobRunner.java) + [`JobPoller`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobPoller.java) (pipeline meters), api + worker `application.yaml` (`management.*`)
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
 
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 1 | [The three signals at a glance](#1-the-three-signals-at-a-glance-) | ⭐⭐⭐ | — |
 | 2 | [Metrics: Micrometer → Prometheus](#2-metrics-micrometer--prometheus-) | ⭐⭐⭐ | D3.1 |
+| 3 | [Dashboards as code](#3-dashboards-as-code-) | ⭐⭐ | D3.2 |
 
 ---
 
@@ -128,3 +129,55 @@ maximum is raised to 2 h (the 30 s default would put every transcode in `+Inf`).
   from worker; Prometheus adds `instance` for the replica.
 
 **Try it:** `make api`, then `curl -s localhost:8080/actuator/prometheus | grep -E '^(http_server|hikaricp|outbox)'`.
+
+---
+
+## 3. Dashboards as code ⭐⭐
+
+**Try it:** `make stack` (or `make api` + `make worker`), then `make obs` →
+<http://localhost:3001> (Grafana, anonymous viewer) · <http://localhost:9091> (Prometheus).
+
+### 3.1 Nothing is clicked together
+
+| File | What Grafana does with it |
+|---|---|
+| `grafana/provisioning/datasources/datasources.yaml` | creates the Prometheus datasource with a **fixed `uid: prometheus`** at startup |
+| `grafana/provisioning/dashboards/dashboards.yaml` | loads every JSON in `grafana/dashboards/` into the *Masternova* folder, re-reads every 30 s, `allowUiUpdates: false` |
+| `grafana/dashboards/*.json` | the four dashboards below |
+
+Grafana has **no state volume**: delete the container and nothing is lost, because everything it
+shows comes from git. A change made in the UI can't be saved over a provisioned dashboard; you
+export the JSON, commit it, and review it like code. The fixed datasource `uid` keeps dashboards
+portable: a Grafana in Kubernetes (D4) that provisions the same uid renders the same files.
+
+| Dashboard | Method | Panels worth knowing |
+|---|---|---|
+| **HTTP (RED)** | RED | 5xx ratio and *share under 300 ms* (the two SLIs of §6), p50/p95/p99 from buckets, slowest routes table |
+| **JVM** | USE | heap used vs max, *live data after GC* (the leak signal), GC pause share, threads by state, CPU |
+| **Connection pool (Hikari)** | USE | in use / max, **threads waiting** (with virtual threads this is the queue that matters), acquire and hold times, timeouts |
+| **Pipeline & outbox** | custom | oldest undelivered event, backlog, commit → delivery quantiles, job duration p95 by step, outcomes, slots and queue |
+
+### 3.2 Details that make a dashboard honest
+
+- **Rates use `$__rate_interval`**, never a fixed `[1m]`: Grafana makes it ≥ 4 scrape intervals
+  (the datasource declares `timeInterval: 15s`), so a zoomed-in panel never computes a rate
+  from a single sample.
+- **The HTTP dashboard excludes `/actuator/**` and the SSE streams** (`…/stream`): Prometheus'
+  own scrapes would dominate the rate, and a stream is *meant* to stay open for minutes; either one
+  would wreck the latency quantiles.
+- **A ratio with nothing in the numerator is 0, not "No data":** `(sum(5xx) or vector(0)) /
+  sum(all)`.
+- **Gauges every worker reports alike use `max`, not `sum`** (`pipeline_jobs_queued` is one
+  table count seen by N workers); per-worker gauges (`pipeline_slots_busy`) use `sum`.
+
+### 3.3 One scrape target per app — found while building it
+
+The first config listed each app twice: `api:8080` (the container) and
+`host.docker.internal:8080` (for `make api` from source), expecting one of the two to be down. In
+stack mode **both answered**: the host port *is* the container's published port. Every series
+existed twice and every `sum()` doubled. Now each app has one target, through the host, which
+reaches either mode. The lesson: the same process scraped twice looks like two replicas, so
+check `count by (job) (up)` when you add a target.
+
+Every panel's query was run against the live stack with real traffic before commit; the only empty
+ones are for events that hadn't happened (5xx, failed jobs).

@@ -2,6 +2,7 @@
 #
 #   docker compose up -d                       # infra only (what `make up` runs) — apps run from your IDE / mvnw / pnpm
 #   docker compose --profile app up -d --build # infra + api + worker + web, all in containers
+#   docker compose --profile observability up -d # Prometheus, Grafana … (`make obs`, DevOps note 05)
 #
 # Host ports are offset from the defaults (5433, 6380, 9010, 8026 …) so this can run next to
 # the NestJS Masternova stack or a native Postgres without clashing.
@@ -235,10 +236,64 @@ services:
       api:
         condition: service_healthy
 
+  # ---- observability (profile: observability, `make obs`) — config in deploy/observability ----
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d # a laptop, not a fleet
+      - --web.enable-lifecycle # POST /-/reload re-reads the config and rules
+    volumes:
+      - ./deploy/observability/prometheus:/etc/prometheus:ro
+      - promdata:/prometheus
+    extra_hosts:
+      - host.docker.internal:host-gateway # the scrape goes through the host (prometheus.yml); Linux needs this alias
+    ports:
+      - '9091:9090'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/-/ready']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:13.2.3
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      # local only: open without a login (Grafana 13 allows anonymous Viewers only) and let viewers
+      # use Explore; provisioned dashboards stay read-only. admin/admin logs in for the rest.
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_VIEWERS_CAN_EDIT: 'true'
+      GF_USERS_DEFAULT_THEME: dark
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/pipeline.json
+    volumes: # everything as code: no state volume — delete the container, lose nothing
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - '3001:3000' # http://localhost:3001
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/api/health']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
 volumes:
   pgdata:
   mediadata:
   pipelinework: # the worker's scratch space (video-pipeline LLD §9); safe to delete
+  promdata: # Prometheus' 7 days of samples
 
 secrets:
   jwt_access_secret:

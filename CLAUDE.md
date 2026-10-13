@@ -38,6 +38,7 @@ make test        # backend verify (incl. Testcontainers) + pattern lab + fronten
 make format      # Spotless (google-java-format) + Prettier
 make secrets     # generate the gitignored secret files the container stack mounts
 make stack       # everything in containers, web on :8081 (runs `make secrets` first)
+make obs         # observability profile: Prometheus :9091, Grafana :3001 (deploy/observability)
 make scan        # Trivy on all images
 make e2e         # Playwright browser tests against the running stack
 make release VERSION=X.Y.Z  # tag a release from a clean main (release.yml promotes the images)
