@@ -4,8 +4,8 @@
 > place, and check the whole object **once** in `build()`. In tests, the same idea (a *test data
 > builder*) lets each test state only the values it's about.
 
-**Type:** Creational · **Status:** built (Phase 5.7: test data builders) · **Last updated:** 2026-10-02
-**Real code:** `com.masternova.api.catalog.domain.CourseBuilder` (test sources: the Course aggregate's test data builder) · the ffmpeg command builder arrives in Phase 7
+**Type:** Creational · **Status:** built (Phase 5.7: test data builders; Phase 7.5: the ffmpeg command) · **Last updated:** 2026-10-13
+**Real code:** `com.masternova.api.catalog.domain.CourseBuilder` (test sources: the Course aggregate's test data builder) · `com.masternova.worker.pipeline.ffmpeg.FfmpegCommand` (production: one HLS rendition's ffmpeg argument list, §3b)
 **Lab:** [`lab/.../patterns/builder/`](../lab/src/main/java/com/masternova/patterns/builder/): Bloch's builder for an immutable object (required fields, defaults, cross-field validation, defensive copies, `toBuilder`).
 
 **Trigger phrase:** "many optional parameters", "the constructor has 9 arguments and two are
@@ -114,6 +114,27 @@ aCourse().slug("k8s").priced(149900)
 course whose `lectureCount` doesn't match its lectures, a state production can never reach.
 Tests would then pass against impossible data. Going through `addLecture` means the builder gets
 the rollups right for free (`CourseBuilderTest.aBuiltCurriculumKeepsTheAggregatesRollups`).
+
+## 3b. Second use: building a process's argument list (Phase 7.5)
+
+`FfmpegCommand` builds no object. It builds the **~40 arguments** of one ffmpeg HLS rendition,
+where Builder's three promises each solve a real problem:
+
+| Promise | ffmpeg's version of the problem |
+|---|---|
+| required parts up front | `hls(ffmpeg, inputUrl, outputDir)`: without them there's no command |
+| named optional steps + defaults in one place | `.rung(rung, preset)`, `.withAudio(false)` for a silent source, `.segments(6 s, 2 s)`, `.withProgress(…)` |
+| validate once, in `build()` | a segment must be a **whole number of GOPs** (ADR-0013: every segment boundary is a switch point); a rendition needs a rung |
+
+Plus one promise specific to processes: **`build()` owns the order**. Input options go before
+`-i`, `-map`s go before codec options, and the output path comes last. Callers can't get that wrong.
+
+And it returns a **`List<String>` for `ProcessBuilder`, never a shell string**. A presigned url is
+full of `&` and `?`, and in `sh -c "ffmpeg -i $url …"` the shell would cut it into background jobs.
+As a list element it is one argument, untouched (`FfmpegCommandTest`, lab `TranscodeArgsTest`).
+
+The poster and sprite commands are **not** builders (`StillCommands`, static factories): each is
+fixed, with nothing optional to name. A builder there would be ceremony.
 
 ## 4. Java features that make it nicer
 

@@ -30,6 +30,10 @@
 			<groupId>com.masternova</groupId>
 			<artifactId>messaging</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>com.masternova</groupId>
+			<artifactId>storage</artifactId>
+		</dependency>
 
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -156,6 +160,12 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.masternova</groupId>
+			<artifactId>storage</artifactId>
+			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

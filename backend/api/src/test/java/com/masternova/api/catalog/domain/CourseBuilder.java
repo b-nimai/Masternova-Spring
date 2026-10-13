@@ -199,10 +199,11 @@ public final class CourseBuilder {
         addMinimalCurriculum(course); // a course can only reach review with a real curriculum
       }
       // ⭐ through the REAL lifecycle: DRAFT → IN_REVIEW → PUBLISHED, gate included. A test that
-      //    asks for a published course with an incomplete curriculum fails loudly here.
-      course.transition(CourseAction.SUBMIT, at);
+      //    asks for a published course with an incomplete curriculum fails loudly here. Media is
+      //    taken to say every attached video is READY (videoAssetIds()).
+      course.transition(CourseAction.SUBMIT, at, course.videoAssetIds());
       if (publishedAt != null) {
-        course.transition(CourseAction.PUBLISH, at);
+        course.transition(CourseAction.PUBLISH, at, course.videoAssetIds());
       }
     }
     return course;
@@ -212,9 +213,19 @@ public final class CourseBuilder {
   private static void addMinimalCurriculum(Course course) {
     Section section = course.addSection("Getting started");
     course.addLecture(
-        section, "Welcome", LectureKind.VIDEO, true, LectureDuration.ofSeconds(60), null);
+        section,
+        "Welcome",
+        LectureKind.VIDEO,
+        true,
+        LectureDuration.ofSeconds(60),
+        UUID.randomUUID());
     course.addLecture(
-        section, "Setup", LectureKind.VIDEO, false, LectureDuration.ofSeconds(60), null);
+        section,
+        "Setup",
+        LectureKind.VIDEO,
+        false,
+        LectureDuration.ofSeconds(60),
+        UUID.randomUUID());
     course.addLecture(section, "Notes", LectureKind.ARTICLE, false, LectureDuration.ZERO, null);
   }
 
@@ -226,7 +237,7 @@ public final class CourseBuilder {
     private LectureKind kind = LectureKind.VIDEO;
     private boolean preview;
     private int seconds = 60;
-    private UUID assetId;
+    private UUID assetId = UUID.randomUUID(); // a video lecture has an uploaded video by default
 
     private LectureBuilder(String title) {
       this.title = title;
@@ -235,6 +246,13 @@ public final class CourseBuilder {
     public LectureBuilder article() {
       this.kind = LectureKind.ARTICLE;
       this.seconds = 0;
+      this.assetId = null;
+      return this;
+    }
+
+    /** A video lecture whose video hasn't been uploaded yet (MEDIA_NOT_READY). */
+    public LectureBuilder withoutVideo() {
+      this.assetId = null;
       return this;
     }
 

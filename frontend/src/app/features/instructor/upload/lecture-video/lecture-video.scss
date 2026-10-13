@@ -1,0 +1,52 @@
+.video {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+
+  mat-progress-bar {
+    width: 140px;
+  }
+}
+
+.pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--mat-sys-primary);
+  font-size: 0.875rem;
+
+  input {
+    // visually hidden but focusable: the label is the button
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+
+  &:focus-within {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
+}
+
+.label {
+  font-size: 0.875rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &.ready {
+    color: var(--mat-sys-tertiary);
+  }
+
+  &.failed {
+    color: var(--mat-sys-error);
+  }
+}
+
+.player {
+  margin-top: 8px;
+  width: 100%;
+}

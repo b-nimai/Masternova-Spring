@@ -71,6 +71,9 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      # the worker's pipeline ITs run the real ffmpeg / ffprobe on a generated clip (Phase 7)
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Build and test (Testcontainers uses the runner's Docker)
         run: ./mvnw -B verify
       - name: Upload coverage report
@@ -155,6 +158,8 @@ jobs:
     env:
       # Only main publishes. PRs build and scan the same images but never push them.
       PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    outputs:
+      day: ${{ steps.day.outputs.day }} # e2e rebuilds from the same cache: same refresh key
     strategy:
       fail-fast: false
       matrix:
@@ -174,6 +179,11 @@ jobs:
           tags: |
             type=sha,prefix=sha-,format=short
             type=raw,value=main,enable={{is_default_branch}}
+      # The day busts the cached `apk upgrade` layer once a day (a CVE fixed upstream yesterday
+      # must not hide behind last week's layer); the push below shares it, so it stays a cache hit.
+      - name: Package refresh key
+        id: day
+        run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
       - name: Build ${{ matrix.name }}
         uses: docker/build-push-action@v6
         with:
@@ -181,6 +191,7 @@ jobs:
           build-args: |
             ${{ matrix.args }}
             GIT_SHA=${{ github.sha }}
+            APK_REFRESH=${{ steps.day.outputs.day }}
           tags: masternova-spring/${{ matrix.name }}:ci
           labels: ${{ steps.meta.outputs.labels }}
           load: true
@@ -210,6 +221,7 @@ jobs:
           build-args: |
             ${{ matrix.args }}
             GIT_SHA=${{ github.sha }}
+            APK_REFRESH=${{ steps.day.outputs.day }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           push: true
@@ -248,6 +260,7 @@ jobs:
           build-args: |
             APP=api
             GIT_SHA=${{ github.sha }}
+            APK_REFRESH=${{ needs.images.outputs.day }}
           tags: masternova-spring/api:local
           load: true
           cache-from: type=gha,scope=api
@@ -259,6 +272,7 @@ jobs:
             APP=worker
             PORT=8090
             GIT_SHA=${{ github.sha }}
+            APK_REFRESH=${{ needs.images.outputs.day }}
           tags: masternova-spring/worker:local
           load: true
           cache-from: type=gha,scope=worker
@@ -266,7 +280,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: frontend
-          build-args: GIT_SHA=${{ github.sha }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            APK_REFRESH=${{ needs.images.outputs.day }}
           tags: masternova-spring/web:local
           load: true
           cache-from: type=gha,scope=web

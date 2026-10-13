@@ -14,10 +14,10 @@
 	<name>worker</name>
 
 	<properties>
-		<!-- Coverage floor = measured (unit + IT merged) minus a small margin: 97 % lines / 88 % branches
-		     on 2026-10-02. Raise it as coverage grows; never lower it to make a build pass. -->
-		<coverage.line>0.94</coverage.line>
-		<coverage.branch>0.82</coverage.branch>
+		<!-- Coverage floor = measured (unit + IT merged) minus a small margin: 96 % lines / 87 % branches
+		     on 2026-10-13 (Phase 7.4). Raise it as coverage grows; never lower it to make a build pass. -->
+		<coverage.line>0.95</coverage.line>
+		<coverage.branch>0.85</coverage.branch>
 	</properties>
 
 	<dependencies>
@@ -29,6 +29,19 @@
 		<dependency>
 			<groupId>com.masternova</groupId>
 			<artifactId>messaging</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>com.masternova</groupId>
+			<artifactId>storage</artifactId>
+		</dependency>
+		<!-- one replica runs each scheduled sweep (Phase 7.6) -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
 		</dependency>
 
 		<dependency>
@@ -121,6 +134,12 @@
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>testcontainers-postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.masternova</groupId>
+			<artifactId>storage</artifactId>
+			<type>test-jar</type>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>

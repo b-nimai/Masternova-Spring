@@ -4,11 +4,12 @@
 > **abstract steps** (which subclasses must supply) and **hooks** (which they may override). The
 > order of the steps, and the steps nobody may skip, live in exactly one place.
 
-**Type:** Behavioral · **Status:** ✅ in real code · **Last updated:** 2026-10-02
+**Type:** Behavioral · **Status:** ✅ in real code (Phases 4, 7.4) · **Last updated:** 2026-10-13
 **Real code:**
 - [`EmailTemplate`](../../backend/worker/src/main/java/com/masternova/worker/notification/template/EmailTemplate.java) (`@DesignPattern(TEMPLATE_METHOD, "AbstractClass")`).
 - Its subclasses [`VerifyEmailTemplate`](../../backend/worker/src/main/java/com/masternova/worker/notification/template/VerifyEmailTemplate.java) and [`WelcomeEmailTemplate`](../../backend/worker/src/main/java/com/masternova/worker/notification/template/WelcomeEmailTemplate.java) ("ConcreteClass").
 - The Thymeleaf files they render: [`templates/email/`](../../backend/worker/src/main/resources/templates/email/).
+- Phase 7.4: [`JobProcessor`](../../backend/worker/src/main/java/com/masternova/worker/pipeline/job/JobProcessor.java) (AbstractClass) and its four pipeline jobs `ProbeProcessor`, `TranscodeProcessor`, `ThumbnailProcessor`, `PackageProcessor` (ConcreteClass); §1b. Proof: `JobProcessorTest`, `PipelineIT`. Lab: [`patterns/template/Job`](../lab/src/main/java/com/masternova/patterns/template/Job.java).
 
 **Proof:** [`EmailTemplateTest`](../../backend/worker/src/test/java/com/masternova/worker/notification/template/EmailTemplateTest.java) · **Lab:** [`lab/.../java/oop/template/`](../lab/src/main/java/com/masternova/java/oop/template/) (plain-Java version) · **Background:** [Java note 06 §4](../java/06-oop-composition-over-inheritance.md) (when inheritance is right) · **Design:** [`docs/lld/notification.md`](../../docs/lld/notification.md)
 
@@ -30,6 +31,26 @@ Every email the product sends must:
 Without the pattern, each email class assembles all of that itself. The first time someone adds
 a "course published" email and forgets the unsubscribe link or the text part, it ships. The bug
 is *in the one email nobody tested for it*.
+
+## 1b. Second use: pipeline jobs, where the skeleton guards invariants (Phase 7.4)
+
+Email templates fix an *order* (layout → body → plaintext → footer). The pipeline's
+`JobProcessor.run` (final) fixes **invariants that a crash-safe pipeline depends on**:
+
+| Step | Who | Why it can't be left to each job |
+|---|---|---|
+| a private, **absolute** work dir per job | base | ffmpeg runs with it as its cwd: a relative path would resolve twice (a real bug `PipelineIT` found) |
+| `process(job, dir, progress)` | **subclass** | the only thing that differs: ffprobe / ffmpeg / a playlist |
+| upload outputs with **commit markers last** | base | a rung's `index.m3u8` and the asset's `master.m3u8` must never point at a segment that isn't there yet |
+| return a `Completion` (DB effects: `record`, `next`) | base + 2 optional hooks | the runner applies it in **one** transaction with marking the job DONE |
+| delete the work dir in `finally` | base | even when ffmpeg throws |
+
+`record` and `next` are **hooks**: default no-op / no successors; `TranscodeProcessor` overrides
+both (upsert its rendition; enqueue PACKAGE when it's the last rung). The four subclasses only
+answer "what does this job do"; none of them uploads, cleans up or opens a transaction.
+
+`JobProcessorTest` proves it with a fake subclass that lists its playlist *first*: the template
+still uploads it last, and cleans up after a throw with nothing uploaded.
 
 ## 2. Structure
 
@@ -162,6 +183,11 @@ What the tests prove (`EmailTemplateTest`, no Spring context):
 - **Q: When is inheritance the right tool?**
   **A:** When the parent is designed and documented for extension, with a final skeleton and
   explicit steps, and the hierarchy is shallow. Template Method is the classic case.
+
+- **Q: Template Method or Strategy for the pipeline's jobs?**
+  **A:** Template Method: the jobs share a non-negotiable skeleton (upload order, cleanup,
+  transactional completion) and differ in one step. Strategy shows up *inside* a step, where a
+  whole algorithm is swapped by config: the transcode ladder (`LadderProfile`).
 
 ## 9. 30-second recall
 

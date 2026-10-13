@@ -53,11 +53,11 @@ services:
     secrets: [{ source: jwt_access_secret, target: JWT_ACCESS_SECRET }]
 ```
 
-| Control | api / worker | web (nginx) | infra (postgres, redis, minio, mailpit) | Stops |
+| Control | api / worker | web (nginx) | infra (postgres, redis, seaweedfs, mailpit) | Stops |
 |---|---|---|---|---|
 | memory / CPU / pids limits | 1 GiB / 2 / 512 | 128 MiB / 0.5 / 128 | — (dev convenience) | a leak or a fork bomb taking the host down |
 | no swap (`memswap_limit` = memory) | ✅ | ✅ | — | a JVM crawling in swap instead of failing fast |
-| restart policy | `unless-stopped` | `unless-stopped` | `unless-stopped` (`minio-init`: `no`) | a crash staying down |
+| restart policy | `unless-stopped` | `unless-stopped` | `unless-stopped` (`media-init`: `no`) | a crash staying down |
 | read-only root FS + tmpfs | ✅ `/tmp` | ✅ `/var/run`, `/var/cache/nginx`, `/tmp` | — (databases write by design) | an attacker or bug modifying the app or dropping tools |
 | capabilities | **none** | `CHOWN SETUID SETGID NET_BIND_SERVICE` | defaults | privilege escalation, raw sockets, `chown` of files |
 | `no-new-privileges` | ✅ | ✅ | — | setuid binaries raising privileges |
@@ -116,7 +116,7 @@ That's the design: a policy reacts to the **process dying**, never to an operato
 It pairs with `-XX:+ExitOnOutOfMemoryError` (note 02 §4): an OOM becomes a clean exit, and the
 policy turns that into a fresh instance.
 
-`minio-init` is a one-shot job, so `restart: 'no'`. With `unless-stopped` it would loop forever.
+`media-init` is a one-shot job, so `restart: 'no'`. With `unless-stopped` it would loop forever.
 
 ---
 

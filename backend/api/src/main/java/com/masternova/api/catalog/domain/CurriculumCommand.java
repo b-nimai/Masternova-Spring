@@ -41,7 +41,8 @@ import java.util.UUID;
   @JsonSubTypes.Type(value = CurriculumCommand.UpdateLecture.class, name = "UPDATE_LECTURE"),
   @JsonSubTypes.Type(value = CurriculumCommand.MoveLecture.class, name = "MOVE_LECTURE"),
   @JsonSubTypes.Type(value = CurriculumCommand.RemoveLecture.class, name = "REMOVE_LECTURE"),
-  @JsonSubTypes.Type(value = CurriculumCommand.RestoreLecture.class, name = "RESTORE_LECTURE")
+  @JsonSubTypes.Type(value = CurriculumCommand.RestoreLecture.class, name = "RESTORE_LECTURE"),
+  @JsonSubTypes.Type(value = CurriculumCommand.AttachMedia.class, name = "ATTACH_MEDIA")
 })
 public sealed interface CurriculumCommand {
 
@@ -210,6 +211,25 @@ public sealed interface CurriculumCommand {
       Course.Place from = course.placeOf(lectureId);
       course.moveLecture(lectureId, toSectionId, toPosition);
       return new MoveLecture(lectureId, from.sectionId(), from.position());
+    }
+  }
+
+  /**
+   * Sets the lecture's video ({@code assetId = null} detaches). The inverse puts back the previous
+   * one, so "undo" after attaching the wrong file works like any other edit. Who may attach WHICH
+   * asset is checked by the application layer (media's {@code isOwnedBy}): the command can't see
+   * other modules.
+   */
+  record AttachMedia(UUID lectureId, UUID assetId) implements CurriculumCommand {
+    public AttachMedia {
+      Objects.requireNonNull(lectureId, "lectureId");
+    }
+
+    @Override
+    public CurriculumCommand applyTo(Course course) {
+      UUID before = course.lecture(lectureId).assetId().orElse(null);
+      course.attachMedia(lectureId, assetId);
+      return new AttachMedia(lectureId, before);
     }
   }
 

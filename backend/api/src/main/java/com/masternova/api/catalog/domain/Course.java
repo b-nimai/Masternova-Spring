@@ -35,6 +35,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * A course — the AGGREGATE ROOT of Course → Section → Lecture (docs/lld/catalog.md §3). Every
@@ -381,6 +382,30 @@ public class Course {
     lecture(lectureId).update(title, preview);
   }
 
+  void attachMedia(UUID lectureId, UUID assetId) {
+    lecture(lectureId).attachMedia(assetId);
+  }
+
+  /** The asset ids of every VIDEO lecture that has one — what catalog asks media about. */
+  public Set<UUID> videoAssetIds() {
+    return sections.stream()
+        .flatMap(s -> s.lectures().stream())
+        .filter(l -> l.kind() == LectureKind.VIDEO)
+        .flatMap(l -> l.assetId().stream())
+        .collect(Collectors.toUnmodifiableSet());
+  }
+
+  /**
+   * Each VIDEO lecture whose asset has a probed duration takes it: the instructor's minutes were an
+   * estimate, the transcoded file is the truth. Done on the gated transitions (7.8).
+   */
+  public void adoptMediaDurations(Map<UUID, Integer> secondsByAsset) {
+    sections.stream()
+        .flatMap(s -> s.lectures().stream())
+        .forEach(l -> l.assetId().map(secondsByAsset::get).ifPresent(l::adoptDuration));
+    recomputeRollups();
+  }
+
   void moveLecture(UUID lectureId, UUID toSectionId, int toPosition) {
     Lecture lecture = lecture(lectureId);
     Section target = section(toSectionId);
@@ -443,15 +468,16 @@ public class Course {
    * <ol>
    *   <li>The STATE decides whether the action is legal from here ({@code ILLEGAL_TRANSITION}).
    *   <li>Submit and publish re-run the PUBLISH GATE against the course AS IT IS NOW — a course
-   *       edited while waiting in review is checked again ({@code COURSE_NOT_READY}, 422).
+   *       edited while waiting in review is checked again ({@code COURSE_NOT_READY}, 422). {@code
+   *       readyAssets}: which of its videos media says are READY (catalog asks, 7.8).
    *   <li>{@code publishedAt} is stamped on the first publish and never moves.
    *   <li>{@code touch} bumps the version, so every open editor tab becomes stale.
    * </ol>
    */
-  public void transition(CourseAction action, Instant now) {
+  public void transition(CourseAction action, Instant now, Set<UUID> readyAssets) {
     CourseStatus next = state().on(action);
     if (action.isGated()) {
-      List<PublishCheck> problems = PublishGate.problems(this);
+      List<PublishCheck> problems = PublishGate.problems(this, readyAssets);
       if (!problems.isEmpty()) {
         throw new RuleViolationException(
             "COURSE_NOT_READY", "The course isn't ready yet.", Map.of("problems", problems));

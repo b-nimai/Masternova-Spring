@@ -2,7 +2,10 @@ package com.masternova.api.catalog.domain;
 
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * Whether a course is complete enough to go to review / to the catalog: a SPECIFICATION that
@@ -52,19 +55,36 @@ public final class PublishGate {
                       .flatMap(s -> s.lectures().stream())
                       .anyMatch(Lecture::isPreview)));
 
-  // Phase 7 adds MEDIA_NOT_READY: every VIDEO lecture has a transcoded asset.
+  static final String MEDIA_NOT_READY = "MEDIA_NOT_READY";
 
   private PublishGate() {}
 
-  /** Every requirement with its result — the checklist. */
-  public static List<PublishCheck> evaluate(Course course) {
-    return REQUIREMENTS.stream()
-        .map(r -> new PublishCheck(r.code(), r.message(), r.isSatisfiedBy(course)))
-        .toList();
+  /**
+   * Every requirement with its result — the checklist. {@code readyAssets} are the asset ids media
+   * reports READY: ⭐ the gate stays pure (no call to media in here); the application layer asks
+   * {@code MediaApi} and passes the answer in.
+   */
+  public static List<PublishCheck> evaluate(Course course, Set<UUID> readyAssets) {
+    List<PublishCheck> checks = new ArrayList<>();
+    REQUIREMENTS.forEach(
+        r -> checks.add(new PublishCheck(r.code(), r.message(), r.isSatisfiedBy(course))));
+    checks.add(
+        new PublishCheck(
+            MEDIA_NOT_READY,
+            "Every video lecture needs an uploaded video that has finished processing.",
+            everyVideoIsReady(course, readyAssets)));
+    return List.copyOf(checks);
   }
 
   /** Only the failures — empty means the course may move toward publication. */
-  public static List<PublishCheck> problems(Course course) {
-    return evaluate(course).stream().filter(check -> !check.satisfied()).toList();
+  public static List<PublishCheck> problems(Course course, Set<UUID> readyAssets) {
+    return evaluate(course, readyAssets).stream().filter(check -> !check.satisfied()).toList();
+  }
+
+  static boolean everyVideoIsReady(Course course, Set<UUID> readyAssets) {
+    return course.sections().stream()
+        .flatMap(s -> s.lectures().stream())
+        .filter(l -> l.kind() == LectureKind.VIDEO)
+        .allMatch(l -> l.assetId().filter(readyAssets::contains).isPresent());
   }
 }

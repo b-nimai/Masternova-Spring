@@ -5,8 +5,8 @@ MVN := cd backend && ./mvnw -B
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-up: ## Start infra (postgres, redis, mailpit); S3 storage is the opt-in `media` profile until Phase 7
-	docker compose up -d --wait postgres redis mailpit
+up: ## Start infra (postgres, redis, mailpit, SeaweedFS S3 + its bucket/CORS init job)
+	docker compose up -d --wait postgres redis mailpit seaweedfs media-init
 
 down: ## Stop everything (volumes kept)
 	docker compose --profile app down
@@ -16,7 +16,7 @@ nuke: ## Stop everything AND delete volumes (fresh database)
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
-	@for f in jwt_access_secret notification_token_secret; do \
+	@for f in jwt_access_secret notification_token_secret playback_token_secret; do \
 	  [ -s secrets/$$f ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/$$f; \
 	    chmod 644 secrets/$$f; echo "created secrets/$$f"; }; \
 	done

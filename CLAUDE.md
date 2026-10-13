@@ -30,7 +30,7 @@ seam: use a concrete class until a second implementation is real or planned.
 ## 2. Commands
 
 ```bash
-make up          # infra: postgres :5433, redis :6380, mailpit :8026 (S3/MinIO: opt-in `media` profile, see ROADMAP Phase 7)
+make up          # infra: postgres :5433, redis :6380, mailpit :8026, S3 (SeaweedFS) :9010 (ADR-0012)
 make api         # run the api from source (Boot reuses the compose infra)
 make web         # Angular dev server :4200, proxies /api → :8080
 make seed        # dev catalog data (200 courses; COURSES=10000 for measurements)
@@ -96,6 +96,18 @@ src/app/
 └── features/<f>/  # one folder per feature, lazy-loaded route, its own pages + components
 ```
 
+- **Visual design source: the StudyNotion Figma**
+  (<https://www.figma.com/design/Mikd0FjHKAofUlWQSi70nf/StudyNotion_shared?node-id=1-5&p=f&t=hjcvkL5yTZm66fbT-0>).
+  It was made for another EdTech project but matches ~90% of Masternova's screens. Implement its
+  layouts, spacing, typography and colours, with small changes:
+  - Masternova's name and branding replace StudyNotion's;
+  - screens and fields follow *our* features and API DTOs (drop what we don't have, add what
+    we do: wizard steps, upload progress, undo/redo);
+  - built with Angular Material components themed to the Figma's tokens, not hand-rolled
+    widgets.
+
+  Before building or restyling a screen, open its frame in the Figma. Note each deviation from it
+  in the feature's Angular note.
 - Generate with `pnpm ng g …`; never hand-create.
 - Use signals for state, RxJS for async streams, `toSignal` at the boundary.
 - API interfaces in `core/api/*.ts` mirror the backend DTO records **by name**.
@@ -130,6 +142,15 @@ When a pattern lands in real code:
 ## 7. Commits
 
 Conventional commits (`feat(catalog): …`).
+
+### Branches: delete after merge
+
+- **Once a PR is merged, delete its branch**, both the remote one (`gh pr merge --merge
+  --delete-branch`, or `git push origin --delete <branch>`) and the local one
+  (`git branch -d <branch>`). Then `git fetch --prune`.
+- The merge commit keeps every per-task commit on `main`, so nothing is lost when the branch goes.
+- Only `main` and the phase branch currently in progress should exist. A closed, unmerged PR's
+  branch is deleted too, unless the PR is going to be reopened.
 
 ### ⛔ NEVER-EVER: commits and pushes show only the user
 

@@ -126,9 +126,9 @@ class CourseTest {
     Course course =
         aCourse().createdAt(NOW).published(NOW).build(); // DRAFT → IN_REVIEW → PUBLISHED
 
-    course.transition(CourseAction.UNPUBLISH, NOW.plusSeconds(60));
-    course.transition(CourseAction.SUBMIT, NOW.plusSeconds(120));
-    course.transition(CourseAction.PUBLISH, NOW.plusSeconds(3600));
+    course.transition(CourseAction.UNPUBLISH, NOW.plusSeconds(60), course.videoAssetIds());
+    course.transition(CourseAction.SUBMIT, NOW.plusSeconds(120), course.videoAssetIds());
+    course.transition(CourseAction.PUBLISH, NOW.plusSeconds(3600), course.videoAssetIds());
 
     assertThat(course.isPublished()).isTrue();
     assertThat(course.publishedAt()).contains(Instant.parse("2026-10-02T10:15:30.123456Z"));

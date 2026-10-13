@@ -243,6 +243,13 @@ sequenceDiagram
   which expected it here.
 - **Builder for the gate.** It's a list of independent requirements, not a stepwise construction.
 
+> **Phase 7.8 additions:**
+> - `ATTACH_MEDIA(lectureId, assetId | null)`, an 11th command whose inverse re-attaches the
+>   previous asset, so attaching the wrong file is undone like any edit. VIDEO lectures only
+>   (`LECTURE_NOT_VIDEO`).
+> - The gate's seventh rule, `MEDIA_NOT_READY`, takes media's READY set as an input. The gate
+>   stays pure, and the lifecycle service asks `MediaApi` (media LLD §4).
+
 ## 7. Alternatives rejected
 
 | Option | Why not |

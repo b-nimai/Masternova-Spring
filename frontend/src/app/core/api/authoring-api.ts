@@ -7,7 +7,7 @@ import {
   CourseSummary,
   CursorPage,
   LectureKind,
-  SectionResponse,
+  LectureResponse,
 } from './catalog-api';
 
 /** Mirrors `CreateCourseRequest`. */
@@ -34,6 +34,21 @@ export interface ReadinessResponse {
   requirements: { code: string; message: string; satisfied: boolean }[];
 }
 
+/**
+ * Mirrors `CurriculumResponse.LectureResponse`: the AUTHOR's view of a lecture, which (unlike the
+ * public course page) says which uploaded video it plays.
+ */
+export interface CurriculumLecture extends LectureResponse {
+  assetId: string | null;
+}
+
+/** Mirrors `CurriculumResponse.SectionResponse`. */
+export interface CurriculumSection {
+  id: string;
+  title: string;
+  lectures: CurriculumLecture[];
+}
+
 /** Mirrors `CurriculumResponse`. */
 export interface CurriculumResponse {
   version: number;
@@ -41,7 +56,7 @@ export interface CurriculumResponse {
   canRedo: boolean;
   lectureCount: number;
   totalDurationSeconds: number;
-  sections: SectionResponse[];
+  sections: CurriculumSection[];
 }
 
 /**
@@ -63,7 +78,8 @@ export type CurriculumCommand =
     }
   | { kind: 'UPDATE_LECTURE'; lectureId: string; title: string; preview: boolean }
   | { kind: 'MOVE_LECTURE'; lectureId: string; toSectionId: string; toPosition: number }
-  | { kind: 'REMOVE_LECTURE'; lectureId: string };
+  | { kind: 'REMOVE_LECTURE'; lectureId: string }
+  | { kind: 'ATTACH_MEDIA'; lectureId: string; assetId: string | null };
 
 /** The author's lifecycle actions (publishing is the reviewer's). */
 export type AuthorAction = 'submit' | 'withdraw' | 'unpublish' | 'archive';

@@ -14,9 +14,11 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { LectureKind, LectureResponse, SectionResponse } from '../../../core/api/catalog-api';
+import { CurriculumLecture, CurriculumSection } from '../../../core/api/authoring-api';
+import { LectureKind } from '../../../core/api/catalog-api';
 import { DurationPipe } from '../../../shared/duration-pipe';
 import { CourseEditorStore } from '../course-editor-store';
+import { LectureVideo } from '../upload/lecture-video/lecture-video';
 
 /**
  * The curriculum editor (6.8). Every change is a COMMAND sent to the server (API conventions §6);
@@ -42,6 +44,7 @@ import { CourseEditorStore } from '../course-editor-store';
     MatSelectModule,
     MatTooltipModule,
     DurationPipe,
+    LectureVideo,
   ],
   selector: 'app-curriculum-editor',
   styleUrl: './curriculum-editor.scss',
@@ -73,13 +76,13 @@ export class CurriculumEditor {
     }
   }
 
-  protected renameSection(section: SectionResponse, title: string): void {
+  protected renameSection(section: CurriculumSection, title: string): void {
     if (title.trim() && title.trim() !== section.title) {
       this.store.apply({ kind: 'RENAME_SECTION', sectionId: section.id, title: title.trim() });
     }
   }
 
-  protected removeSection(section: SectionResponse): void {
+  protected removeSection(section: CurriculumSection): void {
     this.store.apply({ kind: 'REMOVE_SECTION', sectionId: section.id }); // undo brings it back
   }
 
@@ -94,7 +97,7 @@ export class CurriculumEditor {
     this.store.apply({ kind: 'REORDER_SECTIONS', order });
   }
 
-  protected addLecture(section: SectionResponse): void {
+  protected addLecture(section: CurriculumSection): void {
     const d = this.draft(section.id);
     if (!d.title.trim()) {
       return;
@@ -110,7 +113,7 @@ export class CurriculumEditor {
     this.drafts[section.id] = { title: '', kind: d.kind, minutes: d.minutes, preview: false };
   }
 
-  protected togglePreview(lecture: LectureResponse): void {
+  protected togglePreview(lecture: CurriculumLecture): void {
     this.store.apply({
       kind: 'UPDATE_LECTURE',
       lectureId: lecture.id,
@@ -119,12 +122,17 @@ export class CurriculumEditor {
     });
   }
 
-  protected removeLecture(lecture: LectureResponse): void {
+  /** A finished upload becomes the lecture's video: a command like any other, so it's undoable. */
+  protected attachVideo(lecture: CurriculumLecture, assetId: string): void {
+    this.store.apply({ kind: 'ATTACH_MEDIA', lectureId: lecture.id, assetId });
+  }
+
+  protected removeLecture(lecture: CurriculumLecture): void {
     this.store.apply({ kind: 'REMOVE_LECTURE', lectureId: lecture.id });
   }
 
   /** A lecture dropped into a section (the same one or another). */
-  dropLecture(event: CdkDragDrop<SectionResponse, SectionResponse, LectureResponse>): void {
+  dropLecture(event: CdkDragDrop<CurriculumSection, CurriculumSection, CurriculumLecture>): void {
     const from = event.previousContainer.data;
     const to = event.container.data;
     if (from.id === to.id && event.previousIndex === event.currentIndex) {

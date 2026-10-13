@@ -5,9 +5,15 @@ import com.masternova.api.catalog.domain.CourseAction;
 import com.masternova.api.catalog.domain.PublishCheck;
 import com.masternova.api.catalog.domain.PublishGate;
 import com.masternova.api.catalog.domain.Viewer;
+import com.masternova.api.media.AssetReadiness;
+import com.masternova.api.media.MediaApi;
 import java.time.Clock;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,10 +28,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class CourseLifecycleService {
 
   private final CourseAccess access;
+  private final MediaApi media;
   private final Clock clock;
 
-  CourseLifecycleService(CourseAccess access, Clock clock) {
+  CourseLifecycleService(CourseAccess access, MediaApi media, Clock clock) {
     this.access = access;
+    this.media = media;
     this.clock = clock;
   }
 
@@ -33,7 +41,8 @@ public class CourseLifecycleService {
   @PreAuthorize("hasAnyRole('INSTRUCTOR', 'ADMIN')")
   @Transactional(readOnly = true)
   public List<PublishCheck> readiness(UUID courseId, Viewer actor) {
-    return PublishGate.evaluate(access.forAuthoring(courseId, actor));
+    Course course = access.forAuthoring(courseId, actor);
+    return PublishGate.evaluate(course, readyAssets(course));
   }
 
   /**
@@ -47,7 +56,7 @@ public class CourseLifecycleService {
       throw new IllegalArgumentException("publishing is a reviewer action: use publish()");
     }
     Course course = access.forAuthoring(courseId, actor);
-    course.transition(action, clock.instant());
+    gatedTransition(course, action);
     return course; // managed: dirty checking writes it, and @Version bumps, at commit
   }
 
@@ -56,7 +65,34 @@ public class CourseLifecycleService {
   @Transactional
   public Course publish(UUID courseId, Viewer reviewer) {
     Course course = access.forAuthoring(courseId, reviewer);
-    course.transition(CourseAction.PUBLISH, clock.instant());
+    gatedTransition(course, CourseAction.PUBLISH);
     return course;
+  }
+
+  /**
+   * ⭐ Catalog ASKS media at the moment it decides (media LLD §4) — no copied status to go stale. A
+   * gated edge also adopts the probed durations, so the catalog shows the real lengths.
+   */
+  private void gatedTransition(Course course, CourseAction action) {
+    Set<UUID> ready = Set.of();
+    if (action.isGated()) {
+      Map<UUID, AssetReadiness> readiness = media.readiness(course.videoAssetIds());
+      Map<UUID, Integer> durations = new HashMap<>();
+      readiness.forEach((id, r) -> r.durationSeconds().ifPresent(d -> durations.put(id, d)));
+      course.adoptMediaDurations(durations);
+      ready = readyOf(readiness);
+    }
+    course.transition(action, clock.instant(), ready);
+  }
+
+  private Set<UUID> readyAssets(Course course) {
+    return readyOf(media.readiness(course.videoAssetIds()));
+  }
+
+  private static Set<UUID> readyOf(Map<UUID, AssetReadiness> readiness) {
+    return readiness.entrySet().stream()
+        .filter(e -> e.getValue().ready())
+        .map(Map.Entry::getKey)
+        .collect(Collectors.toUnmodifiableSet());
   }
 }

@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-02 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §4 (2.6) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-13 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -16,11 +16,11 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | 4 | `Idempotency-Key` on unsafe, unversioned writes | ✅ Phase 2.6 |
 | 5 | Money in minor units + currency | ✅ Phase 5 |
 | 6 | Commands as request bodies (sealed union) | ✅ Phase 6 |
-| 7 | 64-bit integers as strings | Phase 7 |
-| 8 | Client-driven uploads return a plan, not a stream | Phase 7 |
-| 9 | Long-running work streams over SSE | Phase 7 |
+| 7 | 64-bit integers as strings | ✅ Phase 7.3 (byte sizes are bounded, so numbers) |
+| 8 | Client-driven uploads return a plan, not a stream | ✅ Phase 7.3 |
+| 9 | Long-running work streams over SSE | ✅ Phase 7.7 |
 | 10 | Authorization denials carry a reason code | Phase 8 |
-| 11 | Media is bought with a short-lived token | Phase 8 |
+| 11 | Media is played with a ticket, not the session | ✅ ticket 7.9 · entitlement check Phase 8 |
 | 12 | Payment webhooks answer 200 for almost everything | Phase 9 |
 | 13 | Authentication: deny by default, Bearer access token, refresh by cookie | ✅ Phase 3 |
 
@@ -155,22 +155,48 @@ never named `kind` (that's the discriminator).
 
 ## 7. 64-bit integers as strings
 
-Values that can exceed 2^53 (`sizeBytes`, `BIGINT` ids) are JSON strings, because JavaScript
-numbers lose precision there. Money in minor units is the deliberate exception.
+Values that can exceed 2^53 (unbounded `BIGINT` ids and counters) are JSON strings, because
+JavaScript numbers lose precision there. Money in minor units is the deliberate exception.
+
+**Decided in 7.3:** byte sizes (`sizeBytes`, `partSizeBytes`, `uploadedBytes`) stay **numbers**.
+They are capped at 10 GiB (`PartPlan.MAX_SIZE`, < 2^34), far below 2^53, so a string would only
+make every client parse it. The rule is about values without such a bound.
 
 ## 8. Uploads return a plan, not a stream
 
-`POST /api/v1/media/uploads` returns part boundaries plus presigned URLs, at most 100 per
-response. The bytes go browser → S3/MinIO directly and never touch the API.
-`GET /api/v1/media/uploads/{id}` is both progress and resume: it asks the storage provider
-what it actually holds.
+`POST /api/v1/media/uploads` (`Idempotency-Key`) returns the plan (`partSizeBytes`,
+`partCount`) plus a presigned URL per part, at most 100. The bytes go browser → S3 (SeaweedFS in
+dev) directly and never touch the API. `GET /api/v1/media/uploads/{id}` is both progress and
+resume: it asks the storage provider what it actually holds and returns fresh URLs for the parts
+still missing. `POST …/{id}/complete` has **no body**: the server builds the part list from the
+provider (ADR-0014) and is safe to retry. `DELETE …/{id}` aborts (204, idempotent).
+
+| Code | Status | When |
+|---|---|---|
+| `UPLOAD_TOO_LARGE` | 422 | `sizeBytes` > 10 GiB (`maxBytes` member) |
+| `UNSUPPORTED_MEDIA_TYPE` | 422 | `contentType` not allowed (`allowed` member) |
+| `UPLOAD_INCOMPLETE` | 422 | complete while parts are missing or the wrong size (`missing`, `wrongSize`, `unexpected`) |
+| `UPLOAD_ALREADY_COMPLETED` · `UPLOAD_ABORTED` · `UPLOAD_EXPIRED` | 409 | the session's state forbids the call (`status` member) |
+| `STORAGE_UNAVAILABLE` | 503 + `Retry-After` | the provider is down or throttling |
+
+Implemented by `UploadController`, `UploadService`, `UploadState` (media LLD §3).
 
 ## 9. Long-running work: SSE
 
-Transcode progress is exposed two ways: a one-shot `GET` for clients that poll, and a
-`GET …/stream` (`SseEmitter`, `text/event-stream`) that emits only on change and closes at a
-terminal state. Always send `Cache-Control: no-cache` and `X-Accel-Buffering: no`, because
-nginx and ALBs buffer by default.
+Transcode progress is exposed two ways: a one-shot `GET /api/v1/media/assets/{id}` for clients
+that poll, and `GET …/{id}/stream` (`SseEmitter`, `text/event-stream`). The stream sends a
+`snapshot` event first, then `progress` events (lossy ticks, ≤ 1/s per job) and a fresh `snapshot`
+whenever a job finishes, and the server closes it at `READY` or `FAILED`. Always send
+`Cache-Control: no-cache` and `X-Accel-Buffering: no`, because nginx and ALBs buffer by default.
+A `: keep-alive` comment every 20 s stops proxies from closing an idle stream. The server ends a
+stream after 30 minutes; the SPA's `MediaApi.follow` reopens a stream that ended (or dropped) before
+`READY`/`FAILED`, and each new stream starts with a fresh snapshot.
+
+The stream is authenticated with the normal **bearer token**, so the SPA reads it with
+`HttpClient` (`observe: 'events'`, `reportProgress`, fetch backend), not `EventSource`, which can't
+send an `Authorization` header. Implemented by `AssetController`, `AssetEvents` (Redis
+`media:asset:*` → this replica's open streams) and `AssetProgressService` (access checked once,
+when the stream opens).
 
 ## 10. Denials carry a reason
 
@@ -180,9 +206,19 @@ button, a support link, or "no longer available" without parsing English.
 
 ## 11. Media tokens, not the session
 
-`<video>` sends no `Authorization` header. `GET …/playback/lectures/{id}/grant` runs the
-entitlement chain and returns a 5-minute HMAC token. The manifest endpoint takes only that
-token.
+`<video>` and native Safari HLS send no `Authorization` header. `POST
+/api/v1/media/assets/{id}/playback` (bearer) runs the access check once and returns `{masterUrl,
+expiresAt}`; `masterUrl` is `…/hls/master.m3u8?t=<ticket>`. The two playlist routes (`GET
+…/hls/master.m3u8`, `…/hls/{rung}/index.m3u8`) are public and accept **only** that ticket
+(`PlaybackTickets`: HMAC-SHA256 over asset + user + expiry, constant-time check, bound to one
+asset; anything else → 403 `PLAYBACK_TICKET_INVALID`). The rung playlist's segments are
+presigned storage urls, so the bytes never pass through the api.
+
+**Decided in 7.9:** the ticket lives **6 h**, not the 5 minutes first planned. A VOD player
+fetches a *different rung's* playlist whenever ABR switches, which can be an hour into a lecture.
+A 5-minute ticket would break the switch, not the attacker. The access check is owner or admin
+in Phase 7; Phase 8's entitlement chain plugs into the same `PlaybackService.ticket`, and
+revocation shortens the effective lifetime.
 
 ## 12. Payment webhooks
 

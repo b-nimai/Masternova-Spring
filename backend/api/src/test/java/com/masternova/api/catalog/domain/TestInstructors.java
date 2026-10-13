@@ -37,6 +37,17 @@ public final class TestInstructors {
   /** For tests that commit (@SpringBootTest): courses first, because of the foreign key. */
   public void deleteAll() {
     jdbc.sql("DELETE FROM course").update();
+    // media assets (Phase 7) reference their owners: remove them first, jobs and sessions with them
+    String mine =
+        "SELECT a.id FROM media_asset a JOIN app_user u ON u.id = a.owner_id WHERE u.email LIKE :pattern";
+    for (String table : java.util.List.of("pipeline_job", "upload_session", "media_rendition")) {
+      jdbc.sql("DELETE FROM " + table + " WHERE asset_id IN (" + mine + ")")
+          .param("pattern", "%" + EMAIL_DOMAIN)
+          .update();
+    }
+    jdbc.sql("DELETE FROM media_asset WHERE id IN (" + mine + ")")
+        .param("pattern", "%" + EMAIL_DOMAIN)
+        .update();
     jdbc.sql("DELETE FROM app_user WHERE email LIKE :pattern")
         .param("pattern", "%" + EMAIL_DOMAIN)
         .update();

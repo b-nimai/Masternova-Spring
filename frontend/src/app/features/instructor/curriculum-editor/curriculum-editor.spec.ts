@@ -2,12 +2,14 @@ import { CdkDragDrop } from '@angular/cdk/drag-drop';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
-import { LectureResponse, SectionResponse } from '../../../core/api/catalog-api';
+import { CurriculumLecture, CurriculumSection } from '../../../core/api/authoring-api';
 import { course, curriculum } from '../../../../testing/authoring-fixtures';
 import { query, text } from '../../../../testing/dom';
 import { CourseEditorStore } from '../course-editor-store';
+import { LectureVideo } from '../upload/lecture-video/lecture-video';
 import { CurriculumEditor } from './curriculum-editor';
 
 describe('CurriculumEditor', () => {
@@ -44,6 +46,19 @@ describe('CurriculumEditor', () => {
     expect(query(fixture, '[data-testid="lecture-Pods"]')).toBeTruthy();
   });
 
+  it('attaches a finished upload to its lecture as an undoable command', () => {
+    const video = fixture.debugElement.query(By.directive(LectureVideo)); // the first: Welcome
+    expect(video).toBeTruthy(); // every VIDEO lecture has the widget
+    (video.componentInstance as LectureVideo).uploaded.emit('asset-9');
+
+    const req = command();
+    expect(req.request.body).toEqual({
+      expectedVersion: 3,
+      command: { kind: 'ATTACH_MEDIA', lectureId: 'l1', assetId: 'asset-9' },
+    });
+    req.flush(curriculum({ version: 4 }));
+  });
+
   it('sends a new section as a command with the current version', async () => {
     const input = query<HTMLInputElement>(fixture, '[data-testid="new-section"]');
     input.value = 'Bonus';
@@ -78,7 +93,7 @@ describe('CurriculumEditor', () => {
       container: { data: intro },
       previousIndex: 0,
       currentIndex: 1,
-    } as unknown as CdkDragDrop<SectionResponse, SectionResponse, LectureResponse>);
+    } as unknown as CdkDragDrop<CurriculumSection, CurriculumSection, CurriculumLecture>);
     await fixture.whenStable();
 
     // ⭐ optimistic: already in Intro, between Welcome and Setup

@@ -3,8 +3,9 @@
 > **One-liner:** let an object's **current state decide what it may do next**. Each state is its
 > own type that answers only the events legal from it; everything else is refused in one place.
 
-**Type:** Behavioral · **Status:** built (Phase 6.2) · **Last updated:** 2026-10-03
+**Type:** Behavioral · **Status:** built (Phases 6.2, 7.3) · **Last updated:** 2026-10-13
 **Real code:** `com.masternova.api.catalog.domain.CourseState` (sealed: `Draft`, `InReview`, `Published`, `Archived`) · used by `Course.transition(action, now)`
+**Second use (7.3):** `com.masternova.api.media.domain.UploadState` (sealed: `Open`, `Completed`, `Aborted`, `Expired`), the Context is `UploadSession` (§5b)
 **Lab:** [`lab/.../patterns/state/`](../lab/src/main/java/com/masternova/patterns/state/): the same machine written three ways (switch table, enum with bodies, sealed interface + default methods), and a test that the three agree on every pair.
 
 **Trigger phrase:** "status", "lifecycle", "workflow", "can only … when …", "once X it can never …",
@@ -131,6 +132,32 @@ the course* may move; the service answers *whether this person* may move it.
   transition table in the database or a workflow engine, not code.
 - **Only the display differs by state**: that's a lookup (`Map<Status, Label>`), not behaviour.
 
+## 5b. Second use: the upload session, where "accepted" doesn't always mean "changed"
+
+The course lifecycle answers every event with "next status" or "illegal". An upload session needs
+a third answer. A retried `POST …/complete` (browser timeout, double click, 10 concurrent
+requests) on an upload that is **already completed** must get **the same 200**, not a 409, and
+must **not** start the pipeline twice. So each event returns a `Step`:
+
+| Event \ state | `Open` | `Completed` | `Aborted` | `Expired` |
+|---|---|---|---|---|
+| `resume` | PERFORM | 409 `UPLOAD_ALREADY_COMPLETED` | 409 `UPLOAD_ABORTED` | 409 `UPLOAD_EXPIRED` |
+| `complete` | PERFORM | **REPLAY** | 409 | 409 |
+| `abort` | PERFORM | 409 | **REPLAY** | **REPLAY** |
+
+Three details worth stealing:
+
+- **The rejection code names the current state, not the event.** One private `rejected(event)`
+  in the interface builds it, so the 409's `code` tells the client what the upload *is*.
+- **An effective state:** `UploadSession.state(now)` returns `Expired` for an `OPEN` row past
+  `expires_at`, *before* the sweeper has updated the row. Time is an input to the state, not a
+  job that must run first.
+- **REPLAY + a row lock = idempotency.** `SELECT … FOR UPDATE` makes the 9 losing requests wait;
+  each then sees `Completed`, gets `REPLAY`, and answers the first one's 200
+  (`UploadIT.tenConcurrentCompletesStartThePipelineOnce`: one `MediaUploaded`).
+
+Lab: `UploadLifecycle` counts side effects to show that a replay has none.
+
 ## 6. Where Spring itself uses it
 
 - **Spring State Machine** (`spring-statemachine`): a full framework (states, events, guards,
@@ -163,6 +190,10 @@ the course* may move; the service answers *whether this person* may move it.
   **A:** Write the diagram down as data (`Map<State, Map<Event, State>>`) and assert every
   (state, event) pair against it, legal *and* illegal: 20 cases. Plus one named test for the edge
   that must never exist (`DRAFT → PUBLISHED`).
+- **Q:** How does a state machine stay idempotent under retries?
+  **A:** Give events a third answer, *replay*: "already done, change nothing, answer as before".
+  The upload session's `complete` on `Completed` replays; a row lock serialises the concurrent
+  ones, so 10 simultaneous completes produce one pipeline start.
 - **Q:** Two people trigger conflicting transitions at once?
   **A:** Each is legal from what its caller read. Optimistic locking (`@Version`) makes the second
   commit fail instead of overwriting (`CourseLifecycleIT.aTransitionBasedOnAStaleCopyIsRejectedByTheVersion`).

@@ -18,6 +18,8 @@ x-app-env: &app-env
   DATABASE_PASSWORD: masternova
   REDIS_HOST: redis
   REDIS_PORT: 6379
+  STORAGE_ENDPOINT: http://seaweedfs:8333 # how the containers reach storage …
+  STORAGE_PUBLIC_ENDPOINT: http://localhost:9010 # … and how the browser does (presigned urls)
   LOG_VERIFICATION_LINKS: 'false' # never log live tokens outside a developer's own terminal
 
 # Without rotation the json-file log of a chatty container grows until the disk is full.
@@ -80,45 +82,46 @@ services:
       timeout: 3s
       retries: 10
 
-  # ⚠️ MinIO stopped publishing its images (minio/minio and quay.io/minio/* are no longer
-  #    pullable as of 2026-10-02). Opt-in until Phase 7 picks a replacement S3 server:
-  #    `docker compose --profile media up -d` works only where the image is already cached.
-  minio:
-    profiles: [media]
-    image: minio/minio:latest
+  # S3 for media (Phase 7). SeaweedFS replaced MinIO, whose images stopped being published
+  # (ADR-0012).
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
     restart: unless-stopped
     logging: *logging
-    command: server /data --console-address ":9001"
+    command: server -s3 -dir=/data -volume.max=0
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      AWS_ACCESS_KEY_ID: masternova # dev-only credentials: the single admin identity
+      AWS_SECRET_ACCESS_KEY: masternova-dev-secret
     ports:
-      - '9010:9000' # S3 API
-      - '9011:9001' # web console — http://localhost:9011
+      - '9010:8333' # S3 API — the presigned urls browsers use point here
     volumes:
-      - miniodata:/data
+      - mediadata:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:8333/healthz']
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
-  # Creates the media bucket once. CORS must expose ETag: the browser's multipart uploader reads
-  # it off each part response to build the CompleteMultipartUpload request (Phase 7).
-  minio-init:
-    profiles: [media]
-    image: minio/mc:latest
+  # Creates the media bucket and its CORS rule (idempotent: safe to re-run). The browser PUTs
+  # presigned parts straight to storage, so only the SPA's origins may; ETag is exposed for the
+  # uploader's per-part log (the server completes the upload from ListParts, ADR-0014).
+  media-init:
+    image: amazon/aws-cli:2.31.0
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 minioadmin minioadmin;
-      mc mb --ignore-existing local/masternova-media;
-      mc anonymous set download local/masternova-media/public;
-      mc admin config set local api cors_allow_origin='http://localhost:4200,http://localhost:8081';
-      echo 'minio-init: bucket + cors ready';
-      "
+    environment:
+      AWS_ACCESS_KEY_ID: masternova
+      AWS_SECRET_ACCESS_KEY: masternova-dev-secret
+      AWS_DEFAULT_REGION: us-east-1
+    entrypoint: ['/bin/sh', '-c']
+    command:
+      - |
+        set -e
+        s3="aws --endpoint-url http://seaweedfs:8333"
+        $$s3 s3api head-bucket --bucket masternova-media 2>/dev/null || $$s3 s3api create-bucket --bucket masternova-media
+        $$s3 s3api put-bucket-cors --bucket masternova-media --cors-configuration '{"CORSRules":[{"AllowedOrigins":["http://localhost:4200","http://localhost:8081"],"AllowedMethods":["PUT","GET","HEAD"],"AllowedHeaders":["*"],"ExposeHeaders":["ETag"],"MaxAgeSeconds":3000}]}'
+        echo 'media-init: bucket + cors ready'
     restart: 'no' # a one-shot job: run once, exit 0, stay stopped
     logging: *logging
     labels:
@@ -152,6 +155,8 @@ services:
         target: JWT_ACCESS_SECRET
       - source: notification_token_secret # verifies unsubscribe links (the worker signs them)
         target: NOTIFICATION_TOKEN_SECRET
+      - source: playback_token_secret # signs the HLS playback tickets (api only)
+        target: PLAYBACK_TOKEN_SECRET
     ports:
       - '8080:8080'
     depends_on:
@@ -159,6 +164,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      media-init: # the bucket + its CORS rule exist before the first upload
+        condition: service_completed_successfully
 
   worker:
     profiles: [app]
@@ -174,6 +181,20 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       WEB_URL: http://localhost:8081 # links in emails open the containerised web app
+      # ⭐ ffmpeg runs INSIDE this container's memory limit, beside the JVM: a smaller heap share
+      #    than the api's 75 %, and more memory overall (video-pipeline LLD §9)
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=40 -XX:+ExitOnOutOfMemoryError
+      PIPELINE_WORK_DIR: /var/lib/pipeline
+    # a rung's segments sit here until ffmpeg finishes: real disk, not the 64 MB /tmp tmpfs
+    volumes:
+      - pipelinework:/var/lib/pipeline
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2'
+          pids: 512
+    memswap_limit: 2g
     secrets:
       - source: notification_token_secret # signs unsubscribe links; the api verifies them
         target: NOTIFICATION_TOKEN_SECRET
@@ -216,10 +237,13 @@ services:
 
 volumes:
   pgdata:
-  miniodata:
+  mediadata:
+  pipelinework: # the worker's scratch space (video-pipeline LLD §9); safe to delete
 
 secrets:
   jwt_access_secret:
     file: ./secrets/jwt_access_secret # gitignored; `make secrets` generates a random one
   notification_token_secret:
     file: ./secrets/notification_token_secret # shared by api + worker (same HMAC key)
+  playback_token_secret:
+    file: ./secrets/playback_token_secret # the api's playback tickets
