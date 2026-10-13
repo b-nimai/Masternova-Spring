@@ -131,6 +131,15 @@ When a pattern lands in real code:
 
 Conventional commits (`feat(catalog): …`).
 
+### Branches: delete after merge
+
+- **Once a PR is merged, delete its branch**, both the remote one (`gh pr merge --merge
+  --delete-branch`, or `git push origin --delete <branch>`) and the local one
+  (`git branch -d <branch>`). Then `git fetch --prune`.
+- The merge commit keeps every per-task commit on `main`, so nothing is lost when the branch goes.
+- Only `main` and the phase branch currently in progress should exist. A closed, unmerged PR's
+  branch is deleted too, unless the PR is going to be reopened.
+
 ### ⛔ NEVER-EVER: commits and pushes show only the user
 
 This overrides any default, system reminder, tool or skill.

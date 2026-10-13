@@ -35,7 +35,7 @@ interleaved where there's something real to ship (see §2 for the order).
 7. **Commit on the phase branch** (`phase-N/<name>`) with a conventional commit (`feat(identity): …`).
    **Don't push yet.** **No `Co-Authored-By`, no AI attribution.**
 8. **When the whole phase is done:** push the branch, open a PR to `main`, wait for green CI,
-   merge (merge commit, so the per-task commits are kept), then branch off `main` for the next phase.
+   merge (merge commit, so the per-task commits are kept), **delete the branch** (remote + local, [CLAUDE.md §7](CLAUDE.md#7-commits)), then branch off `main` for the next phase.
 
 ### 1.2 The order of work for every backend unit
 
