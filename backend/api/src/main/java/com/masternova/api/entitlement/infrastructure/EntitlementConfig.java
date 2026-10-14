@@ -15,12 +15,17 @@ import tools.jackson.databind.json.JsonMapper;
 @Configuration(proxyBeanMethods = false)
 class EntitlementConfig {
 
-  /** Anyone may ask what they may watch; a bearer token, when sent, makes it personal. */
+  /**
+   * Anyone may ask what they may watch (a bearer token, when sent, makes it personal). The
+   * playlists are fetched by the player itself: authorised by the playback token, not the bearer.
+   */
   @Bean
   PublicEndpoints entitlementPublicEndpoints() {
     return () ->
         List.of(
-            Endpoint.get("/api/v1/courses/*/access"), Endpoint.get("/api/v1/lectures/*/access"));
+            Endpoint.get("/api/v1/courses/*/access"),
+            Endpoint.get("/api/v1/lectures/*/access"),
+            Endpoint.get("/api/v1/lectures/*/hls/**"));
   }
 
   /**

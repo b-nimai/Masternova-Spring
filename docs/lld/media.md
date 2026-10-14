@@ -38,8 +38,9 @@ On the way out, a paid lecture must not become one permanent, shareable URL.
   and writes renditions. Both must agree on the **key layout**: it's how a crashed job's rerun
   overwrites instead of duplicating (7.10).
 - **Untrusted client:** the server checks what storage holds, not what the browser claims.
-- **Access control on playback** arrives in Phase 8. Phase 7 needs the point where it will plug
-  in.
+- **Access control on playback** arrived in Phase 8, as a separate learner path
+  ([`entitlement-engine.md`](entitlement-engine.md)); media keeps the owner's preview and serves
+  the playlists for both.
 
 ## 3. Domain model
 
@@ -164,9 +165,12 @@ That is the same contract shape as `MailProvider`'s permanent/temporary split.
 
 **Playback** (ADR-0013):
 
-1. `POST /media/assets/{id}/playback` (authenticated; owner or admin in Phase 7, the
-   **entitlement check plugs in here** in Phase 8) returns `{ masterUrl, expiresAt }`. `masterUrl`
-   is `/api/v1/media/assets/{id}/hls/master.m3u8?t=<ticket>`.
+1. `POST /media/assets/{id}/playback` (authenticated; owner or admin: the instructor's
+   **preview**) returns `{ masterUrl, expiresAt }`. `masterUrl` is
+   `/api/v1/media/assets/{id}/hls/master.m3u8?t=<ticket>`. *Phase 8 decided learners do not come
+   through here:* they play a **lecture** through entitlement's 5-minute, IP-bound token
+   ([ADR-0017](../adr/0017-short-ip-bound-playback-token.md)), and media serves both paths from
+   one `HlsDelivery` (exposed to entitlement as `MediaApi.masterPlaylist` / `rungPlaylist`).
 2. The ticket is an HMAC over `(assetId, userId, exp)`, valid 6 h. It's a URL token because
    **native Safari HLS can't send an `Authorization` header**.
 3. The playlist endpoints accept the ticket instead of a bearer. They rewrite every segment and
@@ -266,7 +270,7 @@ same session when they arrive).
 | Storage down during create/complete | `StorageUnavailableException` | 503 `STORAGE_UNAVAILABLE`, `Retry-After: 5`; session unchanged | client retries |
 | Abandoned upload (never completed) | sweeper: `OPEN` and `expires_at < now` | `AbortMultipartUpload` → `EXPIRED` | automatic (7.6); S3 stops billing for the parts |
 | S3 upload with no session row (crash between create and insert) | sweeper: `ListMultipartUploads` older than 24 h with no session | abort | automatic (7.6) |
-| Ticket leaked | — | valid ≤ 6 h for one asset; segment URLs expire too | Phase 8 adds revocation via entitlement |
+| Ticket leaked | — | valid ≤ 6 h for one asset; segment URLs expire too | owner preview only; learners' tokens are 5 min and IP-bound (ADR-0017) |
 
 ## 9. Data & indexes
 

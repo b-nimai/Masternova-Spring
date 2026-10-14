@@ -227,9 +227,18 @@ presigned storage urls, so the bytes never pass through the api.
 
 **Decided in 7.9:** the ticket lives **6 h**, not the 5 minutes first planned. A VOD player
 fetches a *different rung's* playlist whenever ABR switches, which can be an hour into a lecture.
-A 5-minute ticket would break the switch, not the attacker. The access check is owner or admin
-in Phase 7; Phase 8's entitlement chain plugs into the same `PlaybackService.ticket`, and
-revocation shortens the effective lifetime.
+A 5-minute ticket would break the switch, not the attacker. This route is the **owner's
+preview** (owner or admin).
+
+**Learners (8.5, [ADR-0017](../adr/0017-short-ip-bound-playback-token.md)):** `POST
+/api/v1/lectures/{id}/playback` (bearer, then `@PreAuthorize` runs the entitlement decision)
+returns `{manifestUrl, expiresAt}`; `manifestUrl` is `/api/v1/lectures/{id}/hls/master.m3u8?token=…`.
+The token lives **5 minutes** and is **bound to the client IP**, which is in its HMAC but not in
+the token. The playlist routes (`…/hls/master.m3u8`, `…/hls/{rung}/index.m3u8`) are public, accept
+only that token from that IP (else 403 `PLAYBACK_TOKEN_INVALID`), and touch no database. Segments
+are presigned for 30 minutes. What makes 5 minutes work where 7.9's didn't: on a 403 the player
+**re-tickets** (one new POST, which re-runs the decision) and resumes at the same position. A
+lecture without a video is 409 `LECTURE_HAS_NO_VIDEO`; one still processing, 409 `MEDIA_NOT_READY`.
 
 ## 12. Payment webhooks
 

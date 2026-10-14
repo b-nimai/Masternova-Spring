@@ -4,8 +4,8 @@
 > it and decides **whether, when and how** each call reaches it: lazily, with access checks, or
 > wrapped in a transaction.
 
-**Type:** Structural · **Status:** lab built; Spring's proxies in every phase · **Last updated:** 2026-10-02
-**Real code:** Spring-generated proxies around our beans (`@Transactional`, `@PreAuthorize`, `@Cacheable`, `@Async`). Our own `@DesignPattern(PROXY)` class arrives with the Phase 8 playback-token guard.
+**Type:** Structural · **Status:** built (Phase 8.5); Spring's proxies in every phase · **Last updated:** 2026-10-14
+**Real code:** Spring-generated proxies around our beans (`@Transactional`, `@PreAuthorize`, `@Cacheable`, `@Async`). Our `@DesignPattern(PROXY)` class: `com.masternova.api.entitlement.application.LecturePlaybackService`, the RealSubject behind Spring's `@PreAuthorize` proxy (§7b).
 **Lab:** [`lab/.../patterns/proxy/`](../lab/src/main/java/com/masternova/patterns/proxy/) · **Spring deep-dive:** [Java note 09](../java/09-spring-aop-and-proxies.md)
 
 **Trigger phrase:** "*do X before/after every call*", "*only load it if it's actually used*",
@@ -120,6 +120,23 @@ every bean that has `@Transactional`, `@Cacheable`, `@Async` or a matching `@Asp
 | **Adapter** | wraps an object with a **different** interface to make it fit; a Proxy keeps the **same** interface |
 | Inline checks in the real class | mixes concerns (security inside a revenue query) and repeats in every class |
 | AspectJ compile-time weaving | no self-invocation trap, but needs a special compiler/agent. Spring's runtime proxies are simpler. |
+
+## 7b. Real use: the playback guard (Phase 8.5)
+
+`LecturePlaybackService.issue` carries
+`@PreAuthorize("@entitlements.canWatch(authentication, #lectureId)")`. Spring wraps the bean in a
+CGLIB proxy; the proxy evaluates the expression, which runs the whole entitlement engine, and only
+an allowed call reaches the method body. The class is the **RealSubject**: it issues a token and
+never mentions access.
+
+Two details worth defending:
+
+- **The expression returns an `AuthorizationResult`, not a `boolean`.** A boolean loses *why*;
+  the result (`EntitlementAuthorization`, which implements platform's `ReasonedDenial`) rides in
+  the `AuthorizationDeniedException`, and the 403 says `NO_ENTITLEMENT` or `ENTITLEMENT_REVOKED`.
+- **The proxy trap, met for real:** `EntitlementExpressionsTest` first read a guarded bean's
+  *field* through the proxy and got `null`. A CGLIB proxy is a subclass instance whose own fields
+  are never initialised; only method calls are forwarded. Hence a method, `opened()`.
 
 ## 8. Interview Q&A
 
