@@ -18,15 +18,13 @@ describe('NewCourse', () => {
     const category = query(fixture, '[data-testid="category"]');
     expect(category.getAttribute('aria-disabled')).toBe('true');
 
-    http
-      .expectOne('/api/v1/categories')
-      .flush([
-        {
-          slug: 'devops',
-          name: 'DevOps',
-          children: [{ slug: 'ci-cd', name: 'CI/CD', children: [] }],
-        },
-      ]);
+    http.expectOne('/api/v1/categories').flush([
+      {
+        slug: 'devops',
+        name: 'DevOps',
+        children: [{ slug: 'ci-cd', name: 'CI/CD', children: [] }],
+      },
+    ]);
     await fixture.whenStable();
     expect(category.getAttribute('aria-disabled')).toBe('false');
     http.verify();
