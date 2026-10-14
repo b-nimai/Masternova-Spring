@@ -201,8 +201,19 @@ when the stream opens).
 ## 10. Denials carry a reason
 
 A 403 from the entitlement engine sets a `reason` member: `NO_ENTITLEMENT`,
-`ENTITLEMENT_REVOKED`, `COURSE_NOT_PUBLISHED`, `ENTITLEMENT_EXPIRED`. The client shows a buy
-button, a support link, or "no longer available" without parsing English.
+`ENTITLEMENT_REVOKED`, `COURSE_NOT_PUBLISHED`, `ENTITLEMENT_EXPIRED` (and `ACCESS_CHECK_FAILED`
+when a policy broke: the engine fails shut). The client shows a buy button, a support link, or
+"no longer available" without parsing English.
+
+**How it gets there (8.4):** a method guarded by `@PreAuthorize("@entitlements.canWatch(authentication, #lectureId)")`
+gets an `AuthorizationResult` that implements platform's `ReasonedDenial`; Spring Security puts
+it in the `AuthorizationDeniedException`, and `GlobalExceptionHandler` copies its reason into the
+problem. A plain role check still answers `INSUFFICIENT_ROLE`.
+
+**Asking instead of being refused:** `GET /api/v1/courses/{id}/access` (the course page's locks)
+and `GET /api/v1/lectures/{id}/access` (the player's guard) are public and answer the same
+decision as a discriminated union, `{"kind": "ALLOWED", "grant": "PREVIEW_LECTURE"}` or
+`{"kind": "DENIED", "reason": "NO_ENTITLEMENT"}`, with 200.
 
 ## 11. Media tokens, not the session
 

@@ -5,7 +5,7 @@
 > and explainably (every denial carries a stable reason, and an admin can see every policy's
 > vote). Then hand the player a short playback token bound to that user, that lecture and that IP.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** building (8.1 design, 8.2 policy chain, 8.3 cached repository)
+**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** building (8.1 design, 8.2 policy chain, 8.3 cached repository, 8.4 facade + `@PreAuthorize`)
 **Last updated:** 2026-10-14 · **Angular:** `frontend/src/app/features/learn` (player),
 `features/catalog/curriculum` (locks)
 **Pairs with:** [ADR-0016](../adr/0016-cache-the-entitlement-row-not-the-decision.md) (cache) ·

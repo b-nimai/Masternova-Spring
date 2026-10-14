@@ -5,6 +5,7 @@ import com.masternova.api.platform.DomainException;
 import com.masternova.api.platform.ForbiddenException;
 import com.masternova.api.platform.NotFoundException;
 import com.masternova.api.platform.ProblemTypes;
+import com.masternova.api.platform.ReasonedDenial;
 import com.masternova.api.platform.RuleViolationException;
 import com.masternova.api.platform.UnauthenticatedException;
 import com.masternova.api.platform.ValidationException;
@@ -23,6 +24,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -81,6 +83,9 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   /**
    * @PreAuthorize on a service method throws INSIDE Spring MVC — without this handler the catch-all
    * below would turn a missing role into a 500. Same shape as the security chain's 403.
+   *
+   * <p>⭐ When the expression returned a result that knows why ({@link ReasonedDenial}: the
+   * entitlement engine), its reason goes to the client — "buy" and "renew" are different buttons.
    */
   @ExceptionHandler(AccessDeniedException.class)
   ResponseEntity<ProblemDetail> handleAccessDenied(
@@ -88,7 +93,12 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     ProblemDetail problem =
         problem(
             HttpStatus.FORBIDDEN, "FORBIDDEN", "You do not have permission to do this.", request);
-    problem.setProperty("reason", "INSUFFICIENT_ROLE");
+    problem.setProperty(
+        "reason",
+        ex instanceof AuthorizationDeniedException denied
+                && denied.getAuthorizationResult() instanceof ReasonedDenial reasoned
+            ? reasoned.denialReason()
+            : "INSUFFICIENT_ROLE");
     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);
   }
 

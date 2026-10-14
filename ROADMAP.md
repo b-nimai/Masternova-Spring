@@ -123,7 +123,7 @@ Phases are listed **in the order you do them**.
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 8 | 22 h | ~21 h | ✅ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 5 | 12 h | ~12 h | ✅ |
-| 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 3 | 18 h | ~8 h | 🔨 |
+| 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 4 | 18 h | ~10.5 h | 🔨 |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 0 | 28 h | — | ☐ |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 0 | 14 h | — | ☐ |
@@ -374,7 +374,7 @@ with alerts that mean something.
 | 8.1 | `docs/lld/entitlement-engine.md` + ADRs (cache the row not the decision; playback token) | — | — | — | 1.5 h | ✅ | 2026-10-14 |
 | 8.2 | Policy chain: each policy returns ALLOW / DENY / ABSTAIN, explicit DENY wins; policies are ordered beans | `@Order`, `List<Policy>` injection, sealed `Decision` | — | **Chain of Responsibility** + **Strategy** | 4 h | ✅ | 2026-10-14 |
 | 8.3 | Cached entitlement repository (Redis) + invalidation on grant/revoke events | Spring Cache, `RedisTemplate`, cache-aside | — | **Decorator** | 3 h | ✅ | 2026-10-14 |
-| 8.4 | `EntitlementService` as the module's single entry point; hook into `@PreAuthorize` via a custom bean | facade API design | — | **Facade** | 2 h | ☐ | |
+| 8.4 | `EntitlementService` as the module's single entry point; hook into `@PreAuthorize` via a custom bean | facade API design | — | **Facade** | 2 h | ✅ | 2026-10-14 |
 | 8.5 | 5-minute HMAC playback token (user + lecture + IP) + manifest endpoint | `Mac`, constant-time compare | — | — | 2.5 h | ☐ | |
 | 8.6 | Angular: locked/unlocked lecture UI; denial reason → the right CTA; player guard | — | discriminated unions in templates, `@switch` | — | 3 h | ☐ | |
 | 8.7 | Tests: parameterized policy matrix, cache invalidation IT | `@ParameterizedTest`, `@MethodSource` | — | — | 2 h | ☐ | |

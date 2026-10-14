@@ -43,4 +43,8 @@ public interface CourseRepository
 
   @EntityGraph(attributePaths = {"category", "sections"})
   Optional<Course> findWithCurriculumById(UUID id);
+
+  /** Which course a lecture belongs to (entitlement asks by lecture). One indexed join. */
+  @Query("select s.course.id from Lecture l join l.section s where l.id = :lectureId")
+  Optional<UUID> findCourseIdByLectureId(UUID lectureId);
 }
