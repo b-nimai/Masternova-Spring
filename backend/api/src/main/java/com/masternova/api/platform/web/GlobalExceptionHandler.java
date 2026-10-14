@@ -97,6 +97,7 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         "reason",
         ex instanceof AuthorizationDeniedException denied
                 && denied.getAuthorizationResult() instanceof ReasonedDenial reasoned
+                && reasoned.denialReason() != null
             ? reasoned.denialReason()
             : "INSUFFICIENT_ROLE");
     return ResponseEntity.status(HttpStatus.FORBIDDEN).body(problem);

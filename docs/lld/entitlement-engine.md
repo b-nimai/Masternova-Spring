@@ -84,7 +84,7 @@ learner on an archived course reads "your access was withdrawn", which is the tr
 | 10 | `AdminPolicy` | `Allow(ADMIN)` for an admin |
 | 20 | `OwnerPolicy` | `Allow(OWNER)` for the course's instructor |
 | 30 | `RevokedEntitlementPolicy` | `Deny(ENTITLEMENT_REVOKED)` for a non-staff viewer whose row is revoked: a refund beats a preview lecture and a course made free later |
-| 40 | `PublishedCoursePolicy` | `Deny(COURSE_NOT_PUBLISHED)` for a non-staff viewer of a draft / in-review course, or of an **archived** course without an active entitlement (people who paid keep an archived course) |
+| 40 | `PublishedCoursePolicy` | `Deny(COURSE_NOT_PUBLISHED)` for a non-staff viewer of a course that isn't on sale (draft, in review, archived) **unless they hold an active entitlement**: people who paid keep a course its instructor unpublished to edit, or retired |
 | 50 | `FreeCoursePolicy` | `Allow(FREE_COURSE)` if the price is 0 **and was set** (`priceSet`: 0 also means "not priced yet") |
 | 60 | `PreviewLecturePolicy` | `Allow(PREVIEW_LECTURE)` for a preview lecture |
 | 70 | `ActiveEntitlementPolicy` | `Allow(ENTITLED)` if the row is `ACTIVE` at `now` |
@@ -263,6 +263,9 @@ Specification class. Two callers, one line, no composition: a class would be cer
 | Learner's IP changes (Wi-Fi → mobile) | same | 403, the player re-tickets once and continues | automatic |
 | Lecture has no video / not READY | `MediaApi.readiness` | 409 `MEDIA_NOT_READY` | the instructor finishes the upload |
 | Duplicate grant (webhook redelivery) | `ON CONFLICT … WHERE` matches nothing | no change, `grant` returns `false` | none needed |
+| Late copy of the original purchase **after a refund** | not detectable here: a grant after a revoke is a re-purchase | access restored | the caller dedupes the provider's event id first (Phase 9.6, claim-before-process); `EntitlementApi.grant` says so |
+| Direct client forging `X-Forwarded-For` | Tomcat trusts 172.16/12 (the Docker gateway) | would defeat the IP binding | the api port is published on loopback only (`127.0.0.1:8080`); in Kubernetes only the ingress reaches the pod (D4) |
+| Two catalog reads per ticket | `@PreAuthorize` decides, then `issue` finds the asset | 2 extra statements per `POST /playback` | accepted: one ticket per viewer per 5 minutes |
 
 ## 9. Data & indexes
 
@@ -284,7 +287,7 @@ playlist routes open no transaction and run no SQL (token only).
     default (all-abstain and an empty chain), an expired row turns the fallback into
     `ENTITLEMENT_EXPIRED`, a throwing or `null`-returning policy is `ACCESS_CHECK_FAILED` while
     the others' votes are kept.
-  - `PolicyMatrixTest` ⭐: the **decision table as data**, 27 named rows (viewer × course state ×
+  - `PolicyMatrixTest` ⭐: the **decision table as data**, 28 named rows (viewer × course state ×
     lecture × row), through the seven real policies sorted by `AnnotationAwareOrderComparator`
     exactly as Spring injects them; every row again through the chain **reversed** (same
     verdict); and the order itself pinned to §3's table.
@@ -338,6 +341,6 @@ and reach a `<video>` that can't send headers.
    playlists check only the token (no DB); the player **re-tickets** on a 403 and resumes, which
    re-runs the decision. That's how a refund reaches a viewer mid-lecture.
 
-**The numbers:** 27-row decision table, verdict identical with the chain reversed; 50 concurrent
+**The numbers:** 28-row decision table, verdict identical with the chain reversed; 50 concurrent
 grants → 1 row; one Redis `GET` per signed-in decision, none for anonymous; a playlist request
 is one HMAC and one storage read.

@@ -19,9 +19,7 @@ class RevokedEntitlementPolicy implements EntitlementPolicy {
 
   @Override
   public Vote decide(AccessContext context) {
-    boolean revoked =
-        !context.isStaff()
-            && context.entitlementStatus().orElse(null) == Entitlement.Status.REVOKED;
+    boolean revoked = !context.isStaff() && context.entitlementIs(Entitlement.Status.REVOKED);
     return revoked ? Vote.deny(DenialReason.ENTITLEMENT_REVOKED) : Vote.ABSTAIN;
   }
 }

@@ -134,7 +134,7 @@ public class EntitlementService implements EntitlementApi {
     if (identity.displayName(userId).isEmpty()) {
       throw new NotFoundException("User", userId);
     }
-    if (catalog.courseFacts(courseId).isEmpty()) {
+    if (!catalog.courseExists(courseId)) {
       throw new NotFoundException("Course", courseId);
     }
   }

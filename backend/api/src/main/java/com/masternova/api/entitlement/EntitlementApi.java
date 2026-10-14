@@ -20,8 +20,11 @@ public interface EntitlementApi {
   AccessDecision decide(Optional<CurrentUser> viewer, UUID lectureId);
 
   /**
-   * Gives a user a course. ⭐ Idempotent — a webhook redelivery is a no-op — and never shortens
-   * access a user already holds.
+   * Gives a user a course. ⭐ Idempotent against a held grant — a duplicate while the access is
+   * active is a no-op — and never shortens access. A grant after a REVOKE restores access: that is
+   * a re-purchase. So a caller fed by redelivering webhooks must dedupe the EVENT first (Phase 9:
+   * claim the provider's event id before processing), or a late copy of the original purchase would
+   * undo a refund.
    *
    * @param expiresAt empty = lifetime access
    * @return whether anything changed

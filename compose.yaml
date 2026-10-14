@@ -164,7 +164,10 @@ services:
       - source: entitlement_playback_secret # signs learners' IP-bound playback tokens (ADR-0017)
         target: ENTITLEMENT_PLAYBACK_SECRET
     ports:
-      - '8080:8080'
+      # ⭐ loopback only: a direct client would reach Tomcat from Docker's 172.x gateway, which the
+      #    RemoteIpValve trusts, and could forge X-Forwarded-For — the IP playback tokens are bound
+      #    to (ADR-0017). Browsers come through nginx (:8081).
+      - '127.0.0.1:8080:8080'
     depends_on:
       postgres:
         condition: service_healthy

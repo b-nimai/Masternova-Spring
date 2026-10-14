@@ -19,7 +19,7 @@ class ActiveEntitlementPolicy implements EntitlementPolicy {
 
   @Override
   public Vote decide(AccessContext context) {
-    return context.entitlementStatus().orElse(null) == Entitlement.Status.ACTIVE
+    return context.entitlementIs(Entitlement.Status.ACTIVE)
         ? Vote.allow(AccessGrant.ENTITLED)
         : Vote.ABSTAIN;
   }

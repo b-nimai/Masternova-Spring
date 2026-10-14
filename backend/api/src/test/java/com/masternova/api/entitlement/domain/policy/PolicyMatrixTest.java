@@ -217,12 +217,19 @@ class PolicyMatrixTest {
             NONE,
             denied(DenialReason.COURSE_NOT_PUBLISHED)),
         row(
-            "granted early, draft",
+            "buyer keeps a course unpublished to edit",
             LEARNER,
             DRAFT,
             PAID,
             ACTIVE,
-            denied(DenialReason.COURSE_NOT_PUBLISHED)),
+            allowed(AccessGrant.ENTITLED)),
+        row(
+            "refunded, draft",
+            LEARNER,
+            DRAFT,
+            PAID,
+            REVOKED,
+            denied(DenialReason.ENTITLEMENT_REVOKED)),
         row("instructor, own draft", INSTRUCTOR, DRAFT, PAID, NONE, allowed(AccessGrant.OWNER)),
         row("admin, a draft", ADMIN, DRAFT, PAID, NONE, allowed(AccessGrant.ADMIN)),
         row(

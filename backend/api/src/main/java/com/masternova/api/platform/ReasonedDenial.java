@@ -10,6 +10,6 @@ package com.masternova.api.platform;
  */
 public interface ReasonedDenial {
 
-  /** A stable, machine-readable code, e.g. {@code NO_ENTITLEMENT}. */
+  /** A stable, machine-readable code, e.g. {@code NO_ENTITLEMENT}; {@code null} if not denied. */
   String denialReason();
 }

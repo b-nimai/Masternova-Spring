@@ -47,4 +47,9 @@ public record AccessContext(
   public Optional<Entitlement.Status> entitlementStatus() {
     return entitlement.map(e -> e.status(now));
   }
+
+  /** Whether the viewer holds a row in exactly this status now (no row: {@code false}). */
+  public boolean entitlementIs(Entitlement.Status status) {
+    return entitlementStatus().filter(status::equals).isPresent();
+  }
 }

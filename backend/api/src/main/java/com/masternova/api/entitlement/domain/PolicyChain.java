@@ -92,7 +92,7 @@ public class PolicyChain {
 
   /** Nobody allowed: say WHY in the viewer's terms — an expired rental reads "renew", not "buy". */
   private static DenialReason fallback(AccessContext context) {
-    return context.entitlementStatus().orElse(null) == Entitlement.Status.EXPIRED
+    return context.entitlementIs(Entitlement.Status.EXPIRED)
         ? DenialReason.ENTITLEMENT_EXPIRED
         : DenialReason.NO_ENTITLEMENT;
   }

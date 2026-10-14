@@ -44,6 +44,14 @@ class PoliciesTest {
   }
 
   @Test
+  void aBuyerKeepsACourseItsInstructorUnpublishedToEdit() {
+    var draft = course(Availability.UNPUBLISHED, 49_900, true);
+    assertThat(
+            new PublishedCoursePolicy().decide(context(learner(), draft, PAID, Contexts.active())))
+        .isEqualTo(Vote.ABSTAIN);
+  }
+
+  @Test
   void theRevokedRuleNeverDeniesStaff() {
     var policy = new RevokedEntitlementPolicy();
     assertThat(policy.decide(context(learner(), paidCourse(), PAID, Contexts.revoked())))

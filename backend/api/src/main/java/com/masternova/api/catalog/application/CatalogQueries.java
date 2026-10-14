@@ -11,7 +11,7 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** {@link CatalogApi} — the read side other modules use. Two statements per course. */
+/** {@link CatalogApi} — the read side other modules use. Two statements per course's facts. */
 @Service
 @Transactional(readOnly = true)
 class CatalogQueries implements CatalogApi {
@@ -24,7 +24,12 @@ class CatalogQueries implements CatalogApi {
 
   @Override
   public Optional<CourseFacts> courseFacts(UUID courseId) {
-    return courses.findWithCurriculumById(courseId).map(CatalogQueries::facts);
+    return courses.findFactsById(courseId).map(CatalogQueries::facts);
+  }
+
+  @Override
+  public boolean courseExists(UUID courseId) {
+    return courses.existsById(courseId);
   }
 
   @Override

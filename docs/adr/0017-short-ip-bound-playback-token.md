@@ -31,7 +31,9 @@ Learners are different from an instructor previewing their own upload:
    the MAC with the requesting IP. A link replayed from another network fails, and no IP address
    ends up in URLs, logs or screenshots. The IP is `request.getRemoteAddr()` with
    `server.forward-headers-strategy: native`: Tomcat's `RemoteIpValve` takes `X-Forwarded-For`
-   only from internal proxies (our nginx), so a client can't spoof it.
+   only from internal proxies (our nginx), so a client can't spoof it. ⭐ Found in the phase
+   review: "internal" includes Docker's 172.x gateway, so the api's own port is published on
+   loopback only (`127.0.0.1:8080`); browsers reach it through nginx.
 4. **The playlists are verified by token alone:** no SQL, no Redis. The asset id is in the
    signed payload.
 5. **Segments are presigned for 30 minutes** (`segment-url-ttl`), not 6 hours: a long pause
