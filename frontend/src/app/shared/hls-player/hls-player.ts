@@ -18,6 +18,8 @@ export interface PlaybackFailure {
   details: string;
   /** Seconds into the video when it failed. */
   position: number;
+  /** The HTTP status that failed it, when known (hls.js); native HLS doesn't say. */
+  status?: number;
 }
 
 /**
@@ -76,7 +78,7 @@ export class HlsPlayer {
     if (HlsJs.isSupported()) {
       const hls = new HlsJs({ startPosition: startAt > 0 ? startAt : -1 });
       hls.on(HlsJs.Events.ERROR, (_event, data) => {
-        if (data.fatal) this.fail(data.details);
+        if (data.fatal) this.fail(data.details, data.response?.code);
       });
       hls.loadSource(src);
       hls.attachMedia(video);
@@ -93,7 +95,11 @@ export class HlsPlayer {
     }
   }
 
-  private fail(details: string): void {
-    this.failed.emit({ details, position: this.video().nativeElement.currentTime || 0 });
+  private fail(details: string, status?: number): void {
+    this.failed.emit({
+      details,
+      position: this.video().nativeElement.currentTime || 0,
+      ...(status ? { status } : {}),
+    });
   }
 }

@@ -7,9 +7,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { CatalogApi } from '../../../core/api/catalog-api';
-import { AccessResponse, DenialReason, EntitlementApi } from '../../../core/api/entitlement-api';
+import { AccessResponse, EntitlementApi } from '../../../core/api/entitlement-api';
 import { AuthStore } from '../../../core/auth/auth-store';
-import { DENIAL_MESSAGES } from '../../../shared/denial-messages';
+import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
 import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
 import { AccessCta } from '../access-cta/access-cta';
@@ -52,7 +52,7 @@ export class CourseDetail {
 
   readonly slug = input.required<string>();
   /** `?locked=<reason>`: the player's guard sent the viewer back here (query params bind too). */
-  readonly locked = input<DenialReason | undefined>();
+  readonly locked = input<string | undefined>();
 
   protected readonly course = rxResource({
     params: () => this.slug(),
@@ -85,7 +85,7 @@ export class CourseDetail {
   /** The banner for `?locked=` — only for a reason we know (it's a url anyone can edit). */
   protected readonly lockedMessage = computed(() => {
     const reason = this.locked();
-    return reason && Object.hasOwn(DENIAL_MESSAGES, reason) ? DENIAL_MESSAGES[reason] : null;
+    return isDenialReason(reason) ? DENIAL_MESSAGES[reason] : null;
   });
 
   /** A 404 is "this course doesn't exist (for you)" — not an outage. */

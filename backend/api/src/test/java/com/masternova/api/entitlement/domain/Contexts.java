@@ -21,9 +21,11 @@ public final class Contexts {
   public static final UUID LEARNER = UUID.fromString("00000000-0000-0000-0000-00000000000b");
   public static final UUID COURSE = UUID.fromString("00000000-0000-0000-0000-0000000000c0");
   public static final LectureFacts PREVIEW =
-      new LectureFacts(UUID.fromString("00000000-0000-0000-0000-0000000000e1"), true, null);
+      new LectureFacts(
+          UUID.fromString("00000000-0000-0000-0000-0000000000e1"), true, Optional.empty());
   public static final LectureFacts PAID =
-      new LectureFacts(UUID.fromString("00000000-0000-0000-0000-0000000000e2"), false, null);
+      new LectureFacts(
+          UUID.fromString("00000000-0000-0000-0000-0000000000e2"), false, Optional.empty());
 
   private Contexts() {}
 

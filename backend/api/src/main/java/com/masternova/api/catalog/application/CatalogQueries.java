@@ -50,7 +50,7 @@ class CatalogQueries implements CatalogApi {
         c.priceSetAt().isPresent(),
         c.sections().stream()
             .flatMap(s -> s.lectures().stream())
-            .map(l -> new LectureFacts(l.id(), l.isPreview(), l.assetId().orElse(null)))
+            .map(l -> new LectureFacts(l.id(), l.isPreview(), l.assetId()))
             .toList());
   }
 }

@@ -30,15 +30,12 @@ public record CourseFacts(
   }
 
   /**
-   * @param assetId the lecture's video, or {@code null} (a text lecture, or no upload yet)
+   * @param video the lecture's media asset; empty for a text lecture or before an upload
    */
-  public record LectureFacts(UUID lectureId, boolean preview, UUID assetId) {
+  public record LectureFacts(UUID lectureId, boolean preview, Optional<UUID> video) {
     public LectureFacts {
       Objects.requireNonNull(lectureId, "lectureId");
-    }
-
-    public Optional<UUID> video() {
-      return Optional.ofNullable(assetId);
+      Objects.requireNonNull(video, "video");
     }
   }
 

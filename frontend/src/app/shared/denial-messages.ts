@@ -13,3 +13,8 @@ export const DENIAL_MESSAGES: Record<DenialReason, string> = {
   COURSE_NOT_PUBLISHED: 'This course is no longer available.',
   ACCESS_CHECK_FAILED: 'We could not check your access just now. Please try again.',
 };
+
+/** For strings from outside (a problem body, `?locked=`): is this one of OUR reasons? */
+export function isDenialReason(value: unknown): value is DenialReason {
+  return typeof value === 'string' && Object.hasOwn(DENIAL_MESSAGES, value);
+}

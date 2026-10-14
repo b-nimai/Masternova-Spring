@@ -29,7 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/lectures/{id}")
 class LecturePlaybackController {
 
-  static final String HLS = "application/vnd.apple.mpegurl";
+  private static final String HLS = "application/vnd.apple.mpegurl";
   private static final MediaType HLS_TYPE = MediaType.parseMediaType(HLS);
 
   private final LecturePlaybackService playback;

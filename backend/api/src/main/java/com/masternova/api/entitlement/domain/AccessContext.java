@@ -43,13 +43,8 @@ public record AccessContext(
     return viewer.admin() || isOwner();
   }
 
-  /** The row's status now, or empty when the viewer has no row for this course. */
-  public Optional<Entitlement.Status> entitlementStatus() {
-    return entitlement.map(e -> e.status(now));
-  }
-
   /** Whether the viewer holds a row in exactly this status now (no row: {@code false}). */
   public boolean entitlementIs(Entitlement.Status status) {
-    return entitlementStatus().filter(status::equals).isPresent();
+    return entitlement.map(e -> e.status(now)).filter(status::equals).isPresent();
   }
 }

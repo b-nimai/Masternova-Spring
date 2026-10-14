@@ -78,15 +78,12 @@ public class EntitlementService implements EntitlementApi {
     Instant now = clock.instant();
     return new CourseAccess(
         courseId,
-        chain.evaluate(new AccessContext(who, course, Optional.empty(), row, now)).decision(),
+        evaluate(who, course, Optional.empty(), row, now).decision(),
         course.lectures().stream()
             .map(
                 l ->
                     new LectureAccess(
-                        l.lectureId(),
-                        chain
-                            .evaluate(new AccessContext(who, course, Optional.of(l), row, now))
-                            .decision()))
+                        l.lectureId(), evaluate(who, course, Optional.of(l), row, now).decision()))
             .toList());
   }
 
@@ -120,9 +117,17 @@ public class EntitlementService implements EntitlementApi {
         catalog
             .courseFactsOfLecture(lectureId)
             .orElseThrow(() -> new NotFoundException("Lecture", lectureId));
-    Optional<LectureFacts> lecture = course.lecture(lectureId);
-    return chain.evaluate(
-        new AccessContext(viewer, course, lecture, rowOf(viewer, course), clock.instant()));
+    return evaluate(
+        viewer, course, course.lecture(lectureId), rowOf(viewer, course), clock.instant());
+  }
+
+  private Evaluation evaluate(
+      Viewer viewer,
+      CourseFacts course,
+      Optional<LectureFacts> lecture,
+      Optional<Entitlement> row,
+      Instant now) {
+    return chain.evaluate(new AccessContext(viewer, course, lecture, row, now));
   }
 
   /** Anonymous viewers have no row: no lookup at all. */

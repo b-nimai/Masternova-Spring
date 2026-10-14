@@ -130,6 +130,9 @@ protected onFailed(failure: PlaybackFailure): void {
   with `reason: ENTITLEMENT_REVOKED`: shown, not retried. That's how revocation reaches a viewer
   mid-lecture.
 - **The grace window stops a loop:** a broken video would otherwise re-ticket forever.
+- **Only a 403 is the token's fault:** hls.js reports the HTTP status (`data.response.code`), so
+  a 404 or a 5xx is shown, never re-ticketed. Native Safari doesn't say, so there the grace
+  window is the only filter.
 - **The player reloads in place:** `HlsPlayer` runs `attach()` in an `afterRenderEffect`, so a
   new `src` destroys the old hls.js instance and starts a new one on the **same `<video>`** with
   `startPosition: startAt`. Native Safari gets `video.src = …` and a seek on `loadedmetadata`.

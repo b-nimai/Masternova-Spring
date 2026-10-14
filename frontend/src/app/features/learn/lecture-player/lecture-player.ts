@@ -6,7 +6,7 @@ import { RouterLink } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { DenialReason, EntitlementApi } from '../../../core/api/entitlement-api';
 import { asProblem } from '../../../core/api/problem';
-import { DENIAL_MESSAGES } from '../../../shared/denial-messages';
+import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
 import { HlsPlayer, PlaybackFailure } from '../../../shared/hls-player/hls-player';
 
 /** What the page shows — a discriminated union, switched on in the template. */
@@ -27,8 +27,8 @@ const FAILURES: Record<string, string> = {
 /**
  * /courses/:slug/lectures/:lectureId — plays one lecture (ADR-0017).
  *
- * ⭐ RE-TICKETING: the playback token lives 5 minutes and is bound to this network. When the
- *    player fails (an ABR switch 40 minutes in, a new Wi-Fi), the page asks for a new token —
+ * ⭐ RE-TICKETING: the playback token lives 5 minutes and is bound to this network. When a
+ *    playlist answers 403 (an ABR switch 40 minutes in, a new Wi-Fi), the page asks for a new token —
  *    which re-runs the entitlement decision on the server — and resumes at the same second. A
  *    failure within {@link RETICKET_GRACE_MS} of a fresh token is shown instead of retried, and a
  *    403 on the re-ticket is a REAL denial (a refund): shown, never looped.
@@ -59,7 +59,10 @@ export class LecturePlayer {
   }
 
   protected onFailed(failure: PlaybackFailure): void {
-    if (Date.now() - this.ticketedAt < RETICKET_GRACE_MS) {
+    // ⭐ hls.js knows the HTTP status: only a 403 (expired token, new network) is worth a
+    //    re-ticket. Native Safari doesn't say, so it falls back to the time since the ticket.
+    const notTheToken = failure.status !== undefined && failure.status !== 403;
+    if (notTheToken || Date.now() - this.ticketedAt < RETICKET_GRACE_MS) {
       this.state.set({ kind: 'failed', message: 'Playback failed. Please try again.' });
       return;
     }
@@ -79,8 +82,8 @@ export class LecturePlayer {
       },
       error: (error: unknown) => {
         const problem = asProblem(error);
-        if (problem?.status === 403 && problem.reason && problem.reason in DENIAL_MESSAGES) {
-          this.state.set({ kind: 'denied', reason: problem.reason as DenialReason });
+        if (problem?.status === 403 && isDenialReason(problem.reason)) {
+          this.state.set({ kind: 'denied', reason: problem.reason });
         } else {
           this.state.set({
             kind: 'failed',

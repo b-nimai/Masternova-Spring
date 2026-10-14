@@ -61,7 +61,11 @@ describe('LecturePlayer', () => {
     fixture.detectChanges();
     vi.setSystemTime(Date.now() + 6 * 60_000); // the 5-minute token has expired
 
-    player().triggerEventHandler('failed', { details: 'levelLoadError', position: 754 });
+    player().triggerEventHandler('failed', {
+      details: 'levelLoadError',
+      position: 754,
+      status: 403,
+    });
     issue('T2');
     fixture.detectChanges();
 
@@ -75,6 +79,17 @@ describe('LecturePlayer', () => {
     vi.setSystemTime(Date.now() + RETICKET_GRACE_MS - 1);
 
     player().triggerEventHandler('failed', { details: 'manifestLoadError', position: 0 });
+    fixture.detectChanges();
+
+    expect(text(fixture, 'failed')).toContain('Playback failed');
+  });
+
+  it('does not re-ticket a failure that was not the token (a 404)', () => {
+    issue('T1');
+    fixture.detectChanges();
+    vi.setSystemTime(Date.now() + 6 * 60_000);
+
+    player().triggerEventHandler('failed', { details: 'levelLoadError', position: 9, status: 404 });
     fixture.detectChanges();
 
     expect(text(fixture, 'failed')).toContain('Playback failed');

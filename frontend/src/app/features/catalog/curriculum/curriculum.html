@@ -17,14 +17,13 @@
                 <span>{{ lecture.title }}</span>
               </a>
             } @else {
-              <span class="title" [class.locked]="a?.kind === 'DENIED'">
-                <mat-icon [attr.aria-label]="a?.kind === 'DENIED' ? 'Locked' : null">{{
-                  a?.kind === 'DENIED'
-                    ? 'lock'
-                    : lecture.kind === 'VIDEO'
-                      ? 'play_circle'
-                      : 'article'
-                }}</mat-icon>
+              @let locked = a?.kind === 'DENIED';
+              <span class="title" [class.locked]="locked">
+                @if (locked) {
+                  <mat-icon aria-label="Locked">lock</mat-icon>
+                } @else {
+                  <mat-icon>{{ lecture.kind === 'VIDEO' ? 'play_circle' : 'article' }}</mat-icon>
+                }
                 <span>{{ lecture.title }}</span>
               </span>
             }

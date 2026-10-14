@@ -17,7 +17,11 @@ import java.util.UUID;
  */
 final class PlaybackTokens {
 
-  /** What a valid token authorizes. */
+  /**
+   * What a valid token authorizes. {@code userId} isn't checked on the playlist routes (they have
+   * no user); it binds the token to the person it was decided for, so a leaked link in a log or a
+   * support ticket says whose it was.
+   */
   record PlaybackToken(UUID lectureId, UUID assetId, UUID userId, Instant expiresAt) {
     PlaybackToken {
       Objects.requireNonNull(lectureId, "lectureId");
