@@ -441,7 +441,7 @@ check-config`, and parses **every dashboard query** by turning it into a recordi
 (`scripts/dashboards_as_rules.py`). A typo in a panel fails the build instead of showing "No data"
 (checked by breaking one on purpose).
 
-The first CI run on the PR (2026-10-14) found two things the local runs could not:
+The first CI run on the PR (2026-10-14) found three things the local runs could not:
 
 - **BuildKit traces itself.** On CI's buildx, every `RUN` step gets
   `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock`. Boot's OTLP exporter reads
@@ -452,6 +452,11 @@ The first CI run on the PR (2026-10-14) found two things the local runs could no
 - **`mktemp -d` is mode 0700.** The promtool container runs as `nobody` and couldn't read the
   generated rules file. On a Mac, Docker Desktop's file sharing hid this. The Makefile now opens up
   the directory's permissions.
+- **An e2e race, once the images built.** On the new-course form, the test clicked the category
+  dropdown at 5341 ms. The categories response arrived at ~5490 ms (186 ms on a cold api). A
+  `mat-select` with no options doesn't open, so the click did nothing. A real user would hit
+  the same thing. The field is now disabled until the categories load (`new-course.ts`, with a
+  unit test), and Playwright waits for it to be enabled before clicking.
 
 ### 6.5 Routing: Alertmanager → Mailpit
 
