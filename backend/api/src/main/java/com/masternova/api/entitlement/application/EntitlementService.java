@@ -21,8 +21,11 @@ import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,6 +70,20 @@ public class EntitlementService implements EntitlementApi {
   @Override
   public AccessDecision decide(Optional<CurrentUser> viewer, UUID lectureId) {
     return evaluate(viewerOf(viewer), lectureId).decision();
+  }
+
+  @Override
+  public Set<UUID> heldCourses(UUID userId, Collection<UUID> courseIds) {
+    Instant now = clock.instant();
+    return courseIds.stream() // ⭐ one cached lookup each: a cart is ≤ 20 courses
+        .distinct()
+        .filter(
+            courseId ->
+                entitlements
+                    .find(userId, courseId)
+                    .filter(e -> e.status(now) == Entitlement.Status.ACTIVE)
+                    .isPresent())
+        .collect(Collectors.toUnmodifiableSet());
   }
 
   /** The course-wide decision and one per lecture — the row is read once for all of them. */
