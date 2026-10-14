@@ -11,9 +11,11 @@ class FakeHls {
   source = '';
   media: HTMLVideoElement | null = null;
   destroyed = false;
+  readonly config: { startPosition?: number };
   private handlers: Record<string, (e: string, data: { fatal: boolean; details: string }) => void> =
     {};
-  constructor() {
+  constructor(config: { startPosition?: number } = {}) {
+    this.config = config;
     created.push(this);
   }
   on(event: string, handler: (e: string, data: { fatal: boolean; details: string }) => void) {
@@ -59,15 +61,30 @@ describe('HlsPlayer', () => {
     expect(created[0].media).toBe(fixture.nativeElement.querySelector('video'));
   });
 
-  it('reports a fatal error, ignores a recoverable one', async () => {
-    const errors: string[] = [];
+  it('reports a fatal error with the position, ignores a recoverable one', async () => {
+    const errors: { details: string; position: number }[] = [];
     fixture.componentInstance.failed.subscribe((e) => errors.push(e));
     await settle();
 
     created[0].fail('fragLoadError', false); // hls.js retries these itself
-    created[0].fail('manifestLoadError');
+    created[0].fail('levelLoadError');
 
-    expect(errors).toEqual(['manifestLoadError']);
+    expect(errors).toEqual([{ details: 'levelLoadError', position: 0 }]);
+  });
+
+  it('reloads the same video at startAt when a new url arrives (a re-ticket)', async () => {
+    await settle();
+    expect(created[0].config.startPosition).toBe(-1); // -1 = hls.js's own default start
+
+    fixture.componentRef.setInput('startAt', 754);
+    fixture.componentRef.setInput('src', '/api/v1/lectures/l1/hls/master.m3u8?token=NEW');
+    await settle();
+
+    expect(created).toHaveLength(2);
+    expect(created[0].destroyed).toBe(true); // the old instance stops downloading
+    expect(created[1].source).toContain('token=NEW');
+    expect(created[1].config.startPosition).toBe(754);
+    expect(created[1].media).toBe(created[0].media); // ⭐ the same <video> element
   });
 
   it('stops downloading when it goes away', async () => {

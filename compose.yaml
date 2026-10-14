@@ -161,8 +161,13 @@ services:
         target: NOTIFICATION_TOKEN_SECRET
       - source: playback_token_secret # signs the HLS playback tickets (api only)
         target: PLAYBACK_TOKEN_SECRET
+      - source: entitlement_playback_secret # signs learners' IP-bound playback tokens (ADR-0017)
+        target: ENTITLEMENT_PLAYBACK_SECRET
     ports:
-      - '8080:8080'
+      # ⭐ loopback only: a direct client would reach Tomcat from Docker's 172.x gateway, which the
+      #    RemoteIpValve trusts, and could forge X-Forwarded-For — the IP playback tokens are bound
+      #    to (ADR-0017). Browsers come through nginx (:8081).
+      - '127.0.0.1:8080:8080'
     depends_on:
       postgres:
         condition: service_healthy
@@ -375,3 +380,5 @@ secrets:
     file: ./secrets/notification_token_secret # shared by api + worker (same HMAC key)
   playback_token_secret:
     file: ./secrets/playback_token_secret # the api's playback tickets
+  entitlement_playback_secret:
+    file: ./secrets/entitlement_playback_secret # learners' playback tokens (api only)

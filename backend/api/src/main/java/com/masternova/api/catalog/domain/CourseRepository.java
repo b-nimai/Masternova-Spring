@@ -43,4 +43,15 @@ public interface CourseRepository
 
   @EntityGraph(attributePaths = {"category", "sections"})
   Optional<Course> findWithCurriculumById(UUID id);
+
+  /**
+   * For other modules' decisions ({@code CatalogApi}): course + sections in one statement, lectures
+   * batched in a second — no category, which nobody outside catalog reads.
+   */
+  @EntityGraph(attributePaths = "sections")
+  Optional<Course> findFactsById(UUID id);
+
+  /** Which course a lecture belongs to (entitlement asks by lecture). One indexed join. */
+  @Query("select s.course.id from Lecture l join l.section s where l.id = :lectureId")
+  Optional<UUID> findCourseIdByLectureId(UUID lectureId);
 }

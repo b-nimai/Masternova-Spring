@@ -9,7 +9,6 @@ import com.masternova.api.catalog.domain.Instructor;
 import com.masternova.api.catalog.domain.TestInstructors;
 import com.masternova.api.catalog.domain.TestMedia;
 import com.masternova.api.identity.Role;
-import com.masternova.storage.MediaKeys;
 import com.masternova.storage.ObjectStorage;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -59,16 +58,7 @@ class PlaybackIT {
     asha = people.create("Asha Rao");
     ravi = people.create("Ravi Kumar");
     asset = asset("READY");
-    // what the worker's pipeline leaves in storage
-    storage.putText(
-        MediaKeys.master(asset),
-        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=385000,RESOLUTION=426x240\n240p/index.m3u8\n",
-        "application/vnd.apple.mpegurl");
-    storage.putText(
-        MediaKeys.rungPlaylist(asset, "240p"),
-        "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:6.0,\nseg_00000.m4s\n#EXT-X-ENDLIST\n",
-        "application/vnd.apple.mpegurl");
-    storage.putText(MediaKeys.segment(asset, "240p", 0), "segment-bytes", "video/iso.segment");
+    TestMedia.storeHls(storage, asset); // what the worker's pipeline leaves in storage
   }
 
   @AfterEach

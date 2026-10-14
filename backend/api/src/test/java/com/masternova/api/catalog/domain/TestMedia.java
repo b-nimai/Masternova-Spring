@@ -1,5 +1,7 @@
 package com.masternova.api.catalog.domain;
 
+import com.masternova.storage.MediaKeys;
+import com.masternova.storage.ObjectStorage;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -48,6 +50,23 @@ public final class TestMedia {
         .param("seconds", durationSeconds)
         .update();
     return id;
+  }
+
+  /**
+   * What the worker's pipeline leaves in storage for a READY asset: a master with one 240p rung,
+   * its playlist (init segment + one segment), and that segment's bytes ({@code segment-bytes}).
+   */
+  public static void storeHls(ObjectStorage storage, UUID asset) {
+    String hls = "application/vnd.apple.mpegurl";
+    storage.putText(
+        MediaKeys.master(asset),
+        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=385000,RESOLUTION=426x240\n240p/index.m3u8\n",
+        hls);
+    storage.putText(
+        MediaKeys.rungPlaylist(asset, "240p"),
+        "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:6.0,\nseg_00000.m4s\n#EXT-X-ENDLIST\n",
+        hls);
+    storage.putText(MediaKeys.segment(asset, "240p", 0), "segment-bytes", "video/iso.segment");
   }
 
   /** Before {@link TestInstructors#deleteAll()}: assets reference their owners. */

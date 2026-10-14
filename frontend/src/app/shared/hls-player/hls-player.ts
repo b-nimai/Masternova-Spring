@@ -1,21 +1,35 @@
 import {
   afterNextRender,
+  afterRenderEffect,
   Component,
   DestroyRef,
   ElementRef,
   inject,
   input,
   output,
+  untracked,
   viewChild,
 } from '@angular/core';
 import type Hls from 'hls.js';
+
+/** A fatal playback error, and where the viewer was — so a new ticket can resume there. */
+export interface PlaybackFailure {
+  /** hls.js `details` (e.g. `levelLoadError`), `MEDIA_ERROR` (native), or `HLS_UNSUPPORTED`. */
+  details: string;
+  /** Seconds into the video when it failed. */
+  position: number;
+  /** The HTTP status that failed it, when known (hls.js); native HLS doesn't say. */
+  status?: number;
+}
 
 /**
  * Plays an HLS master playlist (ADR-0013): hls.js wherever Media Source Extensions exist, the
  * browser's own HLS where they don't (iPhone Safari).
  *
- * ⭐ `afterNextRender`: the `<video>` element only exists once the view is in the DOM, and hls.js
+ * ⭐ `afterRenderEffect`: the `<video>` element only exists once the view is in the DOM, and hls.js
  *    touches `window` — so it starts there, never during construction (and never on a server).
+ *    As an EFFECT it runs again whenever `src` changes: a re-ticketed url (ADR-0017) reloads the
+ *    same `<video>` at `startAt` instead of rebuilding the component.
  * ⭐ hls.js (~150 kB) is loaded with a dynamic `import()`: only pages that play video pay for it.
  * ⭐ Destroyed with the component: an hls.js instance left behind keeps downloading segments.
  */
@@ -25,39 +39,67 @@ import type Hls from 'hls.js';
   templateUrl: './hls-player.html',
 })
 export class HlsPlayer {
-  /** The master playlist url (ticketed: `…/master.m3u8?t=…`). Fixed for the instance. */
+  /** The master playlist url (ticketed). A new url reloads the player. */
   readonly src = input.required<string>();
-  /** A fatal playback error (hls.js `details`, or `HLS_UNSUPPORTED`): the parent may re-issue. */
-  readonly failed = output<string>();
+  /** Where a (re)load starts, in seconds — read when `src` changes. */
+  readonly startAt = input(0);
+  /** A fatal playback error: the parent may re-issue a ticket and resume at `position`. */
+  readonly failed = output<PlaybackFailure>();
 
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('video');
   private hls: Hls | null = null;
   private destroyed = false;
 
   constructor() {
-    afterNextRender(() => void this.attach());
+    afterNextRender(() => {
+      const video = this.video().nativeElement;
+      // native HLS reports its failures on the element (hls.js reports its own, below)
+      video.addEventListener('error', () => {
+        if (!this.hls) this.fail('MEDIA_ERROR');
+      });
+    });
+    afterRenderEffect(() => {
+      const src = this.src();
+      void this.attach(src, untracked(this.startAt));
+    });
     inject(DestroyRef).onDestroy(() => {
       this.destroyed = true;
       this.hls?.destroy();
     });
   }
 
-  private async attach(): Promise<void> {
+  private async attach(src: string, startAt: number): Promise<void> {
     const video = this.video().nativeElement;
     const { default: HlsJs } = await import('hls.js');
-    if (this.destroyed) return; // the user closed the preview while hls.js was loading
+    // the user closed the player, or a newer url arrived, while hls.js was loading
+    if (this.destroyed || src !== this.src()) return;
+    this.hls?.destroy();
+    this.hls = null;
     if (HlsJs.isSupported()) {
-      const hls = new HlsJs();
+      const hls = new HlsJs({ startPosition: startAt > 0 ? startAt : -1 });
       hls.on(HlsJs.Events.ERROR, (_event, data) => {
-        if (data.fatal) this.failed.emit(data.details);
+        if (data.fatal) this.fail(data.details, data.response?.code);
       });
-      hls.loadSource(this.src());
+      hls.loadSource(src);
       hls.attachMedia(video);
       this.hls = hls;
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = this.src(); // native HLS: Safari fetches the playlists itself (hence the ticket)
+      video.src = src; // native HLS: Safari fetches the playlists itself (hence the token)
+      if (startAt > 0) {
+        video.addEventListener('loadedmetadata', () => (video.currentTime = startAt), {
+          once: true,
+        });
+      }
     } else {
-      this.failed.emit('HLS_UNSUPPORTED');
+      this.fail('HLS_UNSUPPORTED');
     }
+  }
+
+  private fail(details: string, status?: number): void {
+    this.failed.emit({
+      details,
+      position: this.video().nativeElement.currentTime || 0,
+      ...(status ? { status } : {}),
+    });
   }
 }

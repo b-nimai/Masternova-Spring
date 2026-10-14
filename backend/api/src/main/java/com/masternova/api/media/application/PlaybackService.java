@@ -8,9 +8,6 @@ import com.masternova.api.media.domain.MediaStatus;
 import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.ForbiddenException;
 import com.masternova.api.platform.NotFoundException;
-import com.masternova.storage.HlsPlaylists;
-import com.masternova.storage.MediaKeys;
-import com.masternova.storage.ObjectStorage;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -26,22 +23,22 @@ import org.springframework.transaction.annotation.Transactional;
  * Playback (ADR-0013, media LLD §4): issue a ticket after ONE access check, then serve the asset's
  * playlists to whoever holds it, rewritten so the media bytes come straight from storage.
  *
- * <p>Who may watch, in Phase 7: the asset's owner or an admin (the instructor previewing). ⭐ Phase
- * 8's entitlement check plugs in at {@link #ticket} — the playlist endpoints never change.
+ * <p>Who may watch: the asset's owner or an admin — the instructor previewing an upload. Learners
+ * watch through entitlement's lecture playback (ADR-0017), on the same {@link HlsDelivery}.
  */
 @Service
 public class PlaybackService {
 
   private final MediaAssetRepository assets;
-  private final ObjectStorage storage;
+  private final HlsDelivery hls;
   private final PlaybackTickets tickets;
   private final Duration ttl;
   private final Clock clock;
 
   PlaybackService(
-      MediaAssetRepository assets, ObjectStorage storage, MediaProperties props, Clock clock) {
+      MediaAssetRepository assets, HlsDelivery hls, MediaProperties props, Clock clock) {
     this.assets = assets;
-    this.storage = storage;
+    this.hls = hls;
     this.tickets = new PlaybackTickets(props.playbackSecret());
     this.ttl = props.playbackTtl();
     this.clock = clock;
@@ -71,19 +68,14 @@ public class PlaybackService {
   /** The master playlist, each rung URI carrying the ticket on to our rung endpoint. */
   public String master(UUID assetId, String ticket) {
     check(assetId, ticket);
-    return HlsPlaylists.rewriteUris(
-        storage.getText(MediaKeys.master(assetId)),
-        uri -> uri + "?t=" + URLEncoder.encode(ticket, StandardCharsets.UTF_8));
+    return hls.master(
+        assetId, uri -> uri + "?t=" + URLEncoder.encode(ticket, StandardCharsets.UTF_8));
   }
 
   /** A rung playlist whose init segment and segments are presigned storage urls. */
   public String rung(UUID assetId, String rung, String ticket) {
     PlaybackTickets.Ticket valid = check(assetId, ticket);
-    String prefix = MediaKeys.rung(assetId, rung); // validates the rung name (no ../)
-    Duration left = Duration.between(clock.instant(), valid.expiresAt());
-    return HlsPlaylists.rewriteUris(
-        storage.getText(prefix + MediaKeys.PLAYLIST),
-        file -> storage.presignDownload(prefix + file, left).toString());
+    return hls.rung(assetId, rung, Duration.between(clock.instant(), valid.expiresAt()));
   }
 
   private PlaybackTickets.Ticket check(UUID assetId, String ticket) {

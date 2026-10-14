@@ -3,7 +3,7 @@
 > **One-liner:** define a family of algorithms behind one interface, so the caller chooses one at
 > runtime and new ones are added without editing the caller.
 
-**Type:** Behavioral · **Status:** ✅ in real code (Phase 7.5); payment gateways follow in Phase 9 · **Last updated:** 2026-10-13
+**Type:** Behavioral · **Status:** ✅ in real code (Phases 7.5, 8.2); payment gateways follow in Phase 9 · **Last updated:** 2026-10-14
 **Real code:** `com.masternova.worker.pipeline.ffmpeg.LadderProfile` (Strategy) → `StandardLadder`, `FastLadder` (ConcreteStrategy), chosen by `masternova.pipeline.ladder` · planned: `com.masternova.api.commerce.payment.PaymentGateway` · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/) (payments) and [`strategy/ladder/`](../lab/src/main/java/com/masternova/patterns/strategy/ladder/Ladder.java) (the transcode ladder)
 
 **Trigger phrase:** "*support several providers/methods/algorithms, and more later*", or
@@ -139,6 +139,17 @@ interface as a **default method** (`rungsFor`), and each strategy only lists its
 `preset()`. That's a Strategy with a little Template Method inside it. It's fine while the shared
 part is one rule; if it grew, the shared part would move into the processor and the strategies
 would shrink to data. `LadderProfileTest` pins the rule for both.
+
+## 7c. Second use: the entitlement policies (Phase 8.2)
+
+`com.masternova.api.entitlement.domain.EntitlementPolicy` is a Strategy with **seven**
+ConcreteStrategies (`AdminPolicy`, `OwnerPolicy`, `FreeCoursePolicy`, …), each one rule over the
+same `AccessContext`. The difference from the ladder: the caller doesn't *pick one*. The
+`PolicyChain` runs *all* of them and reduces their votes ([Chain of Responsibility](03-chain-of-responsibility.md)).
+That's the usual pairing: Strategy is the shape of each rule, the chain is how they're composed.
+
+The force is the same as for the ladder: the rules vary independently and new ones are added
+without opening the old ones (a coupon policy next quarter is a new `@Component @Order`).
 
 ## 8. Interview Q&A
 

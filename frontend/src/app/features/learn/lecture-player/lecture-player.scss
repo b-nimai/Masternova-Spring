@@ -1,0 +1,25 @@
+.lecture-player {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+app-hls-player {
+  margin-top: 8px;
+}
+
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container);
+
+  p {
+    flex: 1;
+    margin: 0;
+  }
+}

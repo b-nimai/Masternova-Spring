@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 import { authGuard, guestGuard, roleGuard } from './core/auth/auth-guard';
+import { canWatchGuard } from './features/learn/can-watch-guard';
 
 /**
  * Feature pages are lazy-loaded (each one its own JS chunk). ⭐ canMatch guards stop a route from
@@ -20,6 +21,15 @@ export const routes: Routes = [
     path: 'courses/:slug', // :slug → the component's `slug` input (withComponentInputBinding)
     loadComponent: () =>
       import('./features/catalog/course-detail/course-detail').then((m) => m.CourseDetail),
+  },
+  {
+    // Phase 8: play one lecture. ⭐ canMatch signs the viewer in first (the token needs a user);
+    // canActivate then asks the entitlement engine — denied viewers go back to the course page
+    path: 'courses/:slug/lectures/:lectureId',
+    canMatch: [authGuard],
+    canActivate: [canWatchGuard],
+    loadComponent: () =>
+      import('./features/learn/lecture-player/lecture-player').then((m) => m.LecturePlayer),
   },
   {
     path: 'instructor', // Phase 6: an instructor's own courses (INSTRUCTOR or ADMIN)

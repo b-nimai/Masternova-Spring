@@ -1,16 +1,10 @@
 package com.masternova.api.identity.infrastructure.security;
 
 import com.masternova.api.identity.CurrentUser;
-import com.masternova.api.identity.Role;
 import com.masternova.api.platform.UnauthenticatedException;
-import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
-import java.util.stream.Collectors;
 import org.springframework.core.MethodParameter;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.support.WebDataBinderFactory;
 import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.method.support.HandlerMethodArgumentResolver;
@@ -54,17 +48,6 @@ class CurrentUserArgumentResolver implements HandlerMethodArgumentResolver {
   }
 
   private static Optional<CurrentUser> current() {
-    Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-    if (!(auth instanceof JwtAuthenticationToken jwt)) {
-      return Optional.empty(); // anonymous: no (valid) bearer token on a public route
-    }
-    List<String> roles = jwt.getToken().getClaimAsStringList("roles");
-    return Optional.of(
-        new CurrentUser(
-            UUID.fromString(jwt.getToken().getSubject()),
-            roles == null
-                ? java.util.Set.of()
-                : roles.stream().map(Role::valueOf).collect(Collectors.toSet()),
-            Boolean.TRUE.equals(jwt.getToken().getClaimAsBoolean("email_verified"))));
+    return CurrentUser.from(SecurityContextHolder.getContext().getAuthentication());
   }
 }
