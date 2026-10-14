@@ -44,6 +44,8 @@ class MessagingAutoConfigurationTest {
           assertThat(context).hasSingleBean(OutboxWriter.class);
           assertThat(context).doesNotHaveBean(OutboxRelay.class); // ⭐ the api's situation
           assertThat(context).doesNotHaveBean(OutboxRelayScheduler.class);
+          // ⭐ the debt is visible even where nobody relays (a worker with its relay switched off)
+          assertThat(context).hasSingleBean(OutboxBacklogMetrics.class);
         });
   }
 
@@ -55,6 +57,7 @@ class MessagingAutoConfigurationTest {
             context -> {
               assertThat(context).hasSingleBean(OutboxRelay.class);
               assertThat(context).hasSingleBean(OutboxRelayScheduler.class);
+              assertThat(context).hasSingleBean(OutboxBacklogMetrics.class);
             });
   }
 

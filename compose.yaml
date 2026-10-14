@@ -2,6 +2,7 @@
 #
 #   docker compose up -d                       # infra only (what `make up` runs) — apps run from your IDE / mvnw / pnpm
 #   docker compose --profile app up -d --build # infra + api + worker + web, all in containers
+#   docker compose --profile observability up -d # Prometheus, Grafana … (`make obs`, DevOps note 05)
 #
 # Host ports are offset from the defaults (5433, 6380, 9010, 8026 …) so this can run next to
 # the NestJS Masternova stack or a native Postgres without clashing.
@@ -21,6 +22,9 @@ x-app-env: &app-env
   STORAGE_ENDPOINT: http://seaweedfs:8333 # how the containers reach storage …
   STORAGE_PUBLIC_ENDPOINT: http://localhost:9010 # … and how the browser does (presigned urls)
   LOG_VERIFICATION_LINKS: 'false' # never log live tokens outside a developer's own terminal
+  # spans → Tempo (profile `observability`). Without it running the exporter only logs that it
+  # couldn't send; the apps never wait on it (batched, in the background).
+  MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
 
 # Without rotation the json-file log of a chatty container grows until the disk is full.
 x-logging: &logging
@@ -235,10 +239,134 @@ services:
       api:
         condition: service_healthy
 
+  # ---- observability (profile: observability, `make obs`) — config in deploy/observability ----
+
+  prometheus:
+    profiles: [observability]
+    image: prom/prometheus:v3.15.0
+    restart: unless-stopped
+    logging: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d # = the SLO window: the budget panels read increase(…[30d])
+      - --storage.tsdb.retention.size=2GB # … but a laptop's disk wins over the window
+      - --web.enable-lifecycle # POST /-/reload re-reads the config and rules
+    volumes:
+      - ./deploy/observability/prometheus:/etc/prometheus:ro
+      - promdata:/prometheus
+    extra_hosts:
+      - host.docker.internal:host-gateway # the scrape goes through the host (prometheus.yml); Linux needs this alias
+    ports:
+      - '9091:9090'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9090/-/ready']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  tempo:
+    profiles: [observability]
+    image: grafana/tempo:2.10.8
+    restart: unless-stopped
+    logging: *logging
+    command: ['-config.file=/etc/tempo/tempo.yaml']
+    volumes:
+      - ./deploy/observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempodata:/var/tempo
+    ports:
+      - '3201:3200' # Tempo's query API (Grafana uses it inside the network)
+      - '4318:4318' # OTLP/HTTP from apps run on the host (`make api`)
+    # no healthcheck: the image is distroless (no shell, no wget). /ready on :3201 from the host.
+
+  alertmanager:
+    profiles: [observability]
+    image: prom/alertmanager:v0.34.1
+    restart: unless-stopped
+    logging: *logging
+    command: ['--config.file=/etc/alertmanager/alertmanager.yml', '--storage.path=/alertmanager']
+    volumes:
+      - ./deploy/observability/alertmanager:/etc/alertmanager:ro
+    ports:
+      - '9094:9093' # http://localhost:9094 — active alerts and silences
+    depends_on:
+      mailpit: # notifications are emails into Mailpit (http://localhost:8026)
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:9093/-/ready']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  loki:
+    profiles: [observability]
+    image: grafana/loki:3.7.8
+    restart: unless-stopped
+    logging: *logging
+    command: ['-config.file=/etc/loki/loki.yaml']
+    volumes:
+      - ./deploy/observability/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - lokidata:/loki
+    ports:
+      - '3101:3100' # LogQL API (Grafana uses it inside the network)
+    # no healthcheck: distroless image. /ready on :3101 from the host.
+
+  alloy: # the log collector: tails every container of this project through the Docker API
+    profiles: [observability]
+    image: grafana/alloy:v1.20.1
+    restart: unless-stopped
+    logging: *logging
+    command: ['run', '--server.http.listen-addr=0.0.0.0:12345', '/etc/alloy/config.alloy']
+    volumes:
+      - ./deploy/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      # ⭐ read access to the Docker API = root-equivalent on the host. Fine for a laptop; on
+      #    Kubernetes Alloy reads /var/log/pods from a DaemonSet instead (D4).
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - '12345:12345' # Alloy's UI: the pipeline graph and each component's health
+    depends_on:
+      loki:
+        condition: service_started
+
+  grafana:
+    profiles: [observability]
+    image: grafana/grafana:13.2.3
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      # local only: open without a login (Grafana 13 allows anonymous Viewers only) and let viewers
+      # use Explore; provisioned dashboards stay read-only. admin/admin logs in for the rest.
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_USERS_VIEWERS_CAN_EDIT: 'true'
+      GF_USERS_DEFAULT_THEME: dark
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/pipeline.json
+    volumes: # everything as code: no state volume — delete the container, lose nothing
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - '3001:3000' # http://localhost:3001
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1:3000/api/health']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
 volumes:
   pgdata:
   mediadata:
   pipelinework: # the worker's scratch space (video-pipeline LLD §9); safe to delete
+  promdata: # Prometheus' 30 days of samples (the SLO window), at most 2 GB
+  tempodata: # Tempo's 48 h of traces
+  lokidata: # Loki's 72 h of log lines
 
 secrets:
   jwt_access_secret:

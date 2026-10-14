@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -57,6 +57,19 @@ export class NewCourse {
       validators: [Validators.pattern(/^[a-z]{2}$/)],
     }),
   });
+
+  constructor() {
+    // ⭐ a mat-select with no options doesn't open: clicked before the categories arrive, it just
+    //    sits there. Disabled until they load, so the click waits (found by e2e on a cold api).
+    effect(() => {
+      const category = this.form.controls.categorySlug;
+      if (this.categories().length > 0) {
+        category.enable();
+      } else {
+        category.disable();
+      }
+    });
+  }
 
   protected create(): void {
     if (this.form.invalid || this.busy()) {

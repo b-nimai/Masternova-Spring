@@ -76,11 +76,34 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,modulith
+        include: health,info,modulith,prometheus
   endpoint:
     health:
       probes:
         enabled: true # /actuator/health/liveness and /readiness — used by Docker and Kubernetes
+  tracing: # D3.3 — ADR-0015, DevOps note 05 §4
+    sampling:
+      # every request locally; a real environment samples (TRACING_SAMPLING_PROBABILITY=0.1).
+      # The decision is the ROOT's and travels with the trace (parent-based), outbox included.
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  # Spans are exported only when an endpoint is set — deliberately NOT here: the property's mere
+  # presence turns the exporter on. Compose sets MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT;
+  # from source: `MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT=http://localhost:4318/v1/traces make api`.
+  observations:
+    enable:
+      # a span per @Scheduled poll (outbox relay every 1 s, job poller every 2 s) buries the real
+      # traces; the deliveries and jobs they start have their own observations
+      tasks.scheduled.execution: false
+  metrics: # D3.1 — devops note 05
+    tags:
+      application: ${spring.application.name} # one label tells api from worker on every series
+    distribution:
+      # ⭐ Histogram buckets (not client-side percentiles): Prometheus aggregates them across
+      #    replicas and computes any quantile later. Only the edges we will query: Micrometer's
+      #    full histogram is ~54 buckets on EVERY uri × method × status series (measured in D3.1);
+      #    these are 9. The 300 ms edge is the latency SLO's (D3.5).
+      slo:
+        http.server.requests: 25ms,50ms,100ms,200ms,300ms,500ms,1s,2s,5s
   info:
     env:
       enabled: true # publish the info.* properties below at /actuator/info

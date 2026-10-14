@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.masternova.worker.pipeline.TestPipelineProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -40,6 +41,35 @@ class JobPollerTest {
       verify(runner, timeout(2000)).execute(any(), anyString());
       poller.poll(); // ⭐ slot busy: doesn't even ask for more work
       verify(jobs, org.mockito.Mockito.times(1)).claim(anyInt(), any(), anyString());
+      release.countDown();
+    }
+  }
+
+  @Test
+  void itReportsItsSaturationAndTheQueue() throws Exception {
+    Job job = new Job(UUID.randomUUID(), UUID.randomUUID(), JobType.PROBE, "", 1);
+    CountDownLatch release = new CountDownLatch(1);
+    CountDownLatch running = new CountDownLatch(1);
+    when(jobs.claim(anyInt(), any(), anyString())).thenReturn(List.of(job));
+    when(jobs.countDue()).thenReturn(7L);
+    org.mockito.Mockito.doAnswer(
+            inv -> {
+              running.countDown();
+              release.await();
+              return null;
+            })
+        .when(runner)
+        .execute(any(), anyString());
+    SimpleMeterRegistry meters = new SimpleMeterRegistry();
+
+    try (JobPoller poller = new JobPoller(jobs, runner, TestPipelineProperties.defaults())) {
+      poller.bindTo(meters);
+      assertThat(meters.get("pipeline.slots.busy").gauge().value()).isZero();
+      poller.poll();
+      running.await();
+      assertThat(meters.get("pipeline.slots.busy").gauge().value()).isEqualTo(1);
+      assertThat(meters.get("pipeline.slots").gauge().value()).isEqualTo(1);
+      assertThat(meters.get("pipeline.jobs.queued").gauge().value()).isEqualTo(7);
       release.countDown();
     }
   }

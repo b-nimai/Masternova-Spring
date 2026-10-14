@@ -199,6 +199,9 @@ sequenceDiagram
 - `V2__platform_outbox.sql`: `outbox_message` + a **partial index** on `(next_attempt_at)
   WHERE status IN ('PENDING','PROCESSING')`, so the relay's claim query stays fast however many
   `DONE` rows exist.
+- `V16__outbox_headers.sql` (D3.3): nullable `headers JSONB` on `outbox_message`, holding the
+  W3C `traceparent` of the request that wrote the event. The relay continues that trace in the
+  worker ([ADR-0015](../adr/0015-tracing-with-micrometer-observation-and-otlp.md)).
 - `V3__platform_idempotency.sql`: `idempotency_record`, PK `(caller, idem_key)`, index on
   `expires_at` for the cleanup job.
 - Transaction boundaries:

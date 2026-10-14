@@ -47,7 +47,11 @@ COPY --from=build /src/extracted/application/ ./
 # build time, so every start maps them instead: ~45 % faster to ready, ~60 MB less memory. It
 # exits at context refresh (no web server, runners or schedulers) and must not touch the
 # database, hence Flyway, schema validation and JDBC metadata are off for this run only.
-RUN java -XX:AOTCacheOutput=app.aot \
+# BuildKit injects its own OTEL_* variables into RUN steps when its tracing is on (CI's buildx:
+# OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock), which Boot's OTLP exporter
+# rejects — the training run must not trace anything, so they are dropped for it.
+RUN for v in $(env | sed -n 's/^\(OTEL_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done; \
+    java -XX:AOTCacheOutput=app.aot \
       -Dspring.context.exit=onRefresh \
       -Dspring.flyway.enabled=false \
       -Dspring.jpa.hibernate.ddl-auto=none \

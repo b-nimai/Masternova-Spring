@@ -1,0 +1,13 @@
+# Dashboards as code: every JSON file under /var/lib/grafana/dashboards is loaded at startup and
+# re-read every 30 s. Edits in the UI can't be saved over them — change the file, commit it.
+apiVersion: 1
+
+providers:
+  - name: masternova
+    folder: Masternova
+    type: file
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

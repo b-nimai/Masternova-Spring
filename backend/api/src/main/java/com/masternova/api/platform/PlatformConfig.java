@@ -16,7 +16,11 @@ class PlatformConfig {
     return Clock.systemUTC();
   }
 
-  /** The platform's own public routes: service metadata, health probes, the error page. */
+  /**
+   * The platform's own public routes: service metadata, health probes, metrics, the error page. ⭐
+   * {@code /actuator/**} is public to whoever can reach port 8080 — Prometheus, inside the network.
+   * Users can't: nginx (and later the ingress) only forwards {@code /api/}.
+   */
   @Bean
   PublicEndpoints platformPublicEndpoints() {
     return () ->
@@ -24,6 +28,7 @@ class PlatformConfig {
             PublicEndpoints.Endpoint.get("/api/v1/meta/**"),
             PublicEndpoints.Endpoint.get("/actuator/health/**"),
             PublicEndpoints.Endpoint.get("/actuator/info"),
+            PublicEndpoints.Endpoint.get("/actuator/prometheus"),
             PublicEndpoints.Endpoint.any("/error"));
   }
 }

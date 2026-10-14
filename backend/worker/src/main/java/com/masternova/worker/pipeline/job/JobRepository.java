@@ -188,6 +188,15 @@ public class JobRepository {
         == 1;
   }
 
+  /** PENDING jobs already due: the queue no worker has picked up yet (a scrape-time gauge). */
+  public long countDue() {
+    return jdbc.sql(
+            "SELECT count(*) FROM pipeline_job WHERE status = 'PENDING' AND next_attempt_at <= :now")
+        .param("now", Timestamp.from(clock.instant()))
+        .query(Long.class)
+        .single();
+  }
+
   /** Every job of an asset and its status — what fan-in decides from. */
   public List<JobState> jobsOf(UUID assetId) {
     return jdbc.sql("SELECT type, rung, status FROM pipeline_job WHERE asset_id = :asset")

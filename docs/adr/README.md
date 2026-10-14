@@ -25,3 +25,4 @@ re-derived rather than copied.
 | [0012](0012-seaweedfs-as-local-s3.md) | SeaweedFS as the local S3 server (MinIO's images stopped being published); 4 candidates probed, the only one refusing foreign-origin CORS like AWS *and* mature | accepted |
 | [0013](0013-hls-for-playback.md) | HLS with fMP4 segments, aligned-GOP H.264/AAC ladder, presigned segments behind a playback ticket | accepted |
 | [0014](0014-upload-progress-from-the-provider.md) | Upload progress lives in the provider: resume and complete ask `ListParts`; the client never sends ETags | accepted |
+| [0015](0015-tracing-with-micrometer-observation-and-otlp.md) | Tracing through Micrometer Observation + the OTel SDK (not the Java agent); the outbox row carries the W3C trace context in `headers` | accepted |

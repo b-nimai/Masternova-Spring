@@ -19,9 +19,14 @@ import java.util.UUID;
     note = "patterns/docs/16-repository-unit-of-work.md")
 interface OutboxRepository {
 
-  /** A row to append — in the caller's transaction. */
+  /** A row to append — in the caller's transaction. {@code headers} may be empty. */
   record NewMessage(
-      UUID id, String type, String aggregateId, String payloadJson, Instant occurredAt) {}
+      UUID id,
+      String type,
+      String aggregateId,
+      String payloadJson,
+      Instant occurredAt,
+      Map<String, String> headers) {}
 
   void append(NewMessage message);
 
@@ -38,6 +43,19 @@ interface OutboxRepository {
 
   void markDead(UUID id, String error);
 
-  /** Row counts per status — for metrics (D3) and tests. */
+  /** Row counts per status — for tests (a full scan: never on a scrape path). */
   Map<String, Long> countByStatus();
+
+  /**
+   * What the relay still owes: rows not yet delivered (PENDING or PROCESSING), and the earliest
+   * {@code next_attempt_at} among those already DUE. Served by the partial due-index, so it stays
+   * cheap enough for every scrape.
+   */
+  Backlog backlog();
+
+  /**
+   * @param oldestDue when the most overdue row became due; {@code null} when nothing is due. A row
+   *     waiting out its retry backoff, or leased by a live relay, is not due yet.
+   */
+  record Backlog(long size, Instant oldestDue) {}
 }

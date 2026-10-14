@@ -40,6 +40,23 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
+		<!-- the relay's meters and observations (D3); the app decides where they go (Prometheus, OTLP) -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-core</artifactId>
+		</dependency>
+
+		<!-- tests: the real OpenTelemetry SDK + an in-memory exporter prove the outbox carries traces -->
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-tracing-bridge-otel</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.opentelemetry</groupId>
+			<artifactId>opentelemetry-sdk-testing</artifactId>
+			<scope>test</scope>
+		</dependency>
 
 		<!-- tests: a minimal Boot app + real Postgres, Flyway running this module's own migration -->
 		<dependency>

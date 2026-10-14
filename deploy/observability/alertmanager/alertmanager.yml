@@ -1,0 +1,44 @@
+# Alertmanager: groups, routes and delivers what Prometheus' rules fire. DevOps note 05 §6.
+# Locally every alert is an email in Mailpit (http://localhost:8026); in production `page` would go
+# to a pager (PagerDuty, Opsgenie) and `ticket` to a ticket queue or a channel.
+global:
+  smtp_smarthost: mailpit:1025
+  smtp_from: alerts@masternova.dev
+  smtp_require_tls: false # Mailpit speaks plain SMTP; any real relay needs TLS
+
+route:
+  receiver: ticket-email
+  group_by: [alertname, slo, job] # one notification per problem, not one per series
+  group_wait: 30s # collect what fires together before the first notification
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    - matchers: [severity = page]
+      receiver: page-email
+      group_wait: 10s
+      repeat_interval: 1h # a page that's still firing is re-sent hourly until someone acts
+
+inhibit_rules:
+  # an app that is down also burns every SLO measured on it: send the cause, not the echoes
+  - source_matchers: [alertname = ServiceDown, job = api]
+    target_matchers: [slo =~ "api-.*"]
+  - source_matchers: [alertname = ServiceDown, job = worker]
+    target_matchers: [alertname =~ "OutboxStalled|OutboxFreshness.*"]
+  # the fast burn says it louder; no need for the slow one too
+  - source_matchers: [severity = page, slo =~ ".+"]
+    target_matchers: [severity = ticket]
+    equal: [slo]
+
+receivers:
+  - name: page-email
+    email_configs:
+      - to: oncall@masternova.dev
+        send_resolved: true
+        headers:
+          Subject: '[PAGE] {{ .GroupLabels.alertname }} {{ .Status | toUpper }}'
+  - name: ticket-email
+    email_configs:
+      - to: team@masternova.dev
+        send_resolved: true
+        headers:
+          Subject: '[ticket] {{ .GroupLabels.alertname }} {{ .Status | toUpper }}'

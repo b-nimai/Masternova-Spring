@@ -7,6 +7,29 @@ import { query, submit } from '../../../../testing/dom';
 import { NewCourse } from './new-course';
 
 describe('NewCourse', () => {
+  it('keeps the category disabled until the categories arrive', async () => {
+    await TestBed.configureTestingModule({
+      imports: [NewCourse],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+    }).compileComponents();
+    const http = TestBed.inject(HttpTestingController);
+    const fixture = TestBed.createComponent(NewCourse);
+    await fixture.whenStable();
+    const category = query(fixture, '[data-testid="category"]');
+    expect(category.getAttribute('aria-disabled')).toBe('true');
+
+    http.expectOne('/api/v1/categories').flush([
+      {
+        slug: 'devops',
+        name: 'DevOps',
+        children: [{ slug: 'ci-cd', name: 'CI/CD', children: [] }],
+      },
+    ]);
+    await fixture.whenStable();
+    expect(category.getAttribute('aria-disabled')).toBe('false');
+    http.verify();
+  });
+
   it('creates the draft with one idempotency key per form and opens the wizard', async () => {
     await TestBed.configureTestingModule({
       imports: [NewCourse],
