@@ -494,7 +494,7 @@ Tick these as they're used *for real* in the project, not just read about.
 - [x] Boot auto-configuration + starters · [x] `@RestController` / records as DTOs · [x] ProblemDetail · [x] Actuator
 - [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [x] Bean Validation
 - [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [x] Spring Security 7 + JWT
-- [x] Spring Modulith events · [x] Modulith verification · [x] Spring Cache + Redis · [x] `@Scheduled` / ShedLock · [x] SSE
+- [x] Spring Modulith events · [x] Modulith verification · [ ] Spring Cache + Redis · [x] `@Scheduled` / ShedLock · [x] SSE
 - [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [x] `@WebMvcTest` / `@DataJpaTest` slices
 
 ### 3.3 Angular
