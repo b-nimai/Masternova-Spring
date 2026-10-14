@@ -73,6 +73,14 @@ masternova: # → MasternovaProperties (typed + validated at startup)
     playback-secret: ${ENTITLEMENT_PLAYBACK_SECRET:dev-only-entitlement-playback-0123456789abcdef}
     token-ttl: 5m
     segment-url-ttl: 30m
+  commerce: # → CommerceProperties (docs/lld/order-state-machine.md §6)
+    # FAKE: a network-free Razorpay double (dev, e2e, CI: no keys needed). Every real environment
+    # sets PAYMENT_PROVIDER=razorpay and the three Razorpay secrets (test-mode keys outside prod).
+    provider: ${PAYMENT_PROVIDER:fake}
+    razorpay:
+      key-id: ${RAZORPAY_KEY_ID:}
+      key-secret: ${RAZORPAY_KEY_SECRET:}
+      webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
   outbox: # → messaging's OutboxProperties
     # ⭐ The api only WRITES events; the worker relays them (ADR-0008). A relay here would mark the
     #    worker's events as "no handler" and swallow them. (false is also the library default.)

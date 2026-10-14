@@ -5,7 +5,7 @@
 > request, the response **and the failures**, so the rest of the code never learns the vendor
 > exists.
 
-**Type:** Structural · **Status:** ✅ in real code · **Last updated:** 2026-10-13
+**Type:** Structural · **Status:** ✅ in real code (Phases 4, 7, 9.4) · **Last updated:** 2026-10-14
 **Real code:**
 - [`MailProvider`](../../backend/worker/src/main/java/com/masternova/worker/notification/mail/MailProvider.java) (`@DesignPattern(ADAPTER, "Target")`) plus our message shape [`OutboundEmail`](../../backend/worker/src/main/java/com/masternova/worker/notification/mail/OutboundEmail.java).
 - [`SmtpMailProvider`](../../backend/worker/src/main/java/com/masternova/worker/notification/mail/SmtpMailProvider.java) adapts Spring's `JavaMailSender` / Jakarta Mail (Mailpit in dev).
@@ -62,6 +62,36 @@ buries, **by our exception type**. Without the adapter every caller would inspec
 testing. If a GCS backend ever becomes real, extracting `interface ObjectStorage` from the class is
 a mechanical refactor that no caller notices. The interface is created when that day comes, not
 before.
+
+## 1c. Third use: the payment provider (Phase 9.4)
+
+`com.masternova.api.commerce.infrastructure.RazorpayGateway` adapts Razorpay's REST API to
+commerce's port `PaymentGateway` (`createOrder`, `isAuthentic`, `parseWebhook`, `refund`). This
+time the Target interface is earned: a second implementation exists from day one,
+`FakePaymentGateway`, a network-free double for dev, e2e and CI (Strategy, chosen by
+`masternova.commerce.provider`).
+
+| It translates | Razorpay side (Adaptee) | Our side |
+|---|---|---|
+| requests | `POST /v1/orders {amount, currency, receipt, notes}`, basic auth `key_id:key_secret` | `createOrder(orderId, Money)` |
+| responses | `{"id": "order_…"}`, `{"id": "rfnd_…"}` | the provider's id as a `String` |
+| webhooks | `{"event": "payment.captured", "payload": {"payment": {"entity": {…}}}}` + `X-Razorpay-Signature` | `WebhookEvent(eventId, type, providerOrderId?, PaymentEvent?)`, built only after the HMAC verified |
+| signatures | hex HMAC-SHA256 of `order_id|payment_id` (key secret) and of the raw body (webhook secret) | `isAuthentic(callback)` → boolean; a bad webhook → `InvalidSignatureException` |
+| **failures** | `RestClientResponseException` (status + `{"error": {code, description}}`), `ResourceAccessException` | `PaymentProviderException(temporary)`: 5xx, 429, timeouts → 503 + Retry-After; other 4xx → 502 |
+
+Two details:
+
+- **Money crosses unchanged.** Razorpay takes paise as `amount`, and so do we (`Money.amountMinor`).
+  The adapter is where a "×100" would hide if the vendor used major units, and the test pins it
+  (`jsonPath("$.amount").value(49900)`).
+- **The fake reuses the adapter's translation.** `FakePaymentGateway` simulates only the two
+  outbound calls; it signs and verifies with Razorpay's schemes and parses Razorpay's webhook JSON
+  through the same `RazorpayWebhooks`. So dev and e2e exercise everything after the network.
+
+Proof: `RazorpayGatewayTest` (`MockRestServiceServer`: paise, receipt, auth header; 502/429/timeout
+→ temporary, 400 → permanent with Razorpay's description in the message), `RazorpayWebhooksTest`,
+`RazorpaySignaturesTest` (against an independent HMAC; one extra space breaks the webhook MAC).
+Lab: [`adapter/payment/`](../lab/src/main/java/com/masternova/patterns/adapter/payment/RazorpayPayments.java).
 
 ## 2. Structure
 
@@ -281,6 +311,9 @@ What the tests prove:
   adapters.
 - **Storage (Phase 7):** `ObjectStorage` adapts the AWS SDK with **no interface** (one vendor
   API): `S3Exception` → unavailable / no-such-upload / permanent; a 404 on `HEAD` → `Optional.empty()`.
+- **Payments (Phase 9.4):** `RazorpayGateway` → `PaymentGateway`: paise in, ids out, both HMAC
+  schemes, 5xx/429/timeouts temporary vs other 4xx permanent; a network-free fake shares the
+  webhook translation.
 - **Spring's flavour:** `HandlerAdapter`, `SQLExceptionTranslator`, `JavaMailSender`.
 - **Not to confuse with:** Decorator/Proxy (same interface), Facade (a new interface over a
   subsystem).

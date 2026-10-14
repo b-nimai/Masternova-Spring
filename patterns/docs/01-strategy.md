@@ -3,8 +3,8 @@
 > **One-liner:** define a family of algorithms behind one interface, so the caller chooses one at
 > runtime and new ones are added without editing the caller.
 
-**Type:** Behavioral · **Status:** ✅ in real code (Phases 7.5, 8.2, 9.2); payment gateways follow in 9.4 · **Last updated:** 2026-10-14
-**Real code:** `com.masternova.worker.pipeline.ffmpeg.LadderProfile` (Strategy) → `StandardLadder`, `FastLadder` (ConcreteStrategy), chosen by `masternova.pipeline.ladder` · `com.masternova.api.commerce.domain.Discount` (sealed: `PercentOff`, `AmountOff`) · planned: `com.masternova.api.commerce.payment.PaymentGateway` · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/) (payments) and [`strategy/ladder/`](../lab/src/main/java/com/masternova/patterns/strategy/ladder/Ladder.java) (the transcode ladder)
+**Type:** Behavioral · **Status:** ✅ in real code (Phases 7.5, 8.2, 9.2, 9.4) · **Last updated:** 2026-10-14
+**Real code:** `com.masternova.worker.pipeline.ffmpeg.LadderProfile` (Strategy) → `StandardLadder`, `FastLadder` (ConcreteStrategy), chosen by `masternova.pipeline.ladder` · `com.masternova.api.commerce.domain.Discount` (sealed: `PercentOff`, `AmountOff`) · `com.masternova.api.commerce.domain.PaymentGateway` → `RazorpayGateway`, `FakePaymentGateway`, chosen by `masternova.commerce.provider` · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/) (payments) and [`strategy/ladder/`](../lab/src/main/java/com/masternova/patterns/strategy/ladder/Ladder.java) (the transcode ladder)
 
 **Trigger phrase:** "*support several providers/methods/algorithms, and more later*", or
 "*the behaviour depends on a type/config value*".
@@ -166,6 +166,23 @@ record plus one `case`, and the compiler finds the switch.
 The contract every strategy must keep (`0 ≤ discount ≤ base`, same currency) is what lets the
 pricer write `subtotal.minus(discount)` without a check. `DiscountTest.theContractHoldsForEveryKind`
 runs every strategy over the edge bases (0, 1, 99, …). Lab: [`strategy/coupon/`](../lab/src/main/java/com/masternova/patterns/strategy/coupon/CouponDiscount.java).
+
+## 7e. Fourth use: the payment provider (Phase 9.4)
+
+The lab's `PaymentGateway` (written in Phase 1, before any provider existed) picks a gateway **per
+request** from a registry. The real one is simpler, and the difference is worth saying: Masternova
+takes payments through **one** provider per deployment, so the strategy is picked **once, by
+configuration**, in `CommerceConfig.paymentGateway` (a `switch` over
+`masternova.commerce.provider`): `RAZORPAY` (test or live keys) or `FAKE`.
+
+The second implementation is real, not speculative: local runs, e2e and CI have no Razorpay keys,
+so `FakePaymentGateway` simulates the two outbound calls (create an order, refund) and shares the
+rest with Razorpay's adapter (signatures, webhook parsing). Checkout, confirm, webhooks and refunds
+never contain `if (fake)`. A per-request registry would come back only if learners could choose a
+provider (Razorpay for INR, Stripe for USD), which the single-currency catalog doesn't need yet.
+
+Guard rails: the fake logs a WARN at startup, and choosing `RAZORPAY` without its three secrets
+fails startup (`FakePaymentGatewayTest.razorpayWithoutKeysRefusesToStart`).
 
 ## 8. Interview Q&A
 
