@@ -124,7 +124,7 @@ Phases are listed **in the order you do them**.
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 5 | 12 h | ~12 h | ✅ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 7 | 18 h | ~18 h | ✅ |
-| 13 | [9 — Commerce](#phase-9--commerce) | 9 | 2 | 28 h | ~4.5 h | 🔨 |
+| 13 | [9 — Commerce](#phase-9--commerce) | 9 | 3 | 28 h | ~7.5 h | 🔨 |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 0 | 14 h | — | ☐ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
@@ -390,7 +390,7 @@ reorders or races the redirect.
 |---|---|---|---|---|---|---|---|
 | 9.1 | `docs/lld/order-state-machine.md` + ADRs (webhook dedupe; grant in the order transaction) | — | — | — | 2 h | ✅ | 2026-10-14 |
 | 9.2 | Cart + pricing: coupon types and eligibility rules. Cart = course ids in the browser, priced by `POST /cart/quote` (never a client amount). `Discount` sealed Strategy (`PercentOff` half-up + cap, `AmountOff` clamped; the row picks it in one exhaustive switch), `CouponEligibility` 6 coded rules (first failure = the 422), pure `Pricer` (for sale / free / already owned incl. own course; course-scoped coupons discount their line only). `V18` coupon (CHECKs make a row one kind), redemptions counted in SQL at PAID (soft limit). Admin coupons API. `CatalogApi.offers` (1 statement), `EntitlementApi.heldCourses`. `DiscountTest`, `CouponEligibilityTest`, `PricerTest`, `BigDecimalPitfallsLearningTest`, `CartQuoteIT` | `BigDecimal` pitfalls vs minor units | — | **Strategy** (coupon types) + **Specification** (eligibility) | 3 h | ✅ | 2026-10-14 |
-| 9.3 | Order state machine: forward-only transitions, out-of-order safe | sealed states, `EnumSet` transition tables | — | **State** | 3 h | ☐ | |
+| 9.3 | Order state machine: forward-only transitions, out-of-order safe. `OrderStatus` with an `EnumSet` successors table (ranks only go up) + sealed `OrderState` (12 answers: `Move(from, to, effect)` or `Ignore(why)`, never a 409: payment messages are history); the effect depends on the source (a refund revokes only from PAID; a refund overtaking the capture lands REFUNDED and grants nothing). `Order` aggregate (`PurchaseOrder`: `order` is a JPQL keyword) asserts every move against the table; a capture of the wrong amount is ignored. `V19` (CHECKs: PAID has its payment, total = subtotal − discount), `lockById` / `lockByProviderOrderId`. `OrderStateTest` (12 cells, both directions table ↔ states, every permutation of messages ends REFUNDED with ≤ 1 grant = revokes), `OrderTest`, `OrderPersistenceIT` | sealed states, `EnumSet` transition tables | — | **State** | 3 h | ✅ | 2026-10-14 |
 | 9.4 | `PaymentGateway` + Razorpay adapter (test mode), signature verification | `RestClient`, HMAC | — | **Strategy** + **Adapter** | 3.5 h | ☐ | |
 | 9.5 | `CheckoutService`: Idempotency-Key, order + entitlement in one transaction | transaction boundaries | — | **Facade** | 3 h | ☐ | |
 | 9.6 | Webhook endpoint: raw-body signature, claim-before-process on provider event id | raw `byte[]` bodies, unique-constraint claims | — | — | 3 h | ☐ | |
