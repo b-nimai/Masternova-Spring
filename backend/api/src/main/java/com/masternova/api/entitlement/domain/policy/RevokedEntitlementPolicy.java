@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
  * "Buy, refund, watch anyway" is closed whatever gets added next.
  */
 @Component
-@Order(40)
+@Order(30)
 class RevokedEntitlementPolicy implements EntitlementPolicy {
 
   @Override

@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  * who hold an ACTIVE entitlement: they paid for it, and retiring a course must not take it away.
  */
 @Component
-@Order(30)
+@Order(40)
 class PublishedCoursePolicy implements EntitlementPolicy {
 
   @Override

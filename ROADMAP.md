@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-13 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22) · Phase D3 ✅.
+**Created:** 2026-10-02 · **Last updated:** 2026-10-14 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22) · Phase D3 ✅ · Phase 8 ✅ (PR pending).
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -123,14 +123,14 @@ Phases are listed **in the order you do them**.
 | 9 | [6 — Catalog authoring](#phase-6--catalog-authoring) | 8 | 8 | 22 h | ~21 h | ✅ |
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 5 | 12 h | ~12 h | ✅ |
-| 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 6 | 18 h | ~16 h | 🔨 |
+| 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 7 | 18 h | ~18 h | ✅ |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 0 | 28 h | — | ☐ |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 0 | 14 h | — | ☐ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **90** | **~326 h** | ~180 h | |
+| | **Total** | **137** | **97** | **~326 h** | ~198 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -377,7 +377,7 @@ with alerts that mean something.
 | 8.4 | `EntitlementService` as the module's single entry point; hook into `@PreAuthorize` via a custom bean | facade API design | — | **Facade** | 2 h | ✅ | 2026-10-14 |
 | 8.5 | 5-minute HMAC playback token (user + lecture + IP) + manifest endpoint | `Mac`, constant-time compare | — | — | 2.5 h | ✅ | 2026-10-14 |
 | 8.6 | Angular: locked/unlocked lecture UI; denial reason → the right CTA; player guard | — | discriminated unions in templates, `@switch` | — | 3 h | ✅ | 2026-10-14 |
-| 8.7 | Tests: parameterized policy matrix, cache invalidation IT | `@ParameterizedTest`, `@MethodSource` | — | — | 2 h | ☐ | |
+| 8.7 | Tests: parameterized policy matrix, cache invalidation IT | `@ParameterizedTest`, `@MethodSource` | — | — | 2 h | ✅ | 2026-10-14 |
 
 ---
 

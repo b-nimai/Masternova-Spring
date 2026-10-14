@@ -5,7 +5,7 @@
 > and explainably (every denial carries a stable reason, and an admin can see every policy's
 > vote). Then hand the player a short playback token bound to that user, that lecture and that IP.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** building (8.1 design, 8.2 policy chain, 8.3 cached repository, 8.4 facade + `@PreAuthorize`, 8.5 playback token, 8.6 Angular)
+**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** built (Phase 8: 8.1–8.7)
 **Last updated:** 2026-10-14 · **Angular:** `frontend/src/app/features/learn` (player + guard),
 `features/catalog/access-cta` + `curriculum` (call to action, locks) · note: [`patterns/angular/07`](../../patterns/angular/07-access-ui-and-discriminated-unions.md)
 **Pairs with:** [ADR-0016](../adr/0016-cache-the-entitlement-row-not-the-decision.md) (cache) ·
@@ -72,7 +72,10 @@ it travels as a token in the playlist URL. That URL must not be worth sharing.
    viewer's row is expired, otherwise `NO_ENTITLEMENT`. **Closed by default.**
 
 `@Order` never changes *whether* access is granted, only *which* reason is reported when several
-policies agree. `PolicyChainTest` proves it by running the same policies in both orders.
+policies agree. `PolicyChainTest` proves it by running the same policies in both orders, and
+`PolicyMatrixTest` runs every row of the decision table through the chain reversed. That's why
+the personal reason (revoked, 30) comes before the general one (not published, 40): a refunded
+learner on an archived course reads "your access was withdrawn", which is the truer story.
 
 **The seven policies:**
 
@@ -80,8 +83,8 @@ policies agree. `PolicyChainTest` proves it by running the same policies in both
 |---|---|---|
 | 10 | `AdminPolicy` | `Allow(ADMIN)` for an admin |
 | 20 | `OwnerPolicy` | `Allow(OWNER)` for the course's instructor |
-| 30 | `PublishedCoursePolicy` | `Deny(COURSE_NOT_PUBLISHED)` for a non-staff viewer of a draft / in-review course, or of an **archived** course without an active entitlement (people who paid keep an archived course) |
-| 40 | `RevokedEntitlementPolicy` | `Deny(ENTITLEMENT_REVOKED)` for a non-staff viewer whose row is revoked: a refund beats a preview lecture and a course made free later |
+| 30 | `RevokedEntitlementPolicy` | `Deny(ENTITLEMENT_REVOKED)` for a non-staff viewer whose row is revoked: a refund beats a preview lecture and a course made free later |
+| 40 | `PublishedCoursePolicy` | `Deny(COURSE_NOT_PUBLISHED)` for a non-staff viewer of a draft / in-review course, or of an **archived** course without an active entitlement (people who paid keep an archived course) |
 | 50 | `FreeCoursePolicy` | `Allow(FREE_COURSE)` if the price is 0 **and was set** (`priceSet`: 0 also means "not priced yet") |
 | 60 | `PreviewLecturePolicy` | `Allow(PREVIEW_LECTURE)` for a preview lecture |
 | 70 | `ActiveEntitlementPolicy` | `Allow(ENTITLED)` if the row is `ACTIVE` at `now` |
@@ -276,8 +279,65 @@ playlist routes open no transaction and run no SQL (token only).
 
 ## 10. Tests that prove it
 
-*Filled in by 8.7.*
+- **Unit (no Spring, no DB):**
+  - `PolicyChainTest`: deny wins in **both orders**, order only names the reason, closed by
+    default (all-abstain and an empty chain), an expired row turns the fallback into
+    `ENTITLEMENT_EXPIRED`, a throwing or `null`-returning policy is `ACCESS_CHECK_FAILED` while
+    the others' votes are kept.
+  - `PolicyMatrixTest` ⭐: the **decision table as data**, 27 named rows (viewer × course state ×
+    lecture × row), through the seven real policies sorted by `AnnotationAwareOrderComparator`
+    exactly as Spring injects them; every row again through the chain **reversed** (same
+    verdict); and the order itself pinned to §3's table.
+  - `PoliciesTest`: each rule alone, including that both deny rules scope themselves.
+  - `EntitlementTest`: status at a time; revoked wins over expired.
+  - `CachedEntitlementRepositoryTest`: hit, cached negative, `Instant`s survive JSON (the NestJS
+    bug), eviction only **after commit** and not on rollback, Redis down → database, unreadable
+    value dropped.
+  - `PlaybackTokensTest` + kernel `SignedTokensTest`: bound to lecture, IP and expiry; the IP is
+    signed and never carried; old unbound tokens unchanged.
+  - `EntitlementExpressionsTest`: the `@PreAuthorize` hook in a tiny context; the denial's reason
+    survives Spring's proxy, and the method body never runs.
+- **Testcontainers `*IT`:**
+  - `JdbcEntitlementRepositoryIT`: the SQL alone; never-shorten rule; revoke once; re-grant
+    after a refund; ⭐ **50 concurrent copies of one grant → 1 row, exactly one `true`**.
+  - `EntitlementCacheIT` ⭐: on real Redis: the row (not the decision) is cached with a TTL ≤ 5
+    min; grant and revoke evict at commit; a rolled-back grant evicts nothing; inside a longer
+    transaction the key survives until the commit; a write behind the cache's back stays stale
+    (why every writer is a repository method).
+  - `EntitlementAccessIT`: the facade over HTTP: anonymous locks, grant → open, revoke → closed
+    *including the preview*, drafts, free vs unpriced, the admin's explanation, 403/404/400s.
+  - `LecturePlaybackIT`: token → master → rung → a presigned segment from SeaweedFS with no
+    bearer; another IP or another lecture → 403; `NO_ENTITLEMENT` from the chain through
+    `@PreAuthorize` into the 403; a refund stops the next ticket; 409 for unfinished or text
+    lectures.
+- **Angular:** `EntitlementApi` spec; `canWatchGuard` (allowed, denied with `?locked=`, unknown);
+  `AccessCta` (each reason → its button); `Curriculum` (open videos link, locks); `CourseDetail`
+  (chained access request, CTA, banner, a forged `?locked=` ignored); `LecturePlayer` (plays,
+  re-tickets and resumes at the same second, no loop inside the grace window, a real denial
+  shown); `HlsPlayer` (reload on a new `src` at `startAt` on the same `<video>`).
 
 ## 11. Interview notes — 60-second recall
 
-*Written last (8.7).*
+**Problem:** seven reasons decide whether someone may play a lecture (admin, owner, free, preview,
+bought, unpublished, refunded), and more are coming. The answer must be right, fast, explainable,
+and reach a `<video>` that can't send headers.
+
+**Decisions that mattered:**
+
+1. **Chain of Responsibility without short-circuit.** Every policy votes Allow / Deny / Abstain;
+   **any deny wins**, nobody allowing is a deny, a throwing policy is a deny. Order only names the
+   reason, so a rule added next quarter can't defeat a refund. Deny rules scope themselves with
+   one `isStaff()`.
+2. **Cache the row, not the decision** (Decorator over the JDBC repository): the row has three
+   writers, all on the decorated interface; the decision depends on catalog's data. Negatives
+   cached, eviction **after commit**, Redis failures fall through to Postgres, TTL as backstop.
+3. **Facade** `EntitlementService`: facts and the row fetched once, sequence + transaction, no
+   rules. It plugs into Spring Security as `@PreAuthorize("@entitlements.canWatch(…)")`, which
+   returns an `AuthorizationResult` so the 403 keeps its **reason**.
+4. **5-minute playback token bound to user + lecture + IP**, the IP signed but not carried; the
+   playlists check only the token (no DB); the player **re-tickets** on a 403 and resumes, which
+   re-runs the decision. That's how a refund reaches a viewer mid-lecture.
+
+**The numbers:** 27-row decision table, verdict identical with the chain reversed; 50 concurrent
+grants → 1 row; one Redis `GET` per signed-in decision, none for anonymous; a playlist request
+is one HMAC and one storage read.
