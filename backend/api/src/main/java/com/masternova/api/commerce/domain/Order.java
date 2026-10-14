@@ -14,6 +14,7 @@ import jakarta.persistence.Embeddable;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
@@ -102,10 +103,12 @@ public class Order {
   @Column(name = "refunded_at")
   private Instant refundedAt;
 
-  @ElementCollection
+  // ⭐ EAGER on purpose: the lines are part of the order's value (≤ 20, never edited) and every
+  //    reader needs them. @BatchSize loads the lines of a whole history page in one more statement.
+  @ElementCollection(fetch = FetchType.EAGER)
   @CollectionTable(name = "order_line", joinColumns = @JoinColumn(name = "order_id"))
   @OrderColumn(name = "position")
-  @BatchSize(size = 50) // the order history: lines for a page of orders in one more statement
+  @BatchSize(size = 50)
   private List<Line> lines = new ArrayList<>();
 
   @Version private Long version;
@@ -156,7 +159,7 @@ public class Order {
         && !amount.get().equals(total())) {
       // ⭐ money we didn't ask for: never grant on it. The order stays unpaid; a human looks.
       return new Ignore(
-          status, "captured " + amount.get().display() + ", expected " + total().display());
+          status, "captured " + amount.get().display() + ", expected " + total().display(), true);
     }
     Transition transition = state().on(event);
     if (transition instanceof Move(var from, var to, var effect)) {

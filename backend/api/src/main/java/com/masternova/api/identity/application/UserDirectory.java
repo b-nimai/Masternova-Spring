@@ -1,5 +1,6 @@
 package com.masternova.api.identity.application;
 
+import com.masternova.api.identity.Contact;
 import com.masternova.api.identity.IdentityApi;
 import com.masternova.api.identity.domain.User;
 import com.masternova.api.identity.domain.UserRepository;
@@ -22,5 +23,11 @@ class UserDirectory implements IdentityApi {
   @Transactional(readOnly = true)
   public Optional<String> displayName(UUID userId) {
     return users.findById(userId).map(User::displayName);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public Optional<Contact> contact(UUID userId) {
+    return users.findById(userId).map(u -> new Contact(u.email().value(), u.displayName()));
   }
 }

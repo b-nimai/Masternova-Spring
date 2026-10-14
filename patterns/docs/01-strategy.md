@@ -172,8 +172,9 @@ runs every strategy over the edge bases (0, 1, 99, …). Lab: [`strategy/coupon/
 The lab's `PaymentGateway` (written in Phase 1, before any provider existed) picks a gateway **per
 request** from a registry. The real one is simpler, and the difference is worth saying: Masternova
 takes payments through **one** provider per deployment, so the strategy is picked **once, by
-configuration**, in `CommerceConfig.paymentGateway` (a `switch` over
-`masternova.commerce.provider`): `RAZORPAY` (test or live keys) or `FAKE`.
+configuration**, in `CommerceConfig`: two `@Bean` methods guarded by
+`@ConditionalOnProperty(masternova.commerce.provider)`, `razorpay` (test or live keys) or `fake`,
+so exactly one gateway exists and everything else injects `PaymentGateway`.
 
 The second implementation is real, not speculative: local runs, e2e and CI have no Razorpay keys,
 so `FakePaymentGateway` simulates the two outbound calls (create an order, refund) and shares the

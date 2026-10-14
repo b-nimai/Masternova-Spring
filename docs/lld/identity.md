@@ -87,6 +87,8 @@ classDiagram
 
 **Module API** (top-level `com.masternova.api.identity`): `Role`, `UserRegistered` (event),
 `CurrentUser` (who is calling: id + roles). Everything else is internal.
+*Later additions:* `IdentityApi` (Phase 6: `displayName`; Phase 9: `contact` → `Contact(email,
+displayName)`, so a purchase event can carry the address the worker emails the receipt to).
 
 ## 5. Main flows
 

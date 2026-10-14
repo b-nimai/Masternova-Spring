@@ -25,11 +25,19 @@ public sealed interface Transition {
   /**
    * ⭐ Not an error: a duplicate, or a late message about a world that has moved on. The senders are
    * machines replaying history; the order's current state already answers them (LLD §3).
+   *
+   * @param anomaly not history but something wrong (money we didn't ask for): logged at ERROR and
+   *     counted, for a human to look at
    */
-  record Ignore(OrderStatus state, String why) implements Transition {
+  record Ignore(OrderStatus state, String why, boolean anomaly) implements Transition {
     public Ignore {
       Objects.requireNonNull(state, "state");
       Objects.requireNonNull(why, "why");
+    }
+
+    /** History: a duplicate or a late message. */
+    public Ignore(OrderStatus state, String why) {
+      this(state, why, false);
     }
   }
 }

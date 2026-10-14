@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
@@ -22,19 +23,22 @@ class CommerceConfig {
   private static final Logger log = LoggerFactory.getLogger(CommerceConfig.class);
 
   /**
-   * ⭐ The Strategy is picked HERE, once, by configuration — the only {@code switch} on the provider
-   * in the codebase.
+   * ⭐ The Strategy is picked HERE, once, by configuration: exactly one of these two beans exists,
+   * and everything else injects {@link PaymentGateway}.
    */
   @Bean
-  PaymentGateway paymentGateway(
+  @ConditionalOnProperty(name = "masternova.commerce.provider", havingValue = "razorpay")
+  PaymentGateway razorpayGateway(
       CommerceProperties props, MasternovaProperties platform, JsonMapper json) {
-    return switch (props.provider()) {
-      case RAZORPAY -> razorpay(props.razorpay(), platform.checkout().paymentTimeout(), json);
-      case FAKE -> {
-        log.warn("FAKE payment provider active: payments are simulated. Never in production.");
-        yield new FakePaymentGateway(props.fake().keySecret(), props.fake().webhookSecret(), json);
-      }
-    };
+    return razorpay(props.razorpay(), platform.checkout().paymentTimeout(), json);
+  }
+
+  /** Its concrete type is the bean type, so the dev checkout simulator can inject it. */
+  @Bean
+  @ConditionalOnProperty(name = "masternova.commerce.provider", havingValue = "fake")
+  FakePaymentGateway fakePaymentGateway(CommerceProperties props, JsonMapper json) {
+    log.warn("FAKE payment provider active: payments are simulated. Never in production.");
+    return new FakePaymentGateway(props.fake().keySecret(), props.fake().webhookSecret(), json);
   }
 
   static RazorpayGateway razorpay(

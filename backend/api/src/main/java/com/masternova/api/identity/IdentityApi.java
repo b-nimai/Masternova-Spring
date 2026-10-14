@@ -12,4 +12,7 @@ public interface IdentityApi {
 
   /** The user's current display name, or empty if there's no such user. */
   Optional<String> displayName(UUID userId);
+
+  /** Where to send this user's receipts (Phase 9), or empty if there's no such user. */
+  Optional<Contact> contact(UUID userId);
 }
