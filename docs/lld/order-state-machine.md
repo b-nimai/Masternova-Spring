@@ -4,8 +4,8 @@
 > **exactly once in effect**, even when the provider retries, reorders or races the browser's
 > redirect, and turn a paid order into course access in the **same transaction**.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/commerce` · **Status:** draft (Phase 9: 9.1)
-**Last updated:** 2026-10-14 · **Angular:** `frontend/src/app/features/commerce` (cart, checkout, result, order history)
+**Module:** `backend/api/src/main/java/com/masternova/api/commerce` · **Status:** built (Phase 9: 9.1–9.9)
+**Last updated:** 2026-10-14 · **Angular:** `frontend/src/app/features/commerce` (cart, checkout, result, order history) · note: [`patterns/angular/08`](../../patterns/angular/08-cart-checkout-and-third-party-scripts.md)
 **Pairs with:** [ADR-0018](../adr/0018-claim-webhook-events-before-processing.md) (webhook dedupe) ·
 [ADR-0019](../adr/0019-grant-access-in-the-order-transaction.md) (grant in the order transaction) ·
 [`entitlement-engine.md`](entitlement-engine.md) (what a grant and a revoke do) ·
@@ -186,7 +186,7 @@ classDiagram
   PaymentGateway <|.. FakePaymentGateway
 ```
 
-**Module API** (`com.masternova.api.commerce`): the events `OrderPaid` and `OrderRefunded`
+**Module API** (`com.masternova.api.commerce`): the events `OrderPaid` (`commerce.order-paid.v1`) and `OrderRefunded` (`commerce.order-refunded.v1`)
 (through the outbox: the worker sends the receipt and the refund notice; Phase 10's enrollment
 listens to `OrderPaid`). Nobody calls commerce, so there is no `CommerceApi`.
 
@@ -287,3 +287,126 @@ sequenceDiagram
 **Not a pattern, on purpose:** the cart is a list of ids in the browser (localStorage), not a
 server-side aggregate. The server prices it on demand; nothing about it needs to survive a
 device change yet.
+
+## 7. Alternatives rejected
+
+| Option | Why not |
+|---|---|
+| **Grant from an `OrderPaid` listener** (outbox → worker, or `@TransactionalEventListener`) | ADR-0019. Eventual access for something just paid for, and a "paid, no course" failure mode. Both modules share one database: one local transaction is stronger and cheaper. |
+| **Dedupe webhooks by processing first, recording after** | ADR-0018. A crash between the two re-processes the event; claiming in its own transaction drops a redelivery whose processing failed. The claim lives in the effects' transaction. |
+| **A pure `EnumSet` transition table, no State classes** | The table says where an order may go, not what the move does. "Refund revokes only from `PAID`" is behaviour that depends on the source state. The table stays as the guard. |
+| **409 for a late or duplicate payment message** | The senders are machines replaying history: a 409 makes Razorpay retry a webhook for a day and shows an error to a learner who did pay. Late messages are ignored; the current state is the answer. |
+| **`@Transactional` around the whole checkout** | Holds a connection and a row lock across an HTTP call of up to 10 s, and the provider's side can't roll back anyway. Two short transactions around the call (`TransactionTemplate`). |
+| **A server-side cart table** | Nothing about a cart must survive a device change yet; the browser holds ids, the server prices them on demand. Add one when "continue on your phone" is a feature. |
+| **Prices in `BigDecimal`** | `Money` in minor units already rounds a percentage exactly (integer half-up). `BigDecimal` would need the scale and rounding mode chosen right every time, and `equals` compares the scale (`BigDecimalPitfallsLearningTest`). |
+| **Reserve a coupon redemption at checkout** | Abandoned checkouts would burn a limited coupon and need a release job. Counting at `PAID` makes the limit soft instead (§8), which is acceptable for a promotion. |
+| **A generic `processed_event` table in the platform** | One consumer today (payment webhooks). A generic table arrives with the second. |
+| **The provider picked per request (a registry)** | One provider per deployment; picked once by configuration. A registry returns if learners can choose (Razorpay for INR, Stripe for USD). |
+| **Partial refunds** | Not a product need yet. An order is refunded whole; `PaymentEvent.Refunded` carries no amount. |
+
+## 8. Failure modes
+
+| Failure | How it is detected | Behaviour | Recovery |
+|---|---|---|---|
+| Razorpay down or slow at checkout | `PaymentProviderException(temporary)`: timeout, connection error, 5xx, 429 | order → `FAILED` ("provider: …"); 503 `PAYMENT_PROVIDER_UNAVAILABLE` + `Retry-After`; the Idempotency-Key is released | the learner retries; the same key really retries |
+| Razorpay rejects our request | `PaymentProviderException(permanent)`: other 4xx | 502 `PAYMENT_PROVIDER_ERROR`, logged at ERROR with Razorpay's description | a human fixes the request or the keys |
+| Tab closed after paying | no `confirm` | the webhook pays the order; the result page polls while `PENDING`; the order history shows `PAID` | none needed |
+| `confirm` and webhooks race | `SELECT … FOR UPDATE` on the order | the first moves it, the rest read `PAID` and are ignored | none needed (`ExactlyOnceIT`) |
+| 50 copies of one webhook | the inbox's primary key | 1 `PROCESSED`, 49 `DUPLICATE`, all 200 | none needed |
+| A refund webhook overtakes the capture's | `REFUNDED` outranks `PAID` | `REFUNDED`, nothing granted, the late capture ignored | none needed |
+| Processing a webhook throws (a grant fails) | the exception | 500; the claim rolls back with the effects; the order stays visibly unpaid | the provider redelivers and the next copy claims it |
+| A forged webhook | HMAC over the raw body doesn't verify | 400 `WEBHOOK_SIGNATURE_INVALID`; nothing parsed or claimed | none: it was never from Razorpay |
+| A forged or replayed browser confirmation | HMAC of `order|payment` with the key secret | 400; someone else's order is 404 | none |
+| Captured amount ≠ order total | `Order.apply`'s amount check | ignored as an **anomaly**: ERROR log + `commerce.payment.events{outcome=anomaly}`; the order stays unpaid | a human looks at the payment |
+| Last coupon redemption taken twice at once | counted at `PAID`, checked at quote time | both orders get the discount (a **soft** limit) | accepted |
+| The FAKE provider in production | a WARN at startup; `RAZORPAY` without its three secrets fails startup | anyone could "pay" through the dev endpoint | deploy config sets `PAYMENT_PROVIDER=razorpay` (D4 Helm values) |
+| The worker is down | outbox backlog / `OutboxStalled` alert (D3) | receipts are late; access is not (it's in the order's transaction) | the relay catches up |
+
+## 9. Data & indexes
+
+- `V18__commerce_coupon.sql`: `coupon` keyed by its upper-cased `code`; CHECKs make a row exactly
+  one kind (`PERCENT` with `percent_off`, `AMOUNT` with `amount_off_minor`), a window that ends
+  after it starts, positive limits. Partial index on `course_id`.
+- `V19__commerce_order.sql`: `purchase_order` (`order` is a keyword) with `UNIQUE
+  provider_order_id`; CHECKs for the status set, `total = subtotal − discount`, and the state's
+  footprints (`PAID` has `paid_at` and its payment id, `REFUNDED` has `refunded_at`). Indexes:
+  `(user_id, created_at DESC)` for "my orders", `created_at DESC` for the admin's list.
+  `order_line (order_id, course_id)` primary key, a snapshot of slug, title and price; index on
+  `course_id`.
+- `V20__commerce_webhook_inbox.sql`: `payment_webhook_event` with **primary key `(provider,
+  event_id)`**, the claim; index on `provider_order_id` for support.
+- Transactions: `PaymentEvents.apply*` and `WebhookService.handle` are `@Transactional`
+  (everything an event causes, in one); `CheckoutService` uses two short `TransactionTemplate`s
+  around the provider call; `PricingService.quote` is read-only. Entitlement's `grant`/`revoke`
+  join the caller's transaction (REQUIRED).
+
+## 10. Tests that prove it
+
+- **Unit (no Spring, no DB):**
+  - `DiscountTest`: half-up rounding (6 rows), caps, clamping, the contract for every strategy, a
+    row becomes its strategy.
+  - `CouponEligibilityTest`: each rule alone, window edges (start-inclusive, end-exclusive), every
+    failure listed and the first thrown.
+  - `PricerTest`: totals in cart order, cart vs course-scoped coupons, a free order, for sale /
+    free / already owned (incl. the instructor's own course), unknown courses, cart shape.
+  - `OrderStateTest` ⭐: the 12 cells, then the properties both ways (every move is in the table
+    and forward; every table edge is taken), and **every permutation of {captured, failed,
+    refunded} plus duplicates ends `REFUNDED` with ≤ 1 grant and as many revokes**.
+  - `OrderTest`: what each event records; a wrong amount is never a payment.
+  - `RazorpayGatewayTest` (`MockRestServiceServer`), `RazorpayWebhooksTest`,
+    `RazorpaySignaturesTest` (against an independent HMAC), `FakePaymentGatewayTest`.
+  - `BigDecimalPitfallsLearningTest`: why minor units.
+- **Testcontainers `*IT`:**
+  - `OrderPersistenceIT`: mapping, lines in order, the lock queries, a CHECK refusing a `PAID` row
+    without its payment.
+  - `CartQuoteIT`: pricing over HTTP with real offers, coupons created by an admin, owned courses.
+  - `CheckoutIT`: pay → `ENTITLED` with no eventual window, one `OrderPaid` with the buyer's email,
+    double confirm, forged and stolen confirms, a replayed Idempotency-Key, a 100% coupon, the
+    provider down (503, `FAILED`, the same key retries).
+  - `WebhookIT`: duplicates, forgeries claim nothing, a refund overtaking the capture never grants,
+    failed → retry → paid → late failure ignored, wrong amount, another system's order, **a
+    failing grant rolls the claim back and the redelivery processes**.
+  - `RefundIT`: refund revokes every course (deny wins over the preview), one `OrderRefunded` and
+    one `EntitlementRevoked` per course; a double-clicked refund and the provider's webhook add
+    nothing.
+  - `ExactlyOnceIT` ⭐ (9.8): on a real server, **50 concurrent copies of one webhook → 1
+    `PROCESSED` + 49 `DUPLICATE`, one grant, one `OrderPaid`, one `EntitlementGranted`**; and 25
+    distinct webhook events racing 25 browser confirms still pay once. Mutation-checked: with the
+    claim disabled the test fails, while the effects stay single thanks to the row lock.
+- **Worker:** `CommerceEmailsTest`: the receipt and refund handlers read the api's JSON field for
+  field and render.
+- **Angular:** `CommerceApi`, `CartStore` (persisted, garbage-tolerant, limit), `RazorpayCheckout`
+  (lazy script once, handler → proof, dismiss, retry after a failed load), `CheckoutFlow`
+  (widget per provider, a new key per attempt, only bought courses leave the cart), `Cart`
+  (server prices, coupon accepted or explained, blocked when unsellable, errors), `OrderResult`
+  (polls until paid, stops; gives up after 30 s), `OrderHistory`, `AccessCta` (buy now, add to cart,
+  renew).
+- **e2e:** `checkout.spec.ts`: course page → Buy now → cart → checkout → simulated payment →
+  result → the course opens → the order in the history → the receipt in Mailpit.
+
+## 11. Interview notes — 60-second recall
+
+**Problem:** take the money exactly once in effect when the provider retries, reorders and races
+the browser's redirect, and turn a paid order into course access with no "paid but locked" window.
+
+**Decisions that mattered:**
+
+1. **A forward-only state machine that ignores history instead of refusing it.** An `EnumSet`
+   table guards where an order may go (ranks only go up); sealed states say what each event does
+   there, including the effect (a refund revokes only from `PAID`). A refund that overtakes the
+   capture lands `REFUNDED`, so the late capture can never grant.
+2. **Claim the webhook's event id in the same transaction as its effects** (ADR-0018): a
+   primary-key insert serialises copies; a failure rolls the claim back, so the redelivery runs.
+   The order's row lock is the second, independent guard (the browser's confirm has no event id).
+3. **Grant in the order's transaction** (ADR-0019): `PAID` iff every course is granted. Only
+   receipts and enrollment are events.
+4. **The provider is a port**: Razorpay behind an Adapter (paise in, ids out, both HMAC schemes,
+   temporary vs permanent failures), and a network-free fake picked by configuration, so dev, CI
+   and e2e run every line after the network.
+5. **The server prices; the browser never sends an amount.** Coupons are a sealed Strategy plus an
+   explainable Specification whose first failure is the 422 the cart shows.
+
+**The numbers:** 50 concurrent webhooks → 1 processed, 49 duplicates, 1 grant, 1 receipt; every
+permutation of captured/failed/refunded ends refunded with ≤ 1 grant; the checkout's provider call
+holds no transaction.
+

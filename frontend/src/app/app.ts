@@ -1,6 +1,7 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
 import { Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
@@ -10,6 +11,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { map } from 'rxjs';
 import { AuthStore } from './core/auth/auth-store';
+import { CartStore } from './core/commerce/cart-store';
 import { NAV_ITEMS } from './core/layout/nav-items';
 
 /**
@@ -31,6 +33,7 @@ import { NAV_ITEMS } from './core/layout/nav-items';
     MatIconModule,
     MatButtonModule,
     MatMenuModule,
+    MatBadgeModule,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
@@ -49,6 +52,8 @@ export class App {
   protected readonly sidenavMode = computed(() => (this.isHandset() ? 'over' : 'side'));
 
   protected readonly auth = inject(AuthStore);
+  /** The toolbar's cart badge (Phase 9). */
+  protected readonly cart = inject(CartStore);
   private readonly router = inject(Router);
 
   /**

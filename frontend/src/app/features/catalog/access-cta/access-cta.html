@@ -18,9 +18,32 @@
       @switch (a.reason) {
         @case ('NO_ENTITLEMENT') {
           @if (auth.isAuthenticated()) {
-            <!-- checkout arrives with commerce (Phase 9) -->
-            <button mat-flat-button type="button" disabled>Buy now</button>
-            <p class="hint">Checkout is coming soon. Preview lectures are open to everyone.</p>
+            @if (offer(); as o) {
+              @if (cart.has(o.courseId)) {
+                <a mat-flat-button routerLink="/cart" data-testid="go-to-cart">
+                  <mat-icon>shopping_cart</mat-icon> Go to cart
+                </a>
+              } @else {
+                <button
+                  mat-flat-button
+                  type="button"
+                  data-testid="buy-now"
+                  (click)="addToCart(true)"
+                >
+                  Buy now
+                </button>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  data-testid="add-to-cart"
+                  [disabled]="cart.isFull()"
+                  (click)="addToCart(false)"
+                >
+                  Add to cart
+                </button>
+              }
+            }
+            <p class="hint">Preview lectures are open to everyone.</p>
           } @else {
             <a
               mat-flat-button
@@ -31,7 +54,15 @@
           }
         }
         @case ('ENTITLEMENT_EXPIRED') {
-          <button mat-flat-button type="button" disabled>Renew access</button>
+          <button
+            mat-flat-button
+            type="button"
+            data-testid="renew"
+            [disabled]="!offer()"
+            (click)="addToCart(true)"
+          >
+            Renew access
+          </button>
           <p class="hint">{{ messages[a.reason] }}</p>
         }
         @case ('ACCESS_CHECK_FAILED') {

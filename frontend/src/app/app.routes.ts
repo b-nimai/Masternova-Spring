@@ -82,6 +82,23 @@ export const routes: Routes = [
       import('./features/account/notifications/notifications').then((m) => m.Notifications),
   },
   {
+    path: 'cart', // Phase 9: priced by the server, so signed in (who you are decides "already owned")
+    canMatch: [authGuard],
+    loadComponent: () => import('./features/commerce/cart/cart').then((m) => m.Cart),
+  },
+  {
+    path: 'orders/:id', // the payment result; polls while the webhook is on its way
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/commerce/order-result/order-result').then((m) => m.OrderResult),
+  },
+  {
+    path: 'account/orders',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/commerce/order-history/order-history').then((m) => m.OrderHistory),
+  },
+  {
     path: 'admin',
     canMatch: [authGuard, roleGuard('ADMIN')],
     loadComponent: () => import('./features/admin/admin').then((m) => m.Admin),

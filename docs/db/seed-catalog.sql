@@ -20,7 +20,24 @@
 
 BEGIN;
 
+-- rows that reference seeded courses go first (foreign keys): purchases (Phase 9), coupons,
+-- entitlements (Phase 8) — including those of e2e users who bought a seeded course
+DELETE FROM purchase_order WHERE id IN (
+    SELECT l.order_id FROM order_line l JOIN course c ON c.id = l.course_id
+    JOIN app_user u ON u.id = c.instructor_id WHERE u.email LIKE '%@seed.test');
+DELETE FROM coupon WHERE course_id IN (
+    SELECT c.id FROM course c JOIN app_user u ON u.id = c.instructor_id
+    WHERE u.email LIKE '%@seed.test');
+DELETE FROM entitlement WHERE course_id IN (
+    SELECT c.id FROM course c JOIN app_user u ON u.id = c.instructor_id
+    WHERE u.email LIKE '%@seed.test');
 DELETE FROM course WHERE instructor_id IN (SELECT id FROM app_user WHERE email LIKE '%@seed.test');
+-- media the seeded instructor uploaded (the media e2e logs in as them): jobs, sessions and
+-- renditions reference the asset, the asset references its owner
+DELETE FROM pipeline_job WHERE asset_id IN (SELECT a.id FROM media_asset a JOIN app_user u ON u.id = a.owner_id WHERE u.email LIKE '%@seed.test');
+DELETE FROM upload_session WHERE asset_id IN (SELECT a.id FROM media_asset a JOIN app_user u ON u.id = a.owner_id WHERE u.email LIKE '%@seed.test');
+DELETE FROM media_rendition WHERE asset_id IN (SELECT a.id FROM media_asset a JOIN app_user u ON u.id = a.owner_id WHERE u.email LIKE '%@seed.test');
+DELETE FROM media_asset WHERE owner_id IN (SELECT id FROM app_user WHERE email LIKE '%@seed.test');
 DELETE FROM app_user WHERE email LIKE '%@seed.test';
 
 SELECT setseed(0.42);
@@ -72,7 +89,7 @@ FROM generate_series(1, :courses) AS n,
                             'Patterns', 'Interview Prep'])[1 + (n * 17) % 10] AS flavour) AS t;
 
 INSERT INTO course (id, slug, title, subtitle, description, language, level, status, published_at,
-                    price_minor, currency, instructor_id, instructor_name, category_id,
+                    price_minor, currency, price_set_at, instructor_id, instructor_name, category_id,
                     rating_average, rating_count, enrollment_count, lecture_count,
                     total_duration_seconds, created_at, updated_at, version)
 SELECT s.id,
@@ -83,7 +100,11 @@ SELECT s.id,
        s.language, s.level,
        CASE WHEN s.published THEN 'PUBLISHED' ELSE 'DRAFT' END,
        CASE WHEN s.published THEN date_trunc('second', s.published_at) END,
-       s.price_minor, 'INR', s.instructor_id, u.display_name, s.category_id,
+       s.price_minor, 'INR',
+       -- ⭐ a published course has always confirmed its price (the publish gate's PRICE_NOT_SET);
+       --    without it, "0" would read as "not priced yet" and a paid one as not for sale (9.9)
+       CASE WHEN s.published THEN date_trunc('second', s.published_at) - interval '7 days' END,
+       s.instructor_id, u.display_name, s.category_id,
        CASE WHEN s.rating_count = 0 THEN 0 ELSE s.rating_average END,
        s.rating_count,
        floor(random() * 5000)::int,

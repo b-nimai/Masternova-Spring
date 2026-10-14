@@ -1,0 +1,43 @@
+<section class="order-history">
+  <h1>Your orders</h1>
+  @if (orders.hasValue() ? orders.value() : null; as list) {
+    @if (list.length === 0) {
+      <p data-testid="no-orders">No orders yet. <a routerLink="/courses">Browse courses</a></p>
+    } @else {
+      <table mat-table [dataSource]="list" data-testid="orders">
+        <ng-container matColumnDef="date">
+          <th mat-header-cell *matHeaderCellDef>Date</th>
+          <td mat-cell *matCellDef="let o">{{ o.createdAt | date: 'mediumDate' }}</td>
+        </ng-container>
+        <ng-container matColumnDef="courses">
+          <th mat-header-cell *matHeaderCellDef>Courses</th>
+          <td mat-cell *matCellDef="let o">
+            <a [routerLink]="['/orders', o.id]">{{ titles(o) }}</a>
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="total">
+          <th mat-header-cell *matHeaderCellDef>Total</th>
+          <td mat-cell *matCellDef="let o">
+            {{ o.totalMinor === 0 ? 'Free' : (o.totalMinor | money: o.currency) }}
+          </td>
+        </ng-container>
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let o">
+            <span class="status" [attr.data-status]="o.status">{{ label(o) }}</span>
+          </td>
+        </ng-container>
+        <tr mat-header-row *matHeaderRowDef="columns"></tr>
+        <tr mat-row *matRowDef="let row; columns: columns"></tr>
+      </table>
+    }
+  } @else if (orders.error()) {
+    <p class="form-error">
+      We couldn't load your orders.
+      <button mat-button type="button" (click)="orders.reload()">Retry</button>
+    </p>
+  } @else {
+    <mat-spinner diameter="36" />
+  }
+  <a mat-button routerLink="/account">Back to my account</a>
+</section>

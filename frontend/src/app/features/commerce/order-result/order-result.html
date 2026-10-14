@@ -1,0 +1,77 @@
+<section class="order-result">
+  @if (order.hasValue() ? order.value() : null; as o) {
+    @switch (o.status) {
+      @case ('PAID') {
+        <div class="banner success" data-testid="result-paid">
+          <mat-icon>check_circle</mat-icon>
+          <div>
+            <h1>You're in!</h1>
+            <p>Payment received on {{ o.paidAt | date: 'medium' }}. Your courses are ready.</p>
+          </div>
+        </div>
+      }
+      @case ('PENDING') {
+        <div class="banner waiting" data-testid="result-pending">
+          <mat-spinner diameter="28" />
+          <div>
+            <h1>Confirming your payment…</h1>
+            <p>
+              This usually takes a few seconds. If you paid, your courses will appear here and in
+              your order history as soon as the payment provider confirms it.
+            </p>
+          </div>
+        </div>
+      }
+      @case ('FAILED') {
+        <div class="banner failed" data-testid="result-failed">
+          <mat-icon>error</mat-icon>
+          <div>
+            <h1>The payment didn't go through</h1>
+            <p>Nothing was charged. Your courses are still in your cart.</p>
+            <a mat-flat-button routerLink="/cart">Back to cart</a>
+          </div>
+        </div>
+      }
+      @case ('REFUNDED') {
+        <div class="banner refunded" data-testid="result-refunded">
+          <mat-icon>undo</mat-icon>
+          <div>
+            <h1>Refunded</h1>
+            <p>This order was refunded on {{ o.refundedAt | date: 'medium' }}.</p>
+          </div>
+        </div>
+      }
+    }
+
+    <ul class="lines">
+      @for (line of o.lines; track line.courseId) {
+        <li>
+          <span class="title">{{ line.title }}</span>
+          <span>{{ line.priceMinor | money: o.currency }}</span>
+          @if (o.status === 'PAID') {
+            <a mat-button [routerLink]="['/courses', line.slug]" data-testid="start-learning"
+              >Start learning</a
+            >
+          }
+        </li>
+      }
+    </ul>
+    <p class="total">
+      @if (o.discountMinor > 0) {
+        <span class="discount"
+          >Coupon {{ o.couponCode }}: −{{ o.discountMinor | money: o.currency }}</span
+        >
+      }
+      Total {{ o.totalMinor === 0 ? 'Free' : (o.totalMinor | money: o.currency) }} ·
+      {{ labels[o.status] }}
+    </p>
+    <a mat-button routerLink="/account/orders">All orders</a>
+  } @else if (order.error()) {
+    <p class="form-error" data-testid="result-error">
+      We couldn't load this order.
+      <button mat-button type="button" (click)="order.reload()">Retry</button>
+    </p>
+  } @else {
+    <mat-spinner diameter="36" />
+  }
+</section>

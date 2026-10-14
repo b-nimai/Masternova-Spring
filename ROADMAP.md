@@ -124,13 +124,13 @@ Phases are listed **in the order you do them**.
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 5 | 12 h | ~12 h | ✅ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 7 | 18 h | ~18 h | ✅ |
-| 13 | [9 — Commerce](#phase-9--commerce) | 9 | 8 | 28 h | ~21 h | 🔨 |
+| 13 | [9 — Commerce](#phase-9--commerce) | 9 | 9 | 28 h | ~27 h | 🔨 |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 0 | 14 h | — | ☐ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **97** | **~326 h** | ~198 h | |
+| | **Total** | **137** | **106** | **~326 h** | ~225 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -396,7 +396,7 @@ reorders or races the redirect.
 | 9.6 | Webhook endpoint: raw-body signature, claim-before-process on provider event id. `POST /webhooks/payments` (public: `PublicEndpoints`), `@RequestBody byte[]`; `WebhookService` in ONE transaction: verify → `INSERT … ON CONFLICT DO NOTHING` on `(provider, event_id)` (`V20` inbox) → `PaymentEvents.applyByProviderOrder` (row lock) → record the outcome. 200 `PROCESSED`/`DUPLICATE`/`IGNORED`/`UNKNOWN_ORDER`, 400 `WEBHOOK_SIGNATURE_INVALID` (nothing claimed), 500 rolls the claim back. API conventions §12 implemented. `WebhookIT` (7: capture + its copy, forgery then the real one is not a duplicate, refund overtaking the capture never grants, failed → retry → PAID → late failure ignored, wrong amount, another system's order, a failing grant → 500 + no claim + PENDING, redelivery processes) | raw `byte[]` bodies, unique-constraint claims | — | — | 3 h | ✅ | 2026-10-14 |
 | 9.7 | Refunds → `EntitlementRevoked` event. `RefundService` (admin `POST /admin/orders/{id}/refund`, `@IdempotencyKeyRequired`; only PAID → else 409 `ORDER_NOT_REFUNDABLE`): the provider refunds with no transaction open, then the refund goes through `PaymentEvents` like any message — REVOKE every course in the order's transaction + `OrderRefunded` (`accessRevoked` false when the refund overtook the capture); the provider's later `refund.processed` is ignored. Entitlement publishes `EntitlementGranted` / `EntitlementRevoked` **only when the row changed**. Worker Observers `SendPurchaseReceipt` / `SendRefundNotice` (PURCHASE, mandatory) + 2 Thymeleaf templates (HTML + text). `GET /admin/orders`. `RefundIT` (3), `CommerceEmailsTest` (the worker's views read the api's JSON field for field) | events | — | Observer | 2 h | ✅ | 2026-10-14 |
 | 9.8 | Proof: **50 concurrent copies of one webhook → exactly 1 enrollment** (IT). `ExactlyOnceIT` on a real server (RANDOM_PORT, virtual threads), 50 signed copies released by one latch → **1 `PROCESSED` + 49 `DUPLICATE`**, order PAID once, 1 entitlement row, **1 `OrderPaid` + 1 `EntitlementGranted`** in the outbox, 1 inbox claim. Second race: 25 distinct webhook events (captured / order.paid can't be deduped by id) + 25 browser confirms at once → still one effect (the order's row lock). Mutation check: with the claim made to always succeed the test fails on the outcome counts, while the effects stay single thanks to the row lock (two independent guards) | concurrency testing | — | — | 3 h | ✅ | 2026-10-14 |
-| 9.9 | Angular: cart, checkout (Razorpay Checkout), payment result, order history | — | third-party script loading, `NgZone`-free callbacks | — | 5.5 h | ☐ | |
+| 9.9 | Angular: cart, checkout (Razorpay Checkout), payment result, order history. `CartStore` (signal store in `localStorage`, defensive load, display prices only) + toolbar badge; `/cart` priced by the server (`rxResource` over ids + coupon; a coupon applied by quoting with it, refusals explained by code); `CheckoutFlow` (order with a fresh Idempotency-Key → the widget the server names: `RazorpayCheckout` (script loaded lazily once, a Promise of `paid`/`dismissed`, no `NgZone`) or the dev `FakeCheckoutDialog` → confirm → only bought courses leave the cart); `/orders/:id` polls while PENDING (`takeWhile(…, true)`, 30 s); `/account/orders` (MatTable); "Buy now" / "Add to cart" / "Renew access" in `AccessCta`. Specs for all 8 pieces; specs found 2 real bugs (`(ngSubmit)` without a form directive; `resource.value()` throwing in error). e2e `checkout.spec.ts` green on the real stack (course → cart → checkout → paid → course opens → receipt in Mailpit). **Found by the e2e:** the catalog seed published courses without `price_set_at` (not for sale, and seeded "free" courses weren't free to entitlement) and couldn't re-seed once the seeded instructor owned media → both fixed in `docs/db/seed-catalog.sql`. Note [angular/08](patterns/angular/08-cart-checkout-and-third-party-scripts.md) | — | third-party script loading, `NgZone`-free callbacks | — | 5.5 h | ✅ | 2026-10-14 |
 
 ---
 
@@ -494,7 +494,7 @@ Tick these as they're used *for real* in the project, not just read about.
 - [x] Boot auto-configuration + starters · [x] `@RestController` / records as DTOs · [x] ProblemDetail · [x] Actuator
 - [x] DI deep-dive (scopes, profiles, `@ConfigurationProperties`) · [x] AOP + proxies · [x] Bean Validation
 - [x] Spring Data JPA / Hibernate · [x] Flyway · [x] transactions + propagation · [x] Spring Security 7 + JWT
-- [x] Spring Modulith events · [x] Modulith verification · [ ] Spring Cache + Redis · [x] `@Scheduled` / ShedLock · [x] SSE
+- [x] Spring Modulith events · [x] Modulith verification · [x] Spring Cache + Redis · [x] `@Scheduled` / ShedLock · [x] SSE
 - [x] Testcontainers + `@ServiceConnection` · [x] `MockMvcTester` · [x] `@WebMvcTest` / `@DataJpaTest` slices
 
 ### 3.3 Angular
