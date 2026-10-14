@@ -37,7 +37,7 @@ obs-check: ## Validate observability config and unit-test the alert rules (promt
 	  $(PROM) test rules alerts.test.yml
 	docker run --rm --entrypoint amtool -v $(OBS)/alertmanager:/etc/alertmanager:ro \
 	  prom/alertmanager:v0.34.1 check-config /etc/alertmanager/alertmanager.yml
-	@tmp=$$(mktemp -d) && python3 $(OBS)/scripts/dashboards_as_rules.py $(OBS)/grafana/dashboards $$tmp/dashboards.rules.json \
+	@tmp=$$(mktemp -d) && chmod 755 $$tmp && python3 $(OBS)/scripts/dashboards_as_rules.py $(OBS)/grafana/dashboards $$tmp/dashboards.rules.json && chmod 644 $$tmp/dashboards.rules.json \
 	  && docker run --rm --entrypoint promtool -v $$tmp:/q:ro $(PROM) check rules /q/dashboards.rules.json; \
 	  rc=$$?; rm -rf $$tmp; exit $$rc
 

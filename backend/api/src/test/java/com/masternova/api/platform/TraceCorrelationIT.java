@@ -48,7 +48,7 @@ class TraceCorrelationIT {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(
                     """
-                    {"email":"%s","displayName":"Trace","password":"Sup3r-secret-pass"}
+                    {"email":"%s","displayName":"Trace","password":"long-enough-password"}
                     """
                         .formatted(email)))
         .hasStatus(201);

@@ -441,6 +441,18 @@ check-config`, and parses **every dashboard query** by turning it into a recordi
 (`scripts/dashboards_as_rules.py`). A typo in a panel fails the build instead of showing "No data"
 (checked by breaking one on purpose).
 
+The first CI run on the PR (2026-10-14) found two things the local runs could not:
+
+- **BuildKit traces itself.** On CI's buildx, every `RUN` step gets
+  `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock`. Boot's OTLP exporter reads
+  `OTEL_*` variables, rejects a `unix://` endpoint, and the AOT training run failed at context
+  refresh. The training `RUN` now drops every `OTEL_*` variable first (`backend/Dockerfile`).
+  Lesson: the app reads the standard OTel variables too, so whatever environment it lands in
+  can switch its exporter on.
+- **`mktemp -d` is mode 0700.** The promtool container runs as `nobody` and couldn't read the
+  generated rules file. On a Mac, Docker Desktop's file sharing hid this. The Makefile now opens up
+  the directory's permissions.
+
 ### 6.5 Routing: Alertmanager → Mailpit
 
 - `severity: page` → `page-email`: 10 s group wait, repeated hourly while firing. `ticket` →
