@@ -2,9 +2,17 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { Observable } from 'rxjs';
 
+/** Mirrors `OrderLineResponse`: one course in a quote or an order, as priced. */
+export interface OrderLineResponse {
+  courseId: string;
+  slug: string;
+  title: string;
+  priceMinor: number;
+}
+
 /** Mirrors `QuoteResponse`: a priced cart (API conventions §5: minor units + one currency). */
 export interface QuoteResponse {
-  lines: { courseId: string; slug: string; title: string; priceMinor: number }[];
+  lines: OrderLineResponse[];
   subtotalMinor: number;
   discountMinor: number;
   totalMinor: number;
@@ -19,7 +27,7 @@ export type OrderStatus = 'PENDING' | 'FAILED' | 'PAID' | 'REFUNDED';
 export interface OrderResponse {
   id: string;
   status: OrderStatus;
-  lines: { courseId: string; slug: string; title: string; priceMinor: number }[];
+  lines: OrderLineResponse[];
   subtotalMinor: number;
   discountMinor: number;
   totalMinor: number;

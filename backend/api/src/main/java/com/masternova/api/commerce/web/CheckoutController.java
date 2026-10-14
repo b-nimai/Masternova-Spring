@@ -2,7 +2,7 @@ package com.masternova.api.commerce.web;
 
 import com.masternova.api.commerce.application.CheckoutService;
 import com.masternova.api.commerce.application.OrderQueries;
-import com.masternova.api.commerce.web.dto.CheckoutRequest;
+import com.masternova.api.commerce.web.dto.CartRequest;
 import com.masternova.api.commerce.web.dto.CheckoutResponse;
 import com.masternova.api.commerce.web.dto.ConfirmPaymentRequest;
 import com.masternova.api.commerce.web.dto.OrderResponse;
@@ -39,7 +39,7 @@ class CheckoutController {
   @PostMapping("/api/v1/checkout")
   @IdempotencyKeyRequired
   ResponseEntity<CheckoutResponse> checkout(
-      CurrentUser me, @Valid @RequestBody CheckoutRequest request) {
+      CurrentUser me, @Valid @RequestBody CartRequest request) {
     var placed =
         checkout.checkout(me.id(), request.courseIds(), Optional.ofNullable(request.couponCode()));
     return ResponseEntity.created(URI.create("/api/v1/orders/" + placed.order().id()))

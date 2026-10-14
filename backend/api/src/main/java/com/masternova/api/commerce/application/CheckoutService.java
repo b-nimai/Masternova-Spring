@@ -2,13 +2,11 @@ package com.masternova.api.commerce.application;
 
 import com.masternova.api.commerce.domain.Order;
 import com.masternova.api.commerce.domain.OrderRepository;
-import com.masternova.api.commerce.domain.OrderStatus;
 import com.masternova.api.commerce.domain.PaymentEvent;
 import com.masternova.api.commerce.domain.PaymentGateway;
 import com.masternova.api.commerce.domain.PaymentGateway.CheckoutCallback;
 import com.masternova.api.commerce.domain.PaymentProviderException;
 import com.masternova.api.commerce.domain.Quote;
-import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.NotFoundException;
 import com.masternova.api.platform.ValidationException;
 import com.masternova.kernel.pattern.DesignPattern;
@@ -119,20 +117,13 @@ public class CheckoutService {
         orders
             .findByIdAndBuyerId(orderId, buyerId)
             .orElseThrow(() -> new NotFoundException("Order", orderId));
-    String providerOrderId =
-        order
-            .providerOrderId()
-            .orElseThrow(
-                () ->
-                    new ConflictException(
-                        "ORDER_NOT_AWAITING_PAYMENT", "This order isn't waiting for a payment."));
-    if (!gateway.isAuthentic(new CheckoutCallback(providerOrderId, paymentId, signature))) {
+    CheckoutCallback callback =
+        new CheckoutCallback(order.requireProviderOrderId(), paymentId, signature);
+    if (!gateway.isAuthentic(callback)) {
       throw ValidationException.of(
           "signature", "PAYMENT_SIGNATURE_INVALID", "The payment confirmation isn't authentic.");
     }
-    if (order.status() == OrderStatus.PAID || order.status() == OrderStatus.REFUNDED) {
-      return order; // the webhook was first: nothing to lock for
-    }
+    // the state machine answers a late confirm (the webhook was first) by ignoring it
     return payments.apply(orderId, new PaymentEvent.Captured(paymentId, Optional.empty())).order();
   }
 }

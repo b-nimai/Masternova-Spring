@@ -41,7 +41,7 @@
               }
               <dt class="total">Total</dt>
               <dd class="total" data-testid="total">
-                {{ q.totalMinor === 0 ? 'Free' : (q.totalMinor | money: q.currency) }}
+                {{ q.totalMinor | money: q.currency }}
               </dd>
             </dl>
           } @else if (quote.isLoading()) {

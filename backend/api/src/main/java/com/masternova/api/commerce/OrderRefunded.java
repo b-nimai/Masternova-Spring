@@ -15,7 +15,7 @@ public record OrderRefunded(
     String userId,
     String email,
     String displayName,
-    List<OrderPaid.Item> items,
+    List<OrderItem> items,
     long amountMinor,
     String currency,
     boolean accessRevoked,

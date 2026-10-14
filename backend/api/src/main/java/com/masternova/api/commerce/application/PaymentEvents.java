@@ -1,5 +1,6 @@
 package com.masternova.api.commerce.application;
 
+import com.masternova.api.commerce.OrderItem;
 import com.masternova.api.commerce.OrderPaid;
 import com.masternova.api.commerce.OrderRefunded;
 import com.masternova.api.commerce.domain.CouponRepository;
@@ -20,7 +21,9 @@ import com.masternova.api.platform.NotFoundException;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,67 +120,59 @@ public class PaymentEvents {
   private void perform(Order order, Move move, Instant now) {
     // ⭐ every effect joins this transaction: the order is PAID iff every course is granted, and
     //    REFUNDED-from-PAID iff every course is revoked (ADR-0019)
+    UUID buyer = order.buyerId();
     switch (move.effect()) {
       case GRANT -> {
         order
             .courseIds()
             .forEach(
-                course ->
-                    entitlements.grant(
-                        order.buyerId(), course, EntitlementSource.PURCHASE, Optional.empty()));
+                c -> entitlements.grant(buyer, c, EntitlementSource.PURCHASE, Optional.empty()));
         order.couponCode().ifPresent(coupons::redeem);
       }
-      case REVOKE ->
-          order.courseIds().stream()
-              // ⭐ a course the buyer also paid for in another order stays theirs
-              .filter(c -> !orders.paidElsewhere(order.buyerId(), c, order.id(), OrderStatus.PAID))
-              .forEach(course -> entitlements.revoke(order.buyerId(), course, REFUND_REASON));
+      case REVOKE -> {
+        // ⭐ a course the buyer also paid for in another order stays theirs (one query)
+        Set<UUID> keep =
+            orders.paidElsewhere(buyer, order.id(), OrderStatus.PAID, order.courseIds());
+        order.courseIds().stream()
+            .filter(c -> !keep.contains(c))
+            .forEach(c -> entitlements.revoke(buyer, c, REFUND_REASON));
+      }
       case NONE -> {}
     }
-    switch (move.to()) {
-      case PAID -> events.publish(paid(order, now));
-      case REFUNDED -> events.publish(refunded(order, move.effect() == Effect.REVOKE, now));
-      case PENDING, FAILED -> {}
+    if (move.to() == OrderStatus.PAID || move.to() == OrderStatus.REFUNDED) {
+      Contact contact =
+          identity
+              .contact(buyer)
+              .orElseThrow(() -> new IllegalStateException("buyer " + buyer + " is gone"));
+      List<OrderItem> items =
+          order.lines().stream()
+              .map(l -> new OrderItem(l.courseId().toString(), l.slug(), l.title(), l.priceMinor()))
+              .toList();
+      String orderId = order.id().toString();
+      long total = order.total().amountMinor();
+      String currency = order.total().currency().getCurrencyCode();
+      events.publish(
+          move.to() == OrderStatus.PAID
+              ? new OrderPaid(
+                  orderId,
+                  buyer.toString(),
+                  contact.email(),
+                  contact.displayName(),
+                  items,
+                  total,
+                  currency,
+                  now)
+              : new OrderRefunded(
+                  orderId,
+                  buyer.toString(),
+                  contact.email(),
+                  contact.displayName(),
+                  items,
+                  total,
+                  currency,
+                  move.effect() == Effect.REVOKE,
+                  now));
     }
-  }
-
-  private OrderRefunded refunded(Order order, boolean accessRevoked, Instant now) {
-    Contact buyer = buyer(order);
-    return new OrderRefunded(
-        order.id().toString(),
-        order.buyerId().toString(),
-        buyer.email(),
-        buyer.displayName(),
-        items(order),
-        order.total().amountMinor(),
-        order.total().currency().getCurrencyCode(),
-        accessRevoked,
-        now);
-  }
-
-  private OrderPaid paid(Order order, Instant now) {
-    Contact buyer = buyer(order);
-    return new OrderPaid(
-        order.id().toString(),
-        order.buyerId().toString(),
-        buyer.email(),
-        buyer.displayName(),
-        items(order),
-        order.total().amountMinor(),
-        order.total().currency().getCurrencyCode(),
-        now);
-  }
-
-  private Contact buyer(Order order) {
-    return identity
-        .contact(order.buyerId())
-        .orElseThrow(() -> new IllegalStateException("buyer " + order.buyerId() + " is gone"));
-  }
-
-  private static java.util.List<OrderPaid.Item> items(Order order) {
-    return order.lines().stream()
-        .map(l -> new OrderPaid.Item(l.courseId().toString(), l.slug(), l.title(), l.priceMinor()))
-        .toList();
   }
 
   private static String name(PaymentEvent event) {

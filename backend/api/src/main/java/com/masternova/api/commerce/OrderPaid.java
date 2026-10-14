@@ -14,16 +14,13 @@ public record OrderPaid(
     String userId,
     String email,
     String displayName,
-    List<Item> items,
+    List<OrderItem> items,
     long totalMinor,
     String currency,
     Instant paidAt)
     implements DomainEvent {
 
   public static final String TYPE = "commerce.order-paid.v1";
-
-  /** One course as sold. */
-  public record Item(String courseId, String slug, String title, long priceMinor) {}
 
   public OrderPaid {
     items = List.copyOf(items);

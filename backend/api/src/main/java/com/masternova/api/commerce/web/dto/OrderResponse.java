@@ -10,7 +10,7 @@ import java.util.UUID;
 public record OrderResponse(
     UUID id,
     OrderStatus status,
-    List<Line> lines,
+    List<OrderLineResponse> lines,
     long subtotalMinor,
     long discountMinor,
     long totalMinor,
@@ -20,14 +20,12 @@ public record OrderResponse(
     Instant paidAt,
     Instant refundedAt) {
 
-  public record Line(UUID courseId, String slug, String title, long priceMinor) {}
-
   public static OrderResponse from(Order o) {
     return new OrderResponse(
         o.id(),
         o.status(),
         o.lines().stream()
-            .map(l -> new Line(l.courseId(), l.slug(), l.title(), l.priceMinor()))
+            .map(l -> new OrderLineResponse(l.courseId(), l.slug(), l.title(), l.priceMinor()))
             .toList(),
         o.subtotal().amountMinor(),
         o.discount().amountMinor(),

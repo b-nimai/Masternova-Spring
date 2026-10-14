@@ -62,7 +62,7 @@
           >Coupon {{ o.couponCode }}: −{{ o.discountMinor | money: o.currency }}</span
         >
       }
-      Total {{ o.totalMinor === 0 ? 'Free' : (o.totalMinor | money: o.currency) }} ·
+      Total {{ o.totalMinor | money: o.currency }} ·
       {{ labels[o.status] }}
     </p>
     <a mat-button routerLink="/account/orders">All orders</a>

@@ -4,7 +4,6 @@ import com.masternova.api.commerce.application.OrderQueries;
 import com.masternova.api.commerce.domain.PaymentSimulator;
 import com.masternova.api.commerce.web.dto.SimulatedPaymentResponse;
 import com.masternova.api.identity.CurrentUser;
-import com.masternova.api.platform.ConflictException;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -31,14 +30,7 @@ class DevPaymentController {
 
   @PostMapping("/api/v1/dev/fake-payments/{orderId}")
   SimulatedPaymentResponse pay(CurrentUser me, @PathVariable UUID orderId) {
-    String providerOrderId =
-        orders
-            .mine(me.id(), orderId)
-            .providerOrderId()
-            .orElseThrow(
-                () ->
-                    new ConflictException(
-                        "ORDER_NOT_AWAITING_PAYMENT", "This order isn't waiting for a payment."));
+    String providerOrderId = orders.mine(me.id(), orderId).requireProviderOrderId();
     var paid = simulator.simulateCheckout(providerOrderId);
     return new SimulatedPaymentResponse(providerOrderId, paid.paymentId(), paid.signature());
   }

@@ -37,10 +37,6 @@ public record Quote(
     }
   }
 
-  public List<UUID> courseIds() {
-    return lines.stream().map(Line::courseId).toList();
-  }
-
   /** Nothing to charge (a 100% coupon): checkout pays the order without a provider. */
   public boolean isFree() {
     return total.isZero();

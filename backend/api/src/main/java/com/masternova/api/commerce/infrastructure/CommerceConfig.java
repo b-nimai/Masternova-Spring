@@ -6,16 +6,13 @@ import com.masternova.api.platform.MasternovaProperties;
 import com.masternova.api.platform.PublicEndpoints;
 import com.masternova.api.platform.PublicEndpoints.Endpoint;
 import java.net.http.HttpClient;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
@@ -62,15 +59,11 @@ class CommerceConfig {
     JdkClientHttpRequestFactory requests =
         new JdkClientHttpRequestFactory(HttpClient.newBuilder().connectTimeout(timeout).build());
     requests.setReadTimeout(timeout);
-    String basic =
-        Base64.getEncoder()
-            .encodeToString(
-                (keys.keyId() + ":" + keys.keySecret()).getBytes(StandardCharsets.UTF_8));
     RestClient http =
         RestClient.builder()
             .baseUrl(keys.baseUrl().toString())
             .requestFactory(requests)
-            .defaultHeader(HttpHeaders.AUTHORIZATION, "Basic " + basic)
+            .defaultHeaders(h -> h.setBasicAuth(keys.keyId(), keys.keySecret()))
             .build();
     return new RazorpayGateway(
         http, keys.keyId(), new RazorpaySignatures(keys.keySecret(), keys.webhookSecret()), json);

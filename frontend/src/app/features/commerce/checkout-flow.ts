@@ -15,7 +15,7 @@ import { FakeCheckoutData, FakeCheckoutDialog } from './fake-checkout-dialog/fak
 /** How checking out ended, for the cart page to act on. */
 export type CheckoutOutcome =
   | { kind: 'done'; order: OrderResponse } // paid, free, or paid-but-unconfirmed: the result page
-  | { kind: 'dismissed'; order: OrderResponse }; // the buyer closed the widget: stay on the cart
+  | { kind: 'dismissed' }; // the buyer closed the widget: stay on the cart
 
 /**
  * Checkout from the browser's side (commerce LLD §5): place the order, open the provider's
@@ -46,7 +46,7 @@ export class CheckoutFlow {
     }
     const result = await this.openWidget(placed, placed.payment);
     if (result.kind === 'dismissed') {
-      return { kind: 'dismissed', order: placed.order };
+      return { kind: 'dismissed' };
     }
     try {
       return this.bought(await firstValueFrom(this.api.confirm(placed.order.id, result.proof)));

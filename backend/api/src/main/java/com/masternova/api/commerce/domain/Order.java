@@ -4,6 +4,7 @@ import com.masternova.api.commerce.domain.PaymentEvent.Captured;
 import com.masternova.api.commerce.domain.PaymentEvent.PaymentFailed;
 import com.masternova.api.commerce.domain.Transition.Ignore;
 import com.masternova.api.commerce.domain.Transition.Move;
+import com.masternova.api.platform.ConflictException;
 import com.masternova.kernel.money.Money;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -103,6 +105,10 @@ public class Order {
   @Column(name = "refunded_at")
   private Instant refundedAt;
 
+  /** A refund in flight (V21): claimed before the provider is called, so it happens once. */
+  @Column(name = "refund_requested_at")
+  private Instant refundRequestedAt;
+
   // ⭐ EAGER on purpose: the lines are part of the order's value (≤ 20, never edited) and every
   //    reader needs them. @BatchSize loads the lines of a whole history page in one more statement.
   @ElementCollection(fetch = FetchType.EAGER)
@@ -154,21 +160,16 @@ public class Order {
    * caller's to perform, in this transaction.
    */
   public Transition apply(PaymentEvent event, Instant now) {
-    if (event instanceof Captured(var paymentId, var amount)
-        && amount.isPresent()
-        && !amount.get().equals(total())) {
-      // ⭐ money we didn't ask for: never grant on it. The order stays unpaid; a human looks.
-      return new Ignore(
-          status, "captured " + amount.get().display() + ", expected " + total().display(), true);
-    }
-    if (event instanceof PaymentEvent.Refunded(var refundId, var amount)
-        && amount.isPresent()
-        && !amount.get().equals(total())) {
-      // ⭐ a partial refund (made in the provider's dashboard): never revoke the whole order on it
-      return new Ignore(
-          status, "partial refund " + amount.get().display() + " of " + total().display(), true);
-    }
     Transition transition = state().on(event);
+    Optional<Money> wrongAmount = event.amount().filter(a -> !a.equals(total()));
+    if (transition instanceof Move && wrongAmount.isPresent()) {
+      // ⭐ money we didn't ask for (a capture of another amount, a PARTIAL refund made in the
+      //    provider's dashboard): never grant or revoke on it. The order stays; a human looks.
+      return new Ignore(
+          status,
+          "amount " + wrongAmount.get().display() + ", order total " + total().display(),
+          true);
+    }
     if (transition instanceof Move(var from, var to, var effect)) {
       if (!from.canMoveTo(to)) { // the table guards the states: a drifted state fails loudly
         throw new IllegalStateException(from + " → " + to + " is not in the transition table");
@@ -187,6 +188,39 @@ public class Order {
       }
     }
     return transition;
+  }
+
+  /**
+   * Claims this order for a refund BEFORE the provider is called (under the order's row lock), so a
+   * second request is refused instead of sending money back twice. A claim older than {@code
+   * staleBefore} belongs to a request that crashed mid-refund and may be taken over.
+   */
+  public void requestRefund(Instant now, Instant staleBefore) {
+    if (status != OrderStatus.PAID) {
+      throw new ConflictException(
+          "ORDER_NOT_REFUNDABLE",
+          "Only a paid order can be refunded.",
+          Map.of("status", status.name()));
+    }
+    if (refundRequestedAt != null && refundRequestedAt.isAfter(staleBefore)) {
+      throw new ConflictException(
+          "REFUND_IN_PROGRESS", "This order is already being refunded.", Map.of("orderId", id));
+    }
+    refundRequestedAt = now;
+  }
+
+  /** The provider refused the refund: the next request may try again. */
+  public void releaseRefund() {
+    refundRequestedAt = null;
+  }
+
+  /** What the provider calls this order — only an order waiting for a payment has one. */
+  public String requireProviderOrderId() {
+    if (providerOrderId == null) {
+      throw new ConflictException(
+          "ORDER_NOT_AWAITING_PAYMENT", "This order isn't waiting for a payment.");
+    }
+    return providerOrderId;
   }
 
   private static String truncate(String reason) {

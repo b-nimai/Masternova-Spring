@@ -10,6 +10,9 @@ import java.util.Optional;
  */
 public sealed interface PaymentEvent {
 
+  /** The money the messenger says moved, when it says; checked against the order's total. */
+  Optional<Money> amount();
+
   /**
    * The money was taken.
    *
@@ -28,6 +31,11 @@ public sealed interface PaymentEvent {
     public PaymentFailed {
       Objects.requireNonNull(paymentId, "paymentId");
       Objects.requireNonNull(reason, "reason");
+    }
+
+    @Override
+    public Optional<Money> amount() {
+      return Optional.empty(); // no money moved
     }
   }
 

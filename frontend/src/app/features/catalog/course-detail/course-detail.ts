@@ -83,10 +83,13 @@ export class CourseDetail {
     );
   });
 
-  /** What "Buy now" puts in the cart (Phase 9); null for a course that has no price yet. */
+  /**
+   * What "Buy now" puts in the cart (Phase 9); null when the server wouldn't sell it — the same
+   * rule as its COURSE_NOT_FOR_SALE / COURSE_IS_FREE: published, priced, and not free.
+   */
   protected readonly offer = computed<CartItem | null>(() => {
     const c = this.course.value();
-    return c && c.priceMinor > 0
+    return c && c.status === 'PUBLISHED' && c.priceSet && c.priceMinor > 0
       ? {
           courseId: c.id,
           slug: c.slug,

@@ -1,7 +1,7 @@
 package com.masternova.api.commerce.web;
 
 import com.masternova.api.commerce.application.PricingService;
-import com.masternova.api.commerce.web.dto.QuoteRequest;
+import com.masternova.api.commerce.web.dto.CartRequest;
 import com.masternova.api.commerce.web.dto.QuoteResponse;
 import com.masternova.api.identity.CurrentUser;
 import jakarta.validation.Valid;
@@ -27,7 +27,7 @@ class CartController {
   }
 
   @PostMapping("/quote")
-  QuoteResponse quote(CurrentUser me, @Valid @RequestBody QuoteRequest request) {
+  QuoteResponse quote(CurrentUser me, @Valid @RequestBody CartRequest request) {
     return QuoteResponse.from(
         pricing.quote(me.id(), request.courseIds(), Optional.ofNullable(request.couponCode())));
   }

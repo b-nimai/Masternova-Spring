@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Prices a cart for a buyer: fetches what the pure {@link Pricer} needs — catalog's offers (one
@@ -42,7 +41,8 @@ public class PricingService {
     this.clock = clock;
   }
 
-  @Transactional(readOnly = true)
+  // ⭐ no transaction: catalog's read and the coupon's are short ones of their own, and no pooled
+  //    connection is held across entitlement's Redis lookups
   public Quote quote(UUID buyerId, List<UUID> courseIds, Optional<String> couponCode) {
     Pricer.requireCartShape(courseIds, cartMaxItems);
     Optional<Coupon> coupon = couponCode.filter(c -> !c.isBlank()).map(this::coupon);

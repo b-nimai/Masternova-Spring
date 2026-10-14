@@ -61,7 +61,11 @@ public class WebhookService {
     Outcome outcome = apply(webhook);
     inbox.record(provider, webhook.eventId(), outcome);
     log.info("Webhook {} ({}) → {}", webhook.eventId(), webhook.type(), outcome);
-    return Result.valueOf(outcome.name());
+    return switch (outcome) { // exhaustive: a new Outcome is a compile error here, not a 500
+      case PROCESSED -> Result.PROCESSED;
+      case IGNORED -> Result.IGNORED;
+      case UNKNOWN_ORDER -> Result.UNKNOWN_ORDER;
+    };
   }
 
   private Outcome apply(WebhookEvent webhook) {
