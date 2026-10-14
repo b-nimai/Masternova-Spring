@@ -1,6 +1,7 @@
 package com.masternova.api.commerce.infrastructure;
 
 import com.masternova.api.commerce.domain.PaymentGateway;
+import com.masternova.api.commerce.domain.PaymentSimulator;
 import com.masternova.kernel.money.Money;
 import java.security.SecureRandom;
 import java.util.HexFormat;
@@ -18,7 +19,7 @@ import tools.jackson.databind.json.JsonMapper;
  * checkout modal: it hands back what Razorpay's {@code handler} would. Exposed only through a dev
  * endpoint that exists only while this gateway is active.
  */
-public class FakePaymentGateway implements PaymentGateway {
+public class FakePaymentGateway implements PaymentGateway, PaymentSimulator {
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -29,9 +30,6 @@ public class FakePaymentGateway implements PaymentGateway {
     this.signatures = new RazorpaySignatures(keySecret, webhookSecret);
     this.webhooks = new RazorpayWebhooks(signatures, json);
   }
-
-  /** What Razorpay Checkout's {@code handler} receives after a successful payment. */
-  public record SimulatedPayment(String paymentId, String signature) {}
 
   @Override
   public String provider() {
@@ -65,6 +63,7 @@ public class FakePaymentGateway implements PaymentGateway {
   }
 
   /** Plays the checkout modal: a payment id and the signature Razorpay would send the browser. */
+  @Override
   public SimulatedPayment simulateCheckout(String providerOrderId) {
     String paymentId = "pay_fake_" + randomId();
     return new SimulatedPayment(paymentId, signatures.signCheckout(providerOrderId, paymentId));

@@ -31,10 +31,21 @@ public sealed interface PaymentEvent {
     }
   }
 
-  /** The money went back (all of it: partial refunds are not supported). */
-  record Refunded(String refundId) implements PaymentEvent {
+  /**
+   * The money went back. Only a FULL refund moves an order: partial refunds aren't supported, so
+   * one made elsewhere (the provider's dashboard) is an anomaly for a human, not a revoke.
+   *
+   * @param amount what was refunded, when the messenger says (webhooks do)
+   */
+  record Refunded(String refundId, Optional<Money> amount) implements PaymentEvent {
     public Refunded {
       Objects.requireNonNull(refundId, "refundId");
+      Objects.requireNonNull(amount, "amount");
+    }
+
+    /** Our own refund call: always the whole order. */
+    public Refunded(String refundId) {
+      this(refundId, Optional.empty());
     }
   }
 }

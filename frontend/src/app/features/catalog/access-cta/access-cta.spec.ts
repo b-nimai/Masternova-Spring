@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AccessResponse } from '../../../core/api/entitlement-api';
 import { AuthStore } from '../../../core/auth/auth-store';
-import { CartStore } from '../../../core/commerce/cart-store';
+import { CART_MAX_ITEMS, CartStore } from '../../../core/commerce/cart-store';
 import { JAVA } from '../../../../testing/commerce-fixtures';
 import { AccessCta } from './access-cta';
 
@@ -83,6 +83,18 @@ describe('AccessCta', () => {
     el.querySelector<HTMLButtonElement>('[data-testid="buy-now"]')!.click();
     expect(cart.has('c-java')).toBe(true);
     expect(navigate).toHaveBeenCalledWith(['/cart']);
+  });
+
+  it('says the cart is full instead of silently not adding', () => {
+    // review fix: "Buy now" stayed enabled, added nothing, and went to a cart without the course
+    signedIn = true;
+    const cart = TestBed.inject(CartStore);
+    for (let i = 0; i < CART_MAX_ITEMS; i++) {
+      cart.add({ ...JAVA, courseId: `other-${i}` });
+    }
+    const el = show({ kind: 'DENIED', reason: 'NO_ENTITLEMENT' });
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="buy-now"]')!.disabled).toBe(true);
+    expect(el.querySelector('[data-testid="cart-full"]')).not.toBeNull();
   });
 
   it('renews expired access through the cart', () => {

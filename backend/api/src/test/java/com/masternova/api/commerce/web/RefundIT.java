@@ -179,6 +179,76 @@ class RefundIT {
   }
 
   @Test
+  void aCourseAlsoPaidForInAnotherOrderSurvivesTheRefund() throws Exception {
+    // review fix: two tabs can buy one course twice ("already owned" is checked at quote, and
+    // neither was paid yet); refunding one order must not take away what the other paid for
+    String first = placeAndPayLater();
+    String second = placeAndPayLater();
+    pay(first);
+    pay(second);
+
+    assertThat(refund(first, "r-1")).hasStatusOk();
+
+    assertThat(access(java.paidLecture())).isEqualTo("ALLOWED:ENTITLED");
+    assertThat(outbox("entitlement.revoked.v1")).isEmpty();
+  }
+
+  @Test
+  void aRefundInFlightRefusesASecondAndAStaleOneIsTakenOver() throws Exception {
+    // review fix: two refunds with different keys both reached the provider
+    String orderId = paidOrder().path("order").path("id").asString();
+    jdbc.sql("UPDATE purchase_order SET refund_requested_at = now() WHERE id = :id")
+        .param("id", UUID.fromString(orderId))
+        .update(); // another request is refunding it right now
+
+    assertThat(refund(orderId, "r-2"))
+        .hasStatus(HttpStatus.CONFLICT)
+        .bodyJson()
+        .extractingPath("$.code")
+        .isEqualTo("REFUND_IN_PROGRESS");
+
+    jdbc.sql(
+            "UPDATE purchase_order SET refund_requested_at = now() - interval '1 hour' WHERE id = :id")
+        .param("id", UUID.fromString(orderId))
+        .update(); // that request crashed an hour ago
+    assertThat(refund(orderId, "r-3")).hasStatusOk();
+  }
+
+  /** Checks out Java alone and returns the order id, unpaid. */
+  private String placeAndPayLater() throws Exception {
+    return body(mvc.post()
+            .uri("/api/v1/checkout")
+            .with(as(learner, Role.LEARNER))
+            .header("Idempotency-Key", UUID.randomUUID().toString())
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"courseIds\": [\"%s\"]}".formatted(java.courseId())))
+        .path("order")
+        .path("id")
+        .asString();
+  }
+
+  private void pay(String orderId) throws Exception {
+    JsonNode simulated =
+        body(
+            mvc.post()
+                .uri("/api/v1/dev/fake-payments/{id}", orderId)
+                .with(as(learner, Role.LEARNER)));
+    assertThat(
+            mvc.post()
+                .uri("/api/v1/orders/{id}/confirm", orderId)
+                .with(as(learner, Role.LEARNER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"paymentId\": \"%s\", \"signature\": \"%s\"}"
+                        .formatted(
+                            simulated.path("paymentId").asString(),
+                            simulated.path("signature").asString())))
+        .bodyJson()
+        .extractingPath("$.status")
+        .isEqualTo("PAID");
+  }
+
+  @Test
   void onlyAPaidOrderAndOnlyAnAdmin() throws Exception {
     JsonNode placed =
         body(

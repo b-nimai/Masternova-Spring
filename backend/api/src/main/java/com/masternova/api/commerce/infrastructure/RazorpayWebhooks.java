@@ -59,16 +59,18 @@ final class RazorpayWebhooks {
                       text(payment.path("error_description"))
                           .or(() -> text(payment.path("error_code")))
                           .orElse("payment failed")));
-          case "refund.processed" -> text(refund.path("id")).map(PaymentEvent.Refunded::new);
+          case "refund.processed" ->
+              text(refund.path("id")).map(id -> new PaymentEvent.Refunded(id, amount(refund)));
           default -> Optional.empty();
         };
     return new WebhookEvent(eventId, type, orderId, event);
   }
 
-  private static Optional<Money> amount(JsonNode payment) {
-    return text(payment.path("currency"))
-        .filter(c -> payment.path("amount").isIntegralNumber())
-        .map(c -> Money.of(payment.path("amount").asLong(), c));
+  /** A payment's or a refund's {@code amount} + {@code currency}, both in Razorpay's paise. */
+  private static Optional<Money> amount(JsonNode entity) {
+    return text(entity.path("currency"))
+        .filter(c -> entity.path("amount").isIntegralNumber())
+        .map(c -> Money.of(entity.path("amount").asLong(), c));
   }
 
   private static Optional<String> text(JsonNode node) {

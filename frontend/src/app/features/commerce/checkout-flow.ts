@@ -14,7 +14,7 @@ import { FakeCheckoutData, FakeCheckoutDialog } from './fake-checkout-dialog/fak
 
 /** How checking out ended, for the cart page to act on. */
 export type CheckoutOutcome =
-  | { kind: 'done'; order: OrderResponse } // paid (or free): go to the result page
+  | { kind: 'done'; order: OrderResponse } // paid, free, or paid-but-unconfirmed: the result page
   | { kind: 'dismissed'; order: OrderResponse }; // the buyer closed the widget: stay on the cart
 
 /**
@@ -48,7 +48,13 @@ export class CheckoutFlow {
     if (result.kind === 'dismissed') {
       return { kind: 'dismissed', order: placed.order };
     }
-    return this.bought(await firstValueFrom(this.api.confirm(placed.order.id, result.proof)));
+    try {
+      return this.bought(await firstValueFrom(this.api.confirm(placed.order.id, result.proof)));
+    } catch {
+      // ⭐ the buyer HAS paid: never send them back to a live Checkout button (a second order, a
+      //    second charge). The webhook pays the order; the result page polls until it does.
+      return this.bought(placed.order);
+    }
   }
 
   private openWidget(placed: CheckoutResponse, payment: PaymentDetails): Promise<WidgetResult> {

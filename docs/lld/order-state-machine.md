@@ -302,7 +302,7 @@ device change yet.
 | **Reserve a coupon redemption at checkout** | Abandoned checkouts would burn a limited coupon and need a release job. Counting at `PAID` makes the limit soft instead (§8), which is acceptable for a promotion. |
 | **A generic `processed_event` table in the platform** | One consumer today (payment webhooks). A generic table arrives with the second. |
 | **The provider picked per request (a registry)** | One provider per deployment; picked once by configuration. A registry returns if learners can choose (Razorpay for INR, Stripe for USD). |
-| **Partial refunds** | Not a product need yet. An order is refunded whole; `PaymentEvent.Refunded` carries no amount. |
+| **Partial refunds** | Not a product need yet. An order is refunded whole. `PaymentEvent.Refunded` carries the webhook's amount only so a partial one (made in the dashboard) is recognised and left to a human, never treated as a full refund. |
 
 ## 8. Failure modes
 
@@ -319,7 +319,12 @@ device change yet.
 | A forged or replayed browser confirmation | HMAC of `order|payment` with the key secret | 400; someone else's order is 404 | none |
 | Captured amount ≠ order total | `Order.apply`'s amount check | ignored as an **anomaly**: ERROR log + `commerce.payment.events{outcome=anomaly}`; the order stays unpaid | a human looks at the payment |
 | Last coupon redemption taken twice at once | counted at `PAID`, checked at quote time | both orders get the discount (a **soft** limit) | accepted |
-| The FAKE provider in production | a WARN at startup; `RAZORPAY` without its three secrets fails startup | anyone could "pay" through the dev endpoint | deploy config sets `PAYMENT_PROVIDER=razorpay` (D4 Helm values) |
+| `PAYMENT_PROVIDER` forgotten in a real environment | the default is `razorpay`, which fails startup without its three secrets | the api doesn't start: **fails closed**, never the simulator (whose dev endpoint would let anyone "pay") | set the keys; `fake` must be asked for by name (compose, `make api`, tests) |
+| Partial refund made in Razorpay's dashboard | the `refund.processed` amount ≠ the order's total | ignored as an **anomaly** (ERROR + counter); the order stays PAID, access kept | a human decides |
+| Two refunds of one order at once | `claimRefund`: a conditional UPDATE on `refund_requested_at` (`V21`) before the provider is called | the second is 409 `REFUND_IN_PROGRESS`; a provider failure releases the claim; a claim older than 5 min is stale and may be taken over | none needed |
+| A course bought twice (two tabs, both paid) then one order refunded | `paidElsewhere` before each revoke | the course stays: the other order still pays for it | none needed |
+| Any failure after the order exists (an unreadable 2xx, a failed tx 2) | `CheckoutService` catches every `RuntimeException` | the order is marked FAILED with the reason, then the error propagates | the learner retries |
+| `confirm` fails after the buyer paid | the SPA's `CheckoutFlow` | the buyer goes to the result page anyway (it polls), never back to a live Checkout button | the webhook pays the order |
 | The worker is down | outbox backlog / `OutboxStalled` alert (D3) | receipts are late; access is not (it's in the order's transaction) | the relay catches up |
 
 ## 9. Data & indexes
@@ -333,6 +338,7 @@ device change yet.
   `(user_id, created_at DESC)` for "my orders", `created_at DESC` for the admin's list.
   `order_line (order_id, course_id)` primary key, a snapshot of slug, title and price; index on
   `course_id`.
+- `V21__commerce_refund_claim.sql`: `purchase_order.refund_requested_at`, the refund's claim (review fix).
 - `V20__commerce_webhook_inbox.sql`: `payment_webhook_event` with **primary key `(provider,
   event_id)`**, the claim; index on `provider_order_id` for support.
 - Transactions: `PaymentEvents.apply*` and `WebhookService.handle` are `@Transactional`

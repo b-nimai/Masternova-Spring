@@ -103,6 +103,9 @@ public class Coupon {
       throw new IllegalArgumentException("a coupon is either a percentage or an amount off");
     }
     c.kind = terms.percentOff().isPresent() ? Kind.PERCENT : Kind.AMOUNT;
+    if (c.kind == Kind.AMOUNT && terms.maxDiscount().isPresent()) { // V18's coupon_kind_ck
+      throw new IllegalArgumentException("only a percentage coupon has a cap");
+    }
     c.currency = Objects.requireNonNull(currency, "currency");
     c.percentOff = terms.percentOff().orElse(null);
     c.amountOffMinor = terms.amountOff().map(m -> inCurrency(m, currency)).orElse(null);

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.masternova.api.TestcontainersConfiguration;
 import com.masternova.api.catalog.domain.TestInstructors;
 import com.masternova.api.commerce.domain.Order;
+import com.masternova.api.commerce.domain.PaymentSimulator;
 import com.masternova.api.commerce.infrastructure.FakePaymentGateway;
 import com.masternova.api.commerce.infrastructure.RazorpayFixtures;
 import com.masternova.api.entitlement.TestCourses;
@@ -169,7 +170,7 @@ class ExactlyOnceIT {
     // the inbox can't dedupe them), while the browser's handler confirms — all at once
     Order order = placeOrder();
     String providerOrderId = order.providerOrderId().orElseThrow();
-    FakePaymentGateway.SimulatedPayment paid = provider.simulateCheckout(providerOrderId);
+    PaymentSimulator.SimulatedPayment paid = provider.simulateCheckout(providerOrderId);
     byte[] captured = RazorpayFixtures.captured(providerOrderId, paid.paymentId(), 49_900);
 
     List<Callable<String>> racers = new ArrayList<>();

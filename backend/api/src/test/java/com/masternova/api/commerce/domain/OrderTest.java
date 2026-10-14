@@ -88,6 +88,19 @@ class OrderTest {
   }
 
   @Test
+  void aPartialRefundIsNeverAFullOne() {
+    Order order = Orders.pending();
+    order.apply(new Captured("pay_1", Optional.empty()), LATER);
+
+    Transition t = order.apply(new Refunded("rfnd_1", Optional.of(inr(10_000))), LATER);
+
+    assertThat(t).isInstanceOfSatisfying(Ignore.class, i -> assertThat(i.anomaly()).isTrue());
+    assertThat(order.status()).isEqualTo(OrderStatus.PAID); // access stays; a human looks
+    assertThat(order.apply(new Refunded("rfnd_2", Optional.of(inr(49_900))), LATER))
+        .isInstanceOf(Move.class); // the full amount is a refund
+  }
+
+  @Test
   void theProviderOrderIsAttachedOnceWhilePending() {
     Order order = Orders.pending();
     order.attachProviderOrder("order_1");

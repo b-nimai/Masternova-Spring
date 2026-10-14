@@ -85,23 +85,29 @@ public class CheckoutService {
             s ->
                 orders.save(
                     Order.place(orderId, buyerId, quote, gateway.provider(), clock.instant())));
-    String providerOrderId;
     try {
-      providerOrderId = gateway.createOrder(orderId, quote.total()); // no transaction open
-    } catch (PaymentProviderException e) {
-      payments.apply( // the attempt is over: FAILED, with the reason, for the order history
-          orderId, new PaymentEvent.PaymentFailed(Optional.empty(), "provider: " + e.getMessage()));
+      String providerOrderId = gateway.createOrder(orderId, quote.total()); // no transaction open
+      // tx 2: now the browser may pay it
+      Order ready =
+          tx.execute(
+              s -> {
+                Order o = orders.lockById(placed.id()).orElseThrow();
+                o.attachProviderOrder(providerOrderId);
+                return o;
+              });
+      return new Checkout(ready, Optional.of(gateway.publicKey()));
+    } catch (RuntimeException e) {
+      // ⭐ ANY failure after tx 1 ends the attempt — a provider outage, an unreadable answer, a
+      //    failed tx 2 — or the order would sit PENDING forever with nothing to pay against
+      payments.apply(
+          orderId,
+          new PaymentEvent.PaymentFailed(
+              Optional.empty(),
+              e instanceof PaymentProviderException
+                  ? "provider: " + e.getMessage()
+                  : "checkout: " + e.getClass().getSimpleName()));
       throw e;
     }
-    // tx 2: now the browser may pay it
-    Order ready =
-        tx.execute(
-            s -> {
-              Order o = orders.lockById(placed.id()).orElseThrow();
-              o.attachProviderOrder(providerOrderId);
-              return o;
-            });
-    return new Checkout(ready, Optional.of(gateway.publicKey()));
   }
 
   /**

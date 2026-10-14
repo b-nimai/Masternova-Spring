@@ -136,6 +136,17 @@ class RazorpayGatewayTest {
   }
 
   @Test
+  void aSuccessThatIsntJsonIsStillOurException() {
+    // review fix: Jackson's exception escaped the adapter, and checkout left the order PENDING
+    razorpay
+        .expect(requestTo(BASE + "/v1/orders"))
+        .andRespond(withSuccess("<html>maintenance</html>", MediaType.TEXT_HTML));
+    assertThatThrownBy(() -> gateway.createOrder(orderId, Money.of(1, "INR")))
+        .isInstanceOfSatisfying(
+            PaymentProviderException.class, e -> assertThat(e.isTemporary()).isFalse());
+  }
+
+  @Test
   void verifiesTheBrowsersCallbackWithTheKeySecret() {
     String signature = new RazorpaySignatures("key-secret", "x").signCheckout("order_A", "pay_B");
 

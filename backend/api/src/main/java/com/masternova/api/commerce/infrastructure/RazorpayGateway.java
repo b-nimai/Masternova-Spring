@@ -104,7 +104,13 @@ class RazorpayGateway implements PaymentGateway {
               .body(json.writeValueAsString(body))
               .retrieve()
               .body(String.class);
-      JsonNode node = json.readTree(response == null ? "{}" : response);
+      JsonNode node;
+      try {
+        node = json.readTree(response == null ? "{}" : response);
+      } catch (RuntimeException unreadable) { // a 2xx we can't read: our contract, not Jackson's
+        throw new PaymentProviderException(
+            "Razorpay answered " + path + " with no JSON", false, unreadable);
+      }
       if (!node.path("id").isString()) {
         throw new PaymentProviderException("Razorpay answered without an id: " + path, false, null);
       }

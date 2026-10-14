@@ -75,6 +75,19 @@ describe('RazorpayCheckout', () => {
     expect(document.querySelectorAll(`script[src="${RAZORPAY_SCRIPT}"]`).length).toBe(1);
   });
 
+  it('forgets a script that loaded but defined nothing, so a later click tries again', async () => {
+    // review fix: this rejection was cached forever (only onerror reset it)
+    const checkout = TestBed.inject(RazorpayCheckout);
+    const paying = checkout.pay(PAYMENT, 'Java', {});
+    document.querySelector<HTMLScriptElement>(`script[src="${RAZORPAY_SCRIPT}"]`)!.onload!(
+      new Event('load'),
+    );
+    await expect(paying).rejects.toThrow('did not load');
+
+    void checkout.pay(PAYMENT, 'Java', {}).catch(() => undefined);
+    expect(document.querySelectorAll(`script[src="${RAZORPAY_SCRIPT}"]`).length).toBe(1); // a fresh tag
+  });
+
   it('rejects when the script can’t load, and a later click tries again', async () => {
     const checkout = TestBed.inject(RazorpayCheckout);
     const paying = checkout.pay(PAYMENT, 'Java', {});
@@ -84,6 +97,6 @@ describe('RazorpayCheckout', () => {
     await expect(paying).rejects.toThrow('could not be loaded');
 
     void checkout.pay(PAYMENT, 'Java', {}).catch(() => undefined);
-    expect(document.querySelectorAll(`script[src="${RAZORPAY_SCRIPT}"]`).length).toBe(2);
+    expect(document.querySelectorAll(`script[src="${RAZORPAY_SCRIPT}"]`).length).toBe(1); // retried
   });
 });

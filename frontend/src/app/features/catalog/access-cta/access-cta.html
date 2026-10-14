@@ -28,6 +28,7 @@
                   mat-flat-button
                   type="button"
                   data-testid="buy-now"
+                  [disabled]="cart.isFull()"
                   (click)="addToCart(true)"
                 >
                   Buy now
@@ -41,6 +42,9 @@
                 >
                   Add to cart
                 </button>
+              }
+              @if (cart.isFull() && !cart.has(o.courseId)) {
+                <p class="hint" data-testid="cart-full">Your cart is full. Check out first.</p>
               }
             }
             <p class="hint">Preview lectures are open to everyone.</p>
@@ -58,7 +62,7 @@
             mat-flat-button
             type="button"
             data-testid="renew"
-            [disabled]="!offer()"
+            [disabled]="!offer() || cart.isFull()"
             (click)="addToCart(true)"
           >
             Renew access

@@ -5,6 +5,7 @@ import com.masternova.api.commerce.OrderRefunded;
 import com.masternova.api.commerce.domain.CouponRepository;
 import com.masternova.api.commerce.domain.Order;
 import com.masternova.api.commerce.domain.OrderRepository;
+import com.masternova.api.commerce.domain.OrderStatus;
 import com.masternova.api.commerce.domain.PaymentEvent;
 import com.masternova.api.commerce.domain.Transition;
 import com.masternova.api.commerce.domain.Transition.Effect;
@@ -127,8 +128,9 @@ public class PaymentEvents {
         order.couponCode().ifPresent(coupons::redeem);
       }
       case REVOKE ->
-          order
-              .courseIds()
+          order.courseIds().stream()
+              // ⭐ a course the buyer also paid for in another order stays theirs
+              .filter(c -> !orders.paidElsewhere(order.buyerId(), c, order.id(), OrderStatus.PAID))
               .forEach(course -> entitlements.revoke(order.buyerId(), course, REFUND_REASON));
       case NONE -> {}
     }

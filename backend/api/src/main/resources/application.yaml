@@ -74,9 +74,11 @@ masternova: # → MasternovaProperties (typed + validated at startup)
     token-ttl: 5m
     segment-url-ttl: 30m
   commerce: # → CommerceProperties (docs/lld/order-state-machine.md §6)
-    # FAKE: a network-free Razorpay double (dev, e2e, CI: no keys needed). Every real environment
-    # sets PAYMENT_PROVIDER=razorpay and the three Razorpay secrets (test-mode keys outside prod).
-    provider: ${PAYMENT_PROVIDER:fake}
+    # ⭐ Fails CLOSED: the default is razorpay, which refuses to start without its three secrets.
+    #    The simulator (FAKE: no network, anyone signed in can "pay") must be asked for by name —
+    #    compose, `make api` and the tests set PAYMENT_PROVIDER=fake. A forgotten variable in a
+    #    real environment is a startup failure, never free courses.
+    provider: ${PAYMENT_PROVIDER:razorpay}
     razorpay:
       key-id: ${RAZORPAY_KEY_ID:}
       key-secret: ${RAZORPAY_KEY_SECRET:}

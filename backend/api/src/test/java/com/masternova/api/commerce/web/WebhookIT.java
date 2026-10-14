@@ -234,6 +234,19 @@ class WebhookIT {
   }
 
   @Test
+  void aPartialRefundFromTheDashboardRevokesNothing() throws Exception {
+    // review fix: every refund.processed was a full refund, whatever its amount
+    String order = placeOrder();
+    webhook("evt_c", RazorpayFixtures.captured(order, "pay_1", 49_900)).exchange();
+
+    assertThat(
+            outcome(webhook("evt_r", RazorpayFixtures.refunded(order, "pay_1", "rfnd_1", 10_000))))
+        .isEqualTo("IGNORED");
+    assertThat(orderStatus(order)).isEqualTo("PAID");
+    assertThat(access()).isEqualTo("ALLOWED:ENTITLED");
+  }
+
+  @Test
   void anotherSystemsOrderIsClaimedAndLeftAlone() {
     assertThat(outcome(webhook("evt_x", RazorpayFixtures.captured("order_not_ours", "pay_9", 1))))
         .isEqualTo("UNKNOWN_ORDER");

@@ -22,6 +22,7 @@ x-app-env: &app-env
   STORAGE_ENDPOINT: http://seaweedfs:8333 # how the containers reach storage …
   STORAGE_PUBLIC_ENDPOINT: http://localhost:9010 # … and how the browser does (presigned urls)
   LOG_VERIFICATION_LINKS: 'false' # never log live tokens outside a developer's own terminal
+  PAYMENT_PROVIDER: fake # the local stack and e2e have no Razorpay keys (the api's default fails closed)
   # spans → Tempo (profile `observability`). Without it running the exporter only logs that it
   # couldn't send; the apps never wait on it (batched, in the background).
   MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces

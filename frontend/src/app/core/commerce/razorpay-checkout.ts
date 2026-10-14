@@ -83,12 +83,16 @@ export class RazorpayCheckout {
       const script = this.document.createElement('script');
       script.src = RAZORPAY_SCRIPT;
       script.async = true;
-      script.onload = () =>
-        window?.Razorpay ? resolve(window.Razorpay) : reject(new Error('Razorpay did not load'));
-      script.onerror = () => {
-        this.loading = null; // a later click may try again (flaky network, ad blocker)
-        reject(new Error('Razorpay could not be loaded'));
+      // either way a failed load is forgotten, so a later click tries again (flaky network, a
+      // blocker that let the file through but stopped it running)
+      const failed = (message: string) => {
+        this.loading = null;
+        script.remove();
+        reject(new Error(message));
       };
+      script.onload = () =>
+        window?.Razorpay ? resolve(window.Razorpay) : failed('Razorpay did not load');
+      script.onerror = () => failed('Razorpay could not be loaded');
       this.document.head.appendChild(script);
     });
     return this.loading;

@@ -22,16 +22,21 @@ public final class RazorpayFixtures {
   }
 
   public static byte[] refunded(String orderId, String paymentId, String refundId) {
+    return refunded(orderId, paymentId, refundId, 49_900);
+  }
+
+  /** A refund of {@code amount} paise: less than the payment is a PARTIAL refund. */
+  public static byte[] refunded(String orderId, String paymentId, String refundId, long amount) {
     return """
         {"entity": "event", "event": "refund.processed", "contains": ["refund", "payment"],
          "payload": {
-           "refund": {"entity": {"id": "%s", "entity": "refund", "amount": 49900, "currency": "INR",
+           "refund": {"entity": {"id": "%s", "entity": "refund", "amount": %d, "currency": "INR",
                                  "payment_id": "%s", "status": "processed"}},
            "payment": {"entity": {"id": "%s", "entity": "payment", "order_id": "%s",
                                   "amount": 49900, "currency": "INR", "status": "refunded"}}},
          "created_at": 1760436000}
         """
-        .formatted(refundId, paymentId, paymentId, orderId)
+        .formatted(refundId, amount, paymentId, paymentId, orderId)
         .getBytes(StandardCharsets.UTF_8);
   }
 

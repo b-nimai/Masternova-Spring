@@ -1,6 +1,7 @@
 package com.masternova.api.commerce.web;
 
 import com.masternova.api.commerce.application.WebhookService;
+import com.masternova.api.commerce.web.dto.WebhookResponse;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -20,8 +21,6 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 class WebhookController {
-
-  record WebhookResponse(WebhookService.Result outcome) {}
 
   private final WebhookService webhooks;
 

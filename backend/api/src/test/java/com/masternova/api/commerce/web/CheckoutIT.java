@@ -48,6 +48,9 @@ class CheckoutIT {
   static class SwitchableProvider {
     static final AtomicBoolean DOWN = new AtomicBoolean();
 
+    /** Fails with something that is NOT our provider exception (a bug, a parse error). */
+    static final AtomicBoolean BROKEN = new AtomicBoolean();
+
     @Bean
     @Primary
     PaymentGateway switchable(FakePaymentGateway real) {
@@ -63,6 +66,9 @@ class CheckoutIT {
         public String createOrder(UUID orderId, Money amount) {
           if (DOWN.get()) {
             throw new PaymentProviderException("connect timed out", true, null);
+          }
+          if (BROKEN.get()) {
+            throw new IllegalStateException("unexpected");
           }
           return real.createOrder(orderId, amount);
         }
@@ -95,6 +101,7 @@ class CheckoutIT {
   void setUp() {
     jdbc = JdbcClient.create(dataSource);
     SwitchableProvider.DOWN.set(false);
+    SwitchableProvider.BROKEN.set(false);
     TestInstructors people = new TestInstructors(dataSource);
     UUID instructor = people.create("Asha Rao").id();
     learner = people.create("Lena Learner").id();
@@ -289,6 +296,20 @@ class CheckoutIT {
     SwitchableProvider.DOWN.set(false); // ⭐ the 5xx released the key: the same key really retries
     assertThat(checkout("key-down", "{\"courseIds\": [\"%s\"]}".formatted(java)))
         .hasStatus(HttpStatus.CREATED);
+  }
+
+  @Test
+  void anyOtherFailureAfterTheOrderExistsAlsoEndsTheAttempt() {
+    // review fix: only the provider's own exception marked the order FAILED; anything else left a
+    // PENDING order with nothing to pay against, forever
+    SwitchableProvider.BROKEN.set(true);
+
+    assertThat(checkout("key-broken", "{\"courseIds\": [\"%s\"]}".formatted(java)))
+        .hasStatus(HttpStatus.INTERNAL_SERVER_ERROR);
+    assertThat(mvc.get().uri("/api/v1/orders").with(as(learner, Role.LEARNER)))
+        .bodyJson()
+        .extractingPath("$[0].status")
+        .isEqualTo("FAILED");
   }
 
   @Test

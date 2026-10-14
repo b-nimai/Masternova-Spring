@@ -95,6 +95,10 @@ class DiscountTest {
     assertThatThrownBy(() -> Coupons.coupon(both)).isInstanceOf(IllegalArgumentException.class);
     assertThatThrownBy(() -> Coupon.create("x", Coupons.percent(10), Coupons.INR, Coupons.NOW))
         .hasMessageContaining("3–40");
+    // review fix: V18's CHECK forbids a cap on an amount coupon — refuse it here (a 400), not as a
+    // 500
+    assertThatThrownBy(() -> Coupons.coupon(Coupons.capped(Coupons.amount(500), 100)))
+        .hasMessageContaining("only a percentage coupon has a cap");
     assertThat(Coupon.create(" save20 ", Coupons.percent(20), Coupons.INR, Coupons.NOW).code())
         .isEqualTo("SAVE20");
   }

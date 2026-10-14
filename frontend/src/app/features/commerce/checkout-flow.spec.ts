@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { MatDialog } from '@angular/material/dialog';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { CheckoutResponse, CommerceApi } from '../../core/api/commerce-api';
 import { AuthStore } from '../../core/auth/auth-store';
 import { CartStore } from '../../core/commerce/cart-store';
@@ -63,6 +63,18 @@ describe('CheckoutFlow', () => {
     expect(api.confirm).toHaveBeenCalledWith('o-1', { paymentId: 'pay_1', signature: 's' });
     expect(outcome.kind).toBe('done');
     expect(cart.courseIds()).toEqual(['c-spring']); // ⭐ only the bought course left the cart
+  });
+
+  it('never sends a buyer who paid back to the Checkout button, even if confirm fails', async () => {
+    // review fix: a failed confirm surfaced on the cart with the items still there → a 2nd charge
+    api.checkout.mockReturnValue(of(placed('RAZORPAY')));
+    razorpay.pay.mockResolvedValue({ kind: 'paid', proof: { paymentId: 'pay_1', signature: 's' } });
+    api.confirm.mockReturnValue(throwError(() => new Error('network down')));
+
+    const outcome = await flow.checkout(null);
+
+    expect(outcome).toEqual({ kind: 'done', order: placed('RAZORPAY').order }); // → the result page polls
+    expect(cart.courseIds()).toEqual(['c-spring']);
   });
 
   it('uses a new Idempotency-Key per attempt', async () => {

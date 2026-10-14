@@ -50,7 +50,8 @@ class RazorpayWebhooksTest {
     WebhookEvent e = parse(RazorpayFixtures.refunded("order_A", "pay_B", "rfnd_C"));
 
     assertThat(e.providerOrderId()).contains("order_A");
-    assertThat(e.event()).contains(new PaymentEvent.Refunded("rfnd_C"));
+    assertThat(e.event())
+        .contains(new PaymentEvent.Refunded("rfnd_C", Optional.of(Money.of(49_900, "INR"))));
   }
 
   @Test

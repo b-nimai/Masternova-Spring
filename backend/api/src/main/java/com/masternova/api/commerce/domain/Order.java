@@ -161,6 +161,13 @@ public class Order {
       return new Ignore(
           status, "captured " + amount.get().display() + ", expected " + total().display(), true);
     }
+    if (event instanceof PaymentEvent.Refunded(var refundId, var amount)
+        && amount.isPresent()
+        && !amount.get().equals(total())) {
+      // ⭐ a partial refund (made in the provider's dashboard): never revoke the whole order on it
+      return new Ignore(
+          status, "partial refund " + amount.get().display() + " of " + total().display(), true);
+    }
     Transition transition = state().on(event);
     if (transition instanceof Move(var from, var to, var effect)) {
       if (!from.canMoveTo(to)) { // the table guards the states: a drifted state fails loudly
