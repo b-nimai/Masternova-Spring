@@ -33,6 +33,19 @@
         <p class="draft" data-testid="draft-banner">{{ c.status }} — only you can see this page.</p>
       }
       <p class="price" data-testid="price">{{ c.priceMinor | money: c.currency }}</p>
+      @if (lockedMessage(); as message) {
+        <p class="locked" data-testid="locked-banner">
+          <mat-icon inline>lock</mat-icon> {{ message }}
+        </p>
+      }
+      @if (access.value(); as a) {
+        <app-access-cta
+          [access]="a.course"
+          [slug]="c.slug"
+          [firstLectureId]="firstLectureId()"
+          (retry)="access.reload()"
+        />
+      }
     </header>
 
     <section class="description">
@@ -44,7 +57,7 @@
       <h2>Course content</h2>
       <!-- ⭐ deferred: a separate JS chunk, fetched when this block scrolls into view -->
       @defer (on viewport) {
-        <app-curriculum [sections]="c.sections" />
+        <app-curriculum [sections]="c.sections" [slug]="c.slug" [access]="lectureAccess()" />
       } @placeholder {
         <p data-testid="curriculum-placeholder">
           {{ c.sections.length }} sections · {{ c.lectureCount }} lectures

@@ -1,0 +1,32 @@
+<article class="lecture-player">
+  <a mat-button [routerLink]="['/courses', slug()]"><mat-icon>arrow_back</mat-icon> Course</a>
+
+  @let s = state();
+  @switch (s.kind) {
+    @case ('loading') {
+      <mat-spinner diameter="36" data-testid="loading" />
+    }
+    @case ('playing') {
+      <app-hls-player
+        data-testid="player"
+        [src]="s.url"
+        [startAt]="s.startAt"
+        (failed)="onFailed($event)"
+      />
+    }
+    @case ('denied') {
+      <section class="notice" data-testid="denied">
+        <mat-icon>lock</mat-icon>
+        <p>{{ denialMessages[s.reason] }}</p>
+        <a mat-flat-button [routerLink]="['/courses', slug()]">See the course</a>
+      </section>
+    }
+    @case ('failed') {
+      <section class="notice" data-testid="failed">
+        <mat-icon>error_outline</mat-icon>
+        <p>{{ s.message }}</p>
+        <button mat-button type="button" (click)="retry()">Try again</button>
+      </section>
+    }
+  }
+</article>

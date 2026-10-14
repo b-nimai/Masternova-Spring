@@ -9,9 +9,25 @@
       </mat-expansion-panel-header>
       <ul class="lectures">
         @for (lecture of section.lectures; track lecture.id) {
-          <li>
-            <mat-icon>{{ lecture.kind === 'VIDEO' ? 'play_circle' : 'article' }}</mat-icon>
-            <span class="title">{{ lecture.title }}</span>
+          @let a = access()?.get(lecture.id);
+          <li [attr.data-testid]="'lecture-' + lecture.id">
+            @if (a?.kind === 'ALLOWED' && lecture.kind === 'VIDEO') {
+              <a class="title open" [routerLink]="['/courses', slug(), 'lectures', lecture.id]">
+                <mat-icon>play_circle</mat-icon>
+                <span>{{ lecture.title }}</span>
+              </a>
+            } @else {
+              <span class="title" [class.locked]="a?.kind === 'DENIED'">
+                <mat-icon [attr.aria-label]="a?.kind === 'DENIED' ? 'Locked' : null">{{
+                  a?.kind === 'DENIED'
+                    ? 'lock'
+                    : lecture.kind === 'VIDEO'
+                      ? 'play_circle'
+                      : 'article'
+                }}</mat-icon>
+                <span>{{ lecture.title }}</span>
+              </span>
+            }
             @if (lecture.preview) {
               <span class="preview" data-testid="preview">Preview</span>
             }

@@ -5,9 +5,9 @@
 > and explainably (every denial carries a stable reason, and an admin can see every policy's
 > vote). Then hand the player a short playback token bound to that user, that lecture and that IP.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** building (8.1 design, 8.2 policy chain, 8.3 cached repository, 8.4 facade + `@PreAuthorize`, 8.5 playback token)
-**Last updated:** 2026-10-14 · **Angular:** `frontend/src/app/features/learn` (player),
-`features/catalog/curriculum` (locks)
+**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** building (8.1 design, 8.2 policy chain, 8.3 cached repository, 8.4 facade + `@PreAuthorize`, 8.5 playback token, 8.6 Angular)
+**Last updated:** 2026-10-14 · **Angular:** `frontend/src/app/features/learn` (player + guard),
+`features/catalog/access-cta` + `curriculum` (call to action, locks) · note: [`patterns/angular/07`](../../patterns/angular/07-access-ui-and-discriminated-unions.md)
 **Pairs with:** [ADR-0016](../adr/0016-cache-the-entitlement-row-not-the-decision.md) (cache) ·
 [ADR-0017](../adr/0017-short-ip-bound-playback-token.md) (playback token) ·
 [ADR-0013](../adr/0013-hls-for-playback.md) (HLS) · [`media.md`](media.md) §4 (the ticket this

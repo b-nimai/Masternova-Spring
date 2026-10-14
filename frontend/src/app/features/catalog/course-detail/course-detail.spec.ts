@@ -3,6 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { CourseDetailResponse } from '../../../core/api/catalog-api';
+import { CourseAccessResponse } from '../../../core/api/entitlement-api';
 import { K8S } from '../../../../testing/catalog-fixtures';
 import { text } from '../../../../testing/dom';
 import { CourseDetail } from './course-detail';
@@ -22,6 +23,13 @@ const DETAIL: CourseDetailResponse = {
   ],
 };
 
+/** What the entitlement engine says about DETAIL for an anonymous visitor. */
+const LOCKED: CourseAccessResponse = {
+  courseId: '1',
+  course: { kind: 'DENIED', reason: 'NO_ENTITLEMENT' },
+  lectures: [{ lectureId: 'l1', access: { kind: 'ALLOWED', grant: 'PREVIEW_LECTURE' } }],
+};
+
 describe('CourseDetail', () => {
   let http: HttpTestingController;
 
@@ -37,6 +45,19 @@ describe('CourseDetail', () => {
 
   afterEach(() => http.verify());
 
+  /** The second, chained request: once the course is known, ask what this viewer may watch. */
+  async function loadAccess(
+    fixture: { whenStable(): Promise<unknown> },
+    courseId = '1',
+    access: CourseAccessResponse = LOCKED,
+  ) {
+    // the course's value lands, then the chained resource's params change: let both settle
+    await new Promise((resolve) => setTimeout(resolve));
+    TestBed.tick();
+    http.expectOne(`/api/v1/courses/${courseId}/access`).flush({ ...access, courseId });
+    await fixture.whenStable();
+  }
+
   async function open(slug: string) {
     const fixture = TestBed.createComponent(CourseDetail);
     fixture.componentRef.setInput('slug', slug); // what the router does with /courses/:slug
@@ -49,7 +70,7 @@ describe('CourseDetail', () => {
   it('loads the course named by the slug', async () => {
     const fixture = await open('k8s');
     http.expectOne('/api/v1/courses/k8s').flush(DETAIL);
-    await fixture.whenStable();
+    await loadAccess(fixture);
 
     expect(text(fixture, 'title')).toBe('Kubernetes Basics');
     expect(text(fixture, 'price')).toBe('₹1,499.00');
@@ -59,7 +80,7 @@ describe('CourseDetail', () => {
   it('defers the curriculum until its block is triggered', async () => {
     const fixture = await open('k8s');
     http.expectOne('/api/v1/courses/k8s').flush(DETAIL);
-    await fixture.whenStable();
+    await loadAccess(fixture);
 
     expect(text(fixture, 'curriculum-placeholder')).toBe('1 sections · 12 lectures');
     const [curriculum] = await fixture.getDeferBlocks();
@@ -82,7 +103,7 @@ describe('CourseDetail', () => {
   it('marks a draft its owner is looking at', async () => {
     const fixture = await open('mine');
     http.expectOne('/api/v1/courses/mine').flush({ ...DETAIL, status: 'DRAFT' });
-    await fixture.whenStable();
+    await loadAccess(fixture);
 
     expect(text(fixture, 'draft-banner')).toContain('only you can see this page');
   });
@@ -90,13 +111,49 @@ describe('CourseDetail', () => {
   it('loads the new course when the slug changes', async () => {
     const fixture = await open('k8s');
     http.expectOne('/api/v1/courses/k8s').flush(DETAIL);
-    await fixture.whenStable();
+    await loadAccess(fixture);
 
     fixture.componentRef.setInput('slug', 'docker');
     TestBed.tick();
 
-    http.expectOne('/api/v1/courses/docker').flush({ ...DETAIL, title: 'Docker' });
-    await fixture.whenStable();
+    http.expectOne('/api/v1/courses/docker').flush({ ...DETAIL, id: '2', title: 'Docker' });
+    await loadAccess(fixture, '2');
     expect(text(fixture, 'title')).toBe('Docker');
+  });
+
+  it('shows the call to action and which lectures are open', async () => {
+    const fixture = await open('k8s');
+    http.expectOne('/api/v1/courses/k8s').flush(DETAIL);
+    await loadAccess(fixture);
+    const [curriculum] = await fixture.getDeferBlocks();
+    await curriculum.render(DeferBlockState.Complete);
+
+    expect(text(fixture, 'cta-DENIED')).toContain('Sign in to buy');
+    const preview = (fixture.nativeElement as HTMLElement).querySelector(
+      '[data-testid="lecture-l1"] a',
+    );
+    expect(preview?.getAttribute('href')).toBe('/courses/k8s/lectures/l1'); // a preview opens
+  });
+
+  it('explains why the player sent the viewer back', async () => {
+    const fixture = TestBed.createComponent(CourseDetail);
+    fixture.componentRef.setInput('slug', 'k8s');
+    fixture.componentRef.setInput('locked', 'ENTITLEMENT_EXPIRED');
+    TestBed.tick();
+    http.expectOne('/api/v1/courses/k8s').flush(DETAIL);
+    await loadAccess(fixture);
+
+    expect(text(fixture, 'locked-banner')).toContain('has ended');
+  });
+
+  it('ignores a locked reason it does not know (the url is editable)', async () => {
+    const fixture = TestBed.createComponent(CourseDetail);
+    fixture.componentRef.setInput('slug', 'k8s');
+    fixture.componentRef.setInput('locked', 'toString');
+    TestBed.tick();
+    http.expectOne('/api/v1/courses/k8s').flush(DETAIL);
+    await loadAccess(fixture);
+
+    expect(text(fixture, 'locked-banner')).toBe('');
   });
 });

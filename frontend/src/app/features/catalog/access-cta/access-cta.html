@@ -1,0 +1,48 @@
+@let a = access();
+<div class="cta" [attr.data-testid]="'cta-' + a.kind">
+  @switch (a.kind) {
+    @case ('ALLOWED') {
+      @if (firstLectureId(); as lectureId) {
+        <a mat-flat-button [routerLink]="['/courses', slug(), 'lectures', lectureId]">
+          <mat-icon>play_arrow</mat-icon>
+          {{
+            a.grant === 'OWNER' || a.grant === 'ADMIN' ? 'Watch as instructor' : 'Start learning'
+          }}
+        </a>
+      }
+      @if (a.grant === 'FREE_COURSE') {
+        <p class="hint">Free for everyone.</p>
+      }
+    }
+    @case ('DENIED') {
+      @switch (a.reason) {
+        @case ('NO_ENTITLEMENT') {
+          @if (auth.isAuthenticated()) {
+            <!-- checkout arrives with commerce (Phase 9) -->
+            <button mat-flat-button type="button" disabled>Buy now</button>
+            <p class="hint">Checkout is coming soon. Preview lectures are open to everyone.</p>
+          } @else {
+            <a
+              mat-flat-button
+              routerLink="/login"
+              [queryParams]="{ returnUrl: '/courses/' + slug() }"
+              >Sign in to buy</a
+            >
+          }
+        }
+        @case ('ENTITLEMENT_EXPIRED') {
+          <button mat-flat-button type="button" disabled>Renew access</button>
+          <p class="hint">{{ messages[a.reason] }}</p>
+        }
+        @case ('ACCESS_CHECK_FAILED') {
+          <p class="hint">{{ messages[a.reason] }}</p>
+          <button mat-button type="button" (click)="retry.emit()">Try again</button>
+        }
+        @default {
+          <!-- ENTITLEMENT_REVOKED, COURSE_NOT_PUBLISHED: nothing to click, just the truth -->
+          <p class="hint" data-testid="cta-message">{{ messages[a.reason] }}</p>
+        }
+      }
+    }
+  }
+</div>

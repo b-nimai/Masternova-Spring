@@ -33,6 +33,13 @@ h1 {
   color: var(--mat-sys-on-tertiary-container);
 }
 
+.locked {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
 .curriculum {
   min-height: 120px; // gives the deferred block a box to scroll into view
 }
