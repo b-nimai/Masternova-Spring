@@ -20,6 +20,10 @@ spring:
       port: ${REDIS_PORT:6380}
       repositories:
         enabled: false # Redis is a cache and a pub/sub bus here, never a repository store
+      # ⭐ a cache must never be slower than what it caches: a hung Redis fails fast and the
+      #    entitlement lookup falls through to Postgres (ADR-0016). Lettuce's default is 60 s.
+      timeout: 500ms
+      connect-timeout: 1s
   jpa:
     open-in-view: false # no lazy loading from controllers — fetch what you need in the service
     hibernate:
@@ -63,6 +67,12 @@ masternova: # → MasternovaProperties (typed + validated at startup)
     # signs playback tickets (≥ 32 bytes). Dev-only default; the stack mounts a file secret.
     playback-secret: ${PLAYBACK_TOKEN_SECRET:dev-only-playback-secret-0123456789abcdef}
     playback-ttl: 6h
+  entitlement: # → EntitlementProperties (ADR-0016, ADR-0017)
+    cache-ttl: 5m
+    # signs learner playback tokens (≥ 32 bytes). Dev-only default; the stack mounts a file secret.
+    playback-secret: ${ENTITLEMENT_PLAYBACK_SECRET:dev-only-entitlement-playback-0123456789abcdef}
+    token-ttl: 5m
+    segment-url-ttl: 30m
   outbox: # → messaging's OutboxProperties
     # ⭐ The api only WRITES events; the worker relays them (ADR-0008). A relay here would mark the
     #    worker's events as "no handler" and swallow them. (false is also the library default.)
@@ -71,6 +81,10 @@ masternova: # → MasternovaProperties (typed + validated at startup)
 server:
   port: ${API_PORT:8080}
   shutdown: graceful
+  # ⭐ request.getRemoteAddr() is the client, not nginx: Tomcat's RemoteIpValve reads
+  #    X-Forwarded-For — only from internal proxies (10/8, 172.16/12, 192.168/16, 127/8), so a
+  #    client can't spoof it. Playback tokens are bound to this address (ADR-0017).
+  forward-headers-strategy: native
 
 management:
   endpoints:

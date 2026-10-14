@@ -161,6 +161,8 @@ services:
         target: NOTIFICATION_TOKEN_SECRET
       - source: playback_token_secret # signs the HLS playback tickets (api only)
         target: PLAYBACK_TOKEN_SECRET
+      - source: entitlement_playback_secret # signs learners' IP-bound playback tokens (ADR-0017)
+        target: ENTITLEMENT_PLAYBACK_SECRET
     ports:
       - '8080:8080'
     depends_on:
@@ -375,3 +377,5 @@ secrets:
     file: ./secrets/notification_token_secret # shared by api + worker (same HMAC key)
   playback_token_secret:
     file: ./secrets/playback_token_secret # the api's playback tickets
+  entitlement_playback_secret:
+    file: ./secrets/entitlement_playback_secret # learners' playback tokens (api only)

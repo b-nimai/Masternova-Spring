@@ -5,7 +5,7 @@
 > and explainably (every denial carries a stable reason, and an admin can see every policy's
 > vote). Then hand the player a short playback token bound to that user, that lecture and that IP.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** building (8.1 design, 8.2 policy chain)
+**Module:** `backend/api/src/main/java/com/masternova/api/entitlement` · **Status:** building (8.1 design, 8.2 policy chain, 8.3 cached repository)
 **Last updated:** 2026-10-14 · **Angular:** `frontend/src/app/features/learn` (player),
 `features/catalog/curriculum` (locks)
 **Pairs with:** [ADR-0016](../adr/0016-cache-the-entitlement-row-not-the-decision.md) (cache) ·
@@ -263,7 +263,7 @@ Specification class. Two callers, one line, no composition: a class would be cer
 
 ## 9. Data & indexes
 
-`V16__entitlement.sql`:
+`V17__entitlement.sql`:
 
 - `entitlement(user_id → app_user, course_id → course, source, granted_at, expires_at?,
   revoked_at?, revoke_reason?)`, **primary key `(user_id, course_id)`**: the one hot lookup is a

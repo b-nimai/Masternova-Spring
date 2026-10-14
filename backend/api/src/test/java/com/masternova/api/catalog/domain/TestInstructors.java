@@ -36,6 +36,7 @@ public final class TestInstructors {
 
   /** For tests that commit (@SpringBootTest): courses first, because of the foreign key. */
   public void deleteAll() {
+    jdbc.sql("DELETE FROM entitlement").update(); // Phase 8: rows reference courses and users
     jdbc.sql("DELETE FROM course").update();
     // media assets (Phase 7) reference their owners: remove them first, jobs and sessions with them
     String mine =
