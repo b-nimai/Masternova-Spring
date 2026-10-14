@@ -1,6 +1,6 @@
 # ADR-0013 — HLS (fMP4 segments, H.264/AAC ladder) for video playback
 
-**Status:** accepted · **Date:** 2026-10-13 · **Deciders:** Nimai
+**Status:** accepted; learner playback amended by [ADR-0017](0017-short-ip-bound-playback-token.md) · **Date:** 2026-10-13 · **Deciders:** Nimai
 **Context links:** [`docs/lld/video-pipeline.md`](../lld/video-pipeline.md) · [`docs/lld/media.md`](../lld/media.md) §5 (playback)
 
 ## Context

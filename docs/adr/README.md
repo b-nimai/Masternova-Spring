@@ -26,3 +26,5 @@ re-derived rather than copied.
 | [0013](0013-hls-for-playback.md) | HLS with fMP4 segments, aligned-GOP H.264/AAC ladder, presigned segments behind a playback ticket | accepted |
 | [0014](0014-upload-progress-from-the-provider.md) | Upload progress lives in the provider: resume and complete ask `ListParts`; the client never sends ETags | accepted |
 | [0015](0015-tracing-with-micrometer-observation-and-otlp.md) | Tracing through Micrometer Observation + the OTel SDK (not the Java agent); the outbox row carries the W3C trace context in `headers` | accepted |
+| [0016](0016-cache-the-entitlement-row-not-the-decision.md) | Cache the entitlement row, not the decision: a Decorator over the repository, evicted after commit, negatives cached, failing open to Postgres | accepted |
+| [0017](0017-short-ip-bound-playback-token.md) | Learner playback: a 5-minute token bound to user, lecture and IP (signed, not carried); the player re-tickets on a 403 | accepted |
