@@ -1,5 +1,6 @@
 package com.masternova.api.commerce.web;
 
+import com.masternova.api.commerce.domain.PaymentGateway.InvalidSignatureException;
 import com.masternova.api.commerce.domain.PaymentProviderException;
 import com.masternova.api.platform.ProblemTypes;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,16 +16,20 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /**
- * The provider failing is not our 500 (LLD §8): temporary → 503 {@code
+ * Commerce's two failures that aren't {@code DomainException}s.
+ *
+ * <p>A webhook whose signature doesn't verify: 400 {@code WEBHOOK_SIGNATURE_INVALID}.
+ *
+ * <p>The provider failing is not our 500 (LLD §8): temporary → 503 {@code
  * PAYMENT_PROVIDER_UNAVAILABLE} with Retry-After (and the Idempotency-Key is released, so a retry
  * really retries); permanent → 502 {@code PAYMENT_PROVIDER_ERROR}. Ordered before the platform's
  * catch-all, like media's storage handler.
  */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
-class PaymentProviderExceptionHandler {
+class CommerceExceptionHandler {
 
-  private static final Logger log = LoggerFactory.getLogger(PaymentProviderExceptionHandler.class);
+  private static final Logger log = LoggerFactory.getLogger(CommerceExceptionHandler.class);
 
   @ExceptionHandler(PaymentProviderException.class)
   ResponseEntity<ProblemDetail> providerFailed(
@@ -47,6 +52,18 @@ class PaymentProviderExceptionHandler {
                 HttpStatus.BAD_GATEWAY,
                 "PAYMENT_PROVIDER_ERROR",
                 "The payment provider refused this request. Nothing was charged.",
+                request));
+  }
+
+  @ExceptionHandler(InvalidSignatureException.class)
+  ResponseEntity<ProblemDetail> forged(InvalidSignatureException e, HttpServletRequest request) {
+    log.warn("rejected a webhook: {}", e.getMessage());
+    return ResponseEntity.badRequest()
+        .body(
+            ProblemTypes.problem(
+                HttpStatus.BAD_REQUEST,
+                "WEBHOOK_SIGNATURE_INVALID",
+                "The signature does not match the body.",
                 request));
   }
 }

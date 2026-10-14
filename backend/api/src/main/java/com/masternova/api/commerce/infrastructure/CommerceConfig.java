@@ -3,16 +3,20 @@ package com.masternova.api.commerce.infrastructure;
 import com.masternova.api.commerce.application.CommerceProperties;
 import com.masternova.api.commerce.domain.PaymentGateway;
 import com.masternova.api.platform.MasternovaProperties;
+import com.masternova.api.platform.PublicEndpoints;
+import com.masternova.api.platform.PublicEndpoints.Endpoint;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.json.JsonMapper;
@@ -21,6 +25,12 @@ import tools.jackson.databind.json.JsonMapper;
 class CommerceConfig {
 
   private static final Logger log = LoggerFactory.getLogger(CommerceConfig.class);
+
+  /** The provider calls the webhook with no token: its signature over the raw body is the auth. */
+  @Bean
+  PublicEndpoints commercePublicEndpoints() {
+    return () -> List.of(new Endpoint(HttpMethod.POST, "/api/v1/webhooks/payments"));
+  }
 
   /**
    * ⭐ The Strategy is picked HERE, once, by configuration: exactly one of these two beans exists,
