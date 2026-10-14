@@ -124,7 +124,7 @@ Phases are listed **in the order you do them**.
 | 10 | [7 — Media + transcode pipeline](#phase-7--media--transcode-pipeline) | 10 | 10 | 30 h | ~34 h | ✅ |
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 5 | 12 h | ~12 h | ✅ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 7 | 18 h | ~18 h | ✅ |
-| 13 | [9 — Commerce](#phase-9--commerce) | 9 | 0 | 28 h | — | ☐ |
+| 13 | [9 — Commerce](#phase-9--commerce) | 9 | 1 | 28 h | ~1.5 h | 🔨 |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 0 | 14 h | — | ☐ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
@@ -388,7 +388,7 @@ reorders or races the redirect.
 
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
-| 9.1 | `docs/lld/order-state-machine.md` + ADRs (webhook dedupe; grant in the order transaction) | — | — | — | 2 h | ☐ | |
+| 9.1 | `docs/lld/order-state-machine.md` + ADRs (webhook dedupe; grant in the order transaction) | — | — | — | 2 h | ✅ | 2026-10-14 |
 | 9.2 | Cart + pricing: coupon types and eligibility rules | `BigDecimal` pitfalls vs minor units | — | **Strategy** (coupon types) + **Specification** (eligibility) | 3 h | ☐ | |
 | 9.3 | Order state machine: forward-only transitions, out-of-order safe | sealed states, `EnumSet` transition tables | — | **State** | 3 h | ☐ | |
 | 9.4 | `PaymentGateway` + Razorpay adapter (test mode), signature verification | `RestClient`, HMAC | — | **Strategy** + **Adapter** | 3.5 h | ☐ | |
