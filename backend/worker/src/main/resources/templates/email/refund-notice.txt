@@ -1,0 +1,9 @@
+Hi [(${displayName})],
+
+We've refunded [(${amount})] for:
+[# th:each="title : ${titles}"]- [(${title})]
+[/]
+It can take 5–7 working days to reach your account.
+[# th:if="${accessRevoked}"]These courses are no longer available on your account.
+[/]
+Your orders: [(${ordersUrl})]

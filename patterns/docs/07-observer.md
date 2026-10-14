@@ -4,7 +4,8 @@
 > **without the subject knowing who they are**. Adding a reaction means adding an observer, never
 > editing the publisher.
 
-**Type:** Behavioral · **Status:** ✅ in real code · **Last updated:** 2026-10-02
+**Type:** Behavioral · **Status:** ✅ in real code (Phases 2, 4, 9.7) · **Last updated:** 2026-10-14
+**Real code (9.7):** worker `SendPurchaseReceipt`, `SendRefundNotice` (Observers of commerce's events); entitlement's `EntitlementGranted` / `EntitlementRevoked` (§3b)
 **Real code:** [`TransactionalEventPublisher`](../../backend/api/src/main/java/com/masternova/api/platform/events/TransactionalEventPublisher.java) (`@DesignPattern(OBSERVER, "Subject")`), behind the module API [`EventPublisher`](../../backend/api/src/main/java/com/masternova/api/platform/EventPublisher.java); events implement [`DomainEvent`](../../backend/kernel/src/main/java/com/masternova/kernel/event/DomainEvent.java)
 **Lab:** [`lab/.../patterns/observer/EventBus`](../lab/src/main/java/com/masternova/patterns/observer/EventBus.java) · **Design:** [`docs/lld/platform-kernel.md`](../../docs/lld/platform-kernel.md)
 
@@ -96,6 +97,31 @@ public PublishResult publish(Object event) {
   }
 }
 ```
+
+### 3b. A refund and who reacts to it (Phase 9.7)
+
+A refund has consequences outside commerce: the learner gets an email now, and Phase 10 will drop
+the enrollment. Commerce must not know about either. Two subjects, three observers:
+
+| Subject (publishes, in its transaction) | Event | Observers |
+|---|---|---|
+| commerce, `PaymentEvents` (a move to `REFUNDED`) | `OrderRefunded` (`accessRevoked`: false when the refund overtook the capture) | worker `SendRefundNotice` → the refund email |
+| commerce, `PaymentEvents` (a move to `PAID`) | `OrderPaid` | worker `SendPurchaseReceipt` → the receipt; Phase 10's enrollment |
+| entitlement, `EntitlementService.revoke` / `grant`, **only when the row changed** | `EntitlementRevoked` / `EntitlementGranted` | Phase 10 (none yet: the relay marks them done) |
+
+**What is NOT an observer, on purpose:** revoking the access itself. Commerce calls
+`EntitlementApi.revoke` *inside* the refund's transaction (ADR-0019). Making entitlement observe
+`OrderRefunded` would (a) make access eventual, so a refunded learner keeps watching until the
+relay runs, and (b) make entitlement depend on commerce, which already depends on entitlement: a
+module cycle that `ModularityTests` rejects. The rule of thumb: **what must be true when the
+transaction commits is a call; what may follow later is an event.**
+
+"Only when the row changed" matters for the 50× webhook proof (9.8): fifty concurrent grants
+produce one `EntitlementGranted`, because only one upsert changes the row.
+
+Proof: `RefundIT` (one `OrderRefunded` + one `EntitlementRevoked` per course, a double-clicked
+refund and the provider's later webhook add nothing), `CommerceEmailsTest` (the worker's views read
+the api's JSON field for field, and render).
 
 ## 4. Java features that make it nicer
 

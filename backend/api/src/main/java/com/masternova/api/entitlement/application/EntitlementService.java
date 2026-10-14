@@ -5,6 +5,8 @@ import com.masternova.api.catalog.CourseFacts;
 import com.masternova.api.catalog.CourseFacts.LectureFacts;
 import com.masternova.api.entitlement.AccessDecision;
 import com.masternova.api.entitlement.EntitlementApi;
+import com.masternova.api.entitlement.EntitlementGranted;
+import com.masternova.api.entitlement.EntitlementRevoked;
 import com.masternova.api.entitlement.EntitlementSource;
 import com.masternova.api.entitlement.application.CourseAccess.LectureAccess;
 import com.masternova.api.entitlement.domain.AccessContext;
@@ -16,6 +18,7 @@ import com.masternova.api.entitlement.domain.Viewer;
 import com.masternova.api.identity.CurrentUser;
 import com.masternova.api.identity.IdentityApi;
 import com.masternova.api.identity.Role;
+import com.masternova.api.platform.EventPublisher;
 import com.masternova.api.platform.NotFoundException;
 import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
@@ -52,6 +55,7 @@ public class EntitlementService implements EntitlementApi {
   private final IdentityApi identity;
   private final EntitlementRepository entitlements;
   private final PolicyChain chain;
+  private final EventPublisher events;
   private final Clock clock;
 
   EntitlementService(
@@ -59,11 +63,13 @@ public class EntitlementService implements EntitlementApi {
       IdentityApi identity,
       EntitlementRepository entitlements,
       PolicyChain chain,
+      EventPublisher events,
       Clock clock) {
     this.catalog = catalog;
     this.identity = identity;
     this.entitlements = entitlements;
     this.chain = chain;
+    this.events = events;
     this.clock = clock;
   }
 
@@ -117,16 +123,27 @@ public class EntitlementService implements EntitlementApi {
   public boolean grant(
       UUID userId, UUID courseId, EntitlementSource source, Optional<Instant> expiresAt) {
     requireUserAndCourse(userId, courseId);
-    return entitlements.grant(
-        Entitlement.grant(userId, courseId, source, clock.instant(), expiresAt));
+    boolean changed =
+        entitlements.grant(Entitlement.grant(userId, courseId, source, clock.instant(), expiresAt));
+    if (changed) { // ⭐ only a real change is news: 50 copies of one grant → one event
+      events.publish(
+          new EntitlementGranted(
+              userId.toString(), courseId.toString(), source, expiresAt.orElse(null)));
+    }
+    return changed;
   }
 
   @Override
   @Transactional
   public boolean revoke(UUID userId, UUID courseId, String reason) {
     requireUserAndCourse(userId, courseId);
-    return entitlements.revoke(
-        userId, courseId, new Entitlement.Revocation(clock.instant(), reason));
+    Instant now = clock.instant();
+    boolean changed =
+        entitlements.revoke(userId, courseId, new Entitlement.Revocation(now, reason));
+    if (changed) {
+      events.publish(new EntitlementRevoked(userId.toString(), courseId.toString(), reason, now));
+    }
+    return changed;
   }
 
   private Evaluation evaluate(Viewer viewer, UUID lectureId) {

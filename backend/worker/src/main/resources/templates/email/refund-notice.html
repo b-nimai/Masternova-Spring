@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" th:replace="~{email/layout.html :: layout(~{::main})}">
+  <body>
+    <main>
+      <p>Hi <strong th:text="${displayName}">Asha</strong>,</p>
+      <p>We've refunded <strong th:text="${amount}">INR 499.00</strong> for:</p>
+      <ul>
+        <li th:each="title : ${titles}" th:text="${title}">Java from zero</li>
+      </ul>
+      <p>It can take 5–7 working days to reach your account.</p>
+      <p th:if="${accessRevoked}">These courses are no longer available on your account.</p>
+      <p style="margin: 28px 0">
+        <a th:href="${ordersUrl}" data-role="cta"
+           style="display: inline-block; background: #3f51b5; color: #ffffff; padding: 12px 22px; border-radius: 6px; text-decoration: none; font-weight: bold">See your orders</a>
+      </p>
+    </main>
+  </body>
+</html>

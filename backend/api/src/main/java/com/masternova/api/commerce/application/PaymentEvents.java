@@ -1,6 +1,7 @@
 package com.masternova.api.commerce.application;
 
 import com.masternova.api.commerce.OrderPaid;
+import com.masternova.api.commerce.OrderRefunded;
 import com.masternova.api.commerce.domain.CouponRepository;
 import com.masternova.api.commerce.domain.Order;
 import com.masternova.api.commerce.domain.OrderRepository;
@@ -38,6 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentEvents {
 
   private static final Logger log = LoggerFactory.getLogger(PaymentEvents.class);
+
+  /** Why the courses went: the revoke's reason, shown to support. */
+  static final String REFUND_REASON = "refund";
 
   private final OrderRepository orders;
   private final CouponRepository coupons;
@@ -96,7 +100,7 @@ public class PaymentEvents {
     Transition transition = order.apply(event, now);
     switch (transition) {
       case Move m -> {
-        perform(order, m.effect(), now);
+        perform(order, m, now);
         log.info("Order {} {} → {} on {}", order.id(), m.from(), m.to(), name(event));
       }
       case Ignore i when i.anomaly() ->
@@ -109,10 +113,11 @@ public class PaymentEvents {
     return new Applied(order, transition);
   }
 
-  private void perform(Order order, Effect effect, Instant now) {
-    switch (effect) {
+  private void perform(Order order, Move move, Instant now) {
+    // ⭐ every effect joins this transaction: the order is PAID iff every course is granted, and
+    //    REFUNDED-from-PAID iff every course is revoked (ADR-0019)
+    switch (move.effect()) {
       case GRANT -> {
-        // ⭐ joins this transaction: the order is PAID iff every course is granted (ADR-0019)
         order
             .courseIds()
             .forEach(
@@ -120,32 +125,57 @@ public class PaymentEvents {
                     entitlements.grant(
                         order.buyerId(), course, EntitlementSource.PURCHASE, Optional.empty()));
         order.couponCode().ifPresent(coupons::redeem);
-        events.publish(paid(order, now));
       }
-      case REVOKE -> {} // 9.7
+      case REVOKE ->
+          order
+              .courseIds()
+              .forEach(course -> entitlements.revoke(order.buyerId(), course, REFUND_REASON));
       case NONE -> {}
+    }
+    switch (move.to()) {
+      case PAID -> events.publish(paid(order, now));
+      case REFUNDED -> events.publish(refunded(order, move.effect() == Effect.REVOKE, now));
+      case PENDING, FAILED -> {}
     }
   }
 
+  private OrderRefunded refunded(Order order, boolean accessRevoked, Instant now) {
+    Contact buyer = buyer(order);
+    return new OrderRefunded(
+        order.id().toString(),
+        order.buyerId().toString(),
+        buyer.email(),
+        buyer.displayName(),
+        items(order),
+        order.total().amountMinor(),
+        order.total().currency().getCurrencyCode(),
+        accessRevoked,
+        now);
+  }
+
   private OrderPaid paid(Order order, Instant now) {
-    Contact buyer =
-        identity
-            .contact(order.buyerId())
-            .orElseThrow(() -> new IllegalStateException("buyer " + order.buyerId() + " is gone"));
+    Contact buyer = buyer(order);
     return new OrderPaid(
         order.id().toString(),
         order.buyerId().toString(),
         buyer.email(),
         buyer.displayName(),
-        order.lines().stream()
-            .map(
-                l ->
-                    new OrderPaid.Item(
-                        l.courseId().toString(), l.slug(), l.title(), l.priceMinor()))
-            .toList(),
+        items(order),
         order.total().amountMinor(),
         order.total().currency().getCurrencyCode(),
         now);
+  }
+
+  private Contact buyer(Order order) {
+    return identity
+        .contact(order.buyerId())
+        .orElseThrow(() -> new IllegalStateException("buyer " + order.buyerId() + " is gone"));
+  }
+
+  private static java.util.List<OrderPaid.Item> items(Order order) {
+    return order.lines().stream()
+        .map(l -> new OrderPaid.Item(l.courseId().toString(), l.slug(), l.title(), l.priceMinor()))
+        .toList();
   }
 
   private static String name(PaymentEvent event) {
