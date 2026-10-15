@@ -10,12 +10,12 @@
 //   DURATION=8m k6 run load/rollout-drill.js
 import http from 'k6/http';
 import { check, fail, sleep } from 'k6';
+import { BASE, insecureSkipTLSVerify } from './lib.js';
 
-const BASE = __ENV.BASE_URL || 'https://masternova.localhost:8443';
 const DURATION = __ENV.DURATION || '5m';
 
 export const options = {
-  insecureSkipTLSVerify: BASE.includes('.localhost'), // the cluster's local CA
+  insecureSkipTLSVerify,
   scenarios: {
     browse: { executor: 'constant-vus', vus: 10, duration: DURATION, exec: 'browse' },
     author: { executor: 'constant-vus', vus: 2, duration: DURATION, exec: 'author' },

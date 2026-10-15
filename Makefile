@@ -3,7 +3,7 @@
 MVN := cd backend && ./mvnw -B
 
 help: ## List targets
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
 up: ## Start infra (postgres, redis, mailpit, SeaweedFS S3 + its bucket/CORS init job)
 	docker compose up -d --wait postgres redis mailpit seaweedfs media-init
@@ -73,18 +73,19 @@ scan: images ## Scan images for HIGH/CRITICAL CVEs with Trivy (runs in Docker)
 	    --severity HIGH,CRITICAL --ignore-unfixed masternova-spring/$$img:local; \
 	done
 
+E2E_RUN = cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
 e2e: ## Browser e2e tests (Playwright) against the running stack: make stack && make e2e
 	$(MAKE) seed COURSES=60
-	cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
+	$(E2E_RUN)
 
 # ---- Kubernetes (Phase D4, patterns/devops/06): a local k3d cluster + its registry ----
 # Images are tagged with the commit (immutable, like CI's :sha-…). A dirty tree adds a hash of the
 # uncommitted changes: every edit gets its own tag, so the pods really roll (pullPolicy
-# IfNotPresent would keep a re-pushed "-dirty" tag's old image). `:=`: computed once per make run.
-TAG ?= $(shell h=$$(git rev-parse --short=7 HEAD); \
+# IfNotPresent would keep a re-pushed "-dirty" tag's old image). Computed on first use, then once:
+# `make help` or `make up` never runs the diffs.
+TAG ?= $(eval TAG := $(shell h=$$(git rev-parse --short=7 HEAD); \
   git diff --quiet HEAD -- backend frontend && echo sha-$$h \
-  || echo sha-$$h-dirty-$$(git diff HEAD -- backend frontend | shasum | cut -c1-7))
-TAG := $(TAG)
+  || echo sha-$$h-dirty-$$(git diff HEAD -- backend frontend | shasum | cut -c1-7)))$(TAG)
 REGISTRY := localhost:5050
 
 k8s-up: ## Create the local k3d cluster (3 nodes, registry on :5050, ingress on :8082/:8443)
@@ -119,8 +120,9 @@ k8s-images: images ## Build the three images and push them to the cluster's regi
 	  docker push -q $(REGISTRY)/masternova-spring-$$img:$(TAG); \
 	done
 
-K8S_SECRETS_LOG := $(shell mktemp -u)
+K8S_SECRETS_LOG = secrets/.k8s-apply.log
 k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files (never from git); restart pods if one changed
+	@rm -f $(K8S_SECRETS_LOG)
 	kubectl apply -f deploy/k3d/namespace.yaml
 	kubectl -n masternova create secret generic masternova-app \
 	  --from-file=JWT_ACCESS_SECRET=secrets/jwt_access_secret \
@@ -135,8 +137,10 @@ k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files
 	  --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG)
 	@# the read-only role KEDA queries with: CNPG creates it from the copy in masternova, KEDA
 	@# reads the copy in its own namespace (it may read no other namespace's Secrets)
+	@# (keda's namespace may not exist yet; masternova's comes from namespace.yaml — re-creating it
+	@# here would drop its Pod Security labels)
+	kubectl create namespace keda --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 	for ns in masternova keda; do \
-	  kubectl create namespace $$ns --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG) >/dev/null; \
 	  kubectl -n $$ns create secret generic masternova-db-reader --type=kubernetes.io/basic-auth \
 	    --from-literal=username=keda_reader --from-file=password=secrets/db_reader_password \
 	    --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG); \
@@ -167,27 +171,30 @@ k8s-gitops: ## Hand the cluster to Argo CD: the project + the root Application (
 k8s-bump: ## GitOps deploy: commit image tag TAG (must exist on GHCR) into the local values: make k8s-bump TAG=sha-abc1234
 	deploy/argocd/bump.sh $(TAG)
 
-HELM_SCHEMAS := -schema-location default \
+KUBECONFORM_CACHE = $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/kubeconform
+HELM_SCHEMAS = -cache $(KUBECONFORM_CACHE) -schema-location default \
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 helm-check: ## Lint both charts; validate what they render + the Argo CD manifests against the Kubernetes + CRD schemas (also in CI)
-	helm lint --strict deploy/helm/masternova -f deploy/helm/masternova/values-local.yaml
-	helm lint --strict deploy/helm/masternova-infra -f deploy/helm/masternova-infra/values-local.yaml
-	helm template masternova deploy/helm/masternova -n masternova -f deploy/helm/masternova/values-local.yaml \
-	  | kubeconform -strict -summary $(HELM_SCHEMAS)
-	helm template masternova-infra deploy/helm/masternova-infra -n masternova -f deploy/helm/masternova-infra/values-local.yaml \
-	  | kubeconform -strict -summary $(HELM_SCHEMAS)
+	@mkdir -p $(KUBECONFORM_CACHE)
+	set -e; for c in masternova masternova-infra; do \
+	  helm lint --strict deploy/helm/$$c -f deploy/helm/$$c/values-local.yaml; \
+	  helm template $$c deploy/helm/$$c -n masternova -f deploy/helm/$$c/values-local.yaml \
+	    | kubeconform -strict -summary $(HELM_SCHEMAS); \
+	done
 	kubeconform -strict -summary $(HELM_SCHEMAS) deploy/argocd/*.yaml deploy/argocd/apps/*.yaml deploy/k3d/namespace.yaml deploy/k3d/local-ca.yaml
 
-# the CURRENT primary (after a failover it's no longer instance 1), as the superuser over the local socket
-K8S_PSQL = kubectl -n masternova exec -i $$(kubectl -n masternova get pod -l cnpg.io/cluster=masternova-db,cnpg.io/instanceRole=primary -o name) -c postgres -- sh -c 'psql -q -d masternova
 k8s-seed: ## Seed dev catalog data into the cluster's postgres: make k8s-seed COURSES=60
-	$(K8S_PSQL) -v courses=$(or $(COURSES),200)' < docs/db/seed-catalog.sql
+	@# the CURRENT primary (after a failover it's no longer instance 1), as the superuser over the local socket
+	kubectl -n masternova exec -i \
+	  $$(kubectl -n masternova get pod -l cnpg.io/cluster=masternova-db,cnpg.io/instanceRole=primary -o name) \
+	  -c postgres -- psql -q -d masternova -v courses=$(or $(COURSES),200) < docs/db/seed-catalog.sql
 
+k8s-e2e: export BASE_URL = https://masternova.localhost:8443
+k8s-e2e: export MAILPIT_URL = https://mail.masternova.localhost:8443
+k8s-e2e: export E2E_LOCAL_CA = 1
 k8s-e2e: ## Browser e2e tests against the cluster (https://masternova.localhost:8443)
 	$(MAKE) k8s-seed COURSES=60
-	cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && \
-	  BASE_URL=https://masternova.localhost:8443 MAILPIT_URL=https://mail.masternova.localhost:8443 \
-	  E2E_LOCAL_CA=1 pnpm test
+	$(E2E_RUN)
 
 release: ## Tag and push a release from an up-to-date, clean main: make release VERSION=1.2.3
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "usage: make release VERSION=X.Y.Z"; exit 1; }

@@ -31,23 +31,14 @@ spec:
             - { name: PIPELINE_WORK_DIR, value: /var/lib/pipeline }
           {{- include "masternova.restrictedContainer" . | nindent 10 }}
           resources: {{- toYaml .Values.worker.resources | nindent 12 }}
-          startupProbe:
-            httpGet: { path: /actuator/health/liveness, port: http }
-            periodSeconds: 2
-            failureThreshold: 30
-          livenessProbe:
-            httpGet: { path: /actuator/health/liveness, port: http }
-            periodSeconds: 10
-          readinessProbe: # nothing routes here, but readiness still paces a rollout
-            httpGet: { path: /actuator/health/readiness, port: http }
-            periodSeconds: 10
+          # nothing routes here, but readiness still paces a rollout
+          {{- include "masternova.jvmProbes" (dict "readinessPeriod" 10) | nindent 10 }}
           volumeMounts:
             - { name: tmp, mountPath: /tmp }
             - { name: work, mountPath: /var/lib/pipeline }
             - { name: secrets, mountPath: /run/secrets, readOnly: true }
       volumes:
-        - name: tmp
-          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+        {{- include "masternova.tmpVolume" . | nindent 8 }}
         - name: work # a rung's segments until ffmpeg finishes: node disk, per pod
           emptyDir: { sizeLimit: {{ .Values.worker.workDirSize }} }
         {{- include "masternova.secretsVolume" (dict "root" . "redis" true "appKeys" (list "NOTIFICATION_TOKEN_SECRET")) | nindent 8 }}

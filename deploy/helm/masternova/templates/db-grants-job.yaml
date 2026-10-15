@@ -1,6 +1,7 @@
 {{- if .Values.worker.autoscaling.enabled }}
 {{- $c := dict "root" . "component" "db-grants" -}}
-{{- $pg := .Values.autoscaling.postgres -}}
+{{- $pg := .Values.worker.autoscaling.postgres -}}
+{{- $db := include "masternova.database" . | fromJson -}}
 # What the autoscaler may read: the two columns its two queries filter on, nothing else. Not
 # pg_read_all_data (every table: password hashes, refresh tokens, orders), and not a Flyway
 # migration (who may read the schema is deployment config: the role doesn't exist in compose or
@@ -22,13 +23,8 @@ spec:
       labels: {{- include "masternova.labels" $c | nindent 8 }}
     spec:
       restartPolicy: Never
-      enableServiceLinks: false
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 70 # postgres in the alpine image
-        runAsGroup: 70
-        seccompProfile: { type: RuntimeDefault }
+      # as `postgres` (70) of the alpine image
+      {{- include "masternova.podSpec" (dict "uid" 70 "gid" 70) | nindent 6 }}
       containers:
         - name: psql
           image: postgres:17-alpine
@@ -37,14 +33,15 @@ spec:
             - |
               set -e
               export PGPASSWORD="$(cat /run/secrets/DATABASE_PASSWORD)"
-              psql "host=$PGHOST dbname=$PGDATABASE user=$(cat /run/secrets/DATABASE_USER) sslmode={{ $pg.sslmode }}" \
+              psql "host=$PGHOST port=$PGPORT dbname=$PGDATABASE user=$(cat /run/secrets/DATABASE_USER) sslmode={{ $pg.sslmode }}" \
                 -v ON_ERROR_STOP=1 -v reader={{ $pg.user }} <<'SQL'
               GRANT SELECT (status, next_attempt_at) ON outbox_message TO :"reader";
               GRANT SELECT (status, next_attempt_at) ON pipeline_job TO :"reader";
               SQL
           env:
-            - { name: PGHOST, value: masternova-db-rw }
-            - { name: PGDATABASE, value: {{ $pg.database }} }
+            - { name: PGHOST, value: {{ $db.host }} } # config.DATABASE_URL's, the primary
+            - { name: PGPORT, value: {{ $db.port | quote }} }
+            - { name: PGDATABASE, value: {{ $db.name }} }
           {{- include "masternova.restrictedContainer" . | nindent 10 }}
           resources:
             requests: { cpu: 10m, memory: 16Mi }
@@ -52,5 +49,5 @@ spec:
           volumeMounts:
             - { name: secrets, mountPath: /run/secrets, readOnly: true }
       volumes:
-        {{- include "masternova.secretsVolume" (dict "root" . "redis" false "appKeys" (list)) | nindent 8 }}
+        {{- include "masternova.secretsVolume" (dict "root" .) | nindent 8 }}
 {{- end }}

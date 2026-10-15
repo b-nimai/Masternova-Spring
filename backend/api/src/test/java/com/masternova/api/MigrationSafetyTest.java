@@ -223,7 +223,8 @@ class MigrationSafetyTest {
    */
   private static Map<Integer, String> migrations() throws IOException, URISyntaxException {
     Map<Integer, String> byVersion = new TreeMap<>();
-    for (URL url : Collections.list(classLoader().getResources("db/migration"))) {
+    for (URL url :
+        Collections.list(MigrationSafetyTest.class.getClassLoader().getResources("db/migration"))) {
       URI uri = url.toURI();
       if ("jar".equals(uri.getScheme())) {
         try (FileSystem jar = FileSystems.newFileSystem(uri, Map.of())) {
@@ -244,9 +245,5 @@ class MigrationSafetyTest {
         byVersion.put(Integer.parseInt(name.group(1)), Files.readString(file));
       }
     }
-  }
-
-  private static ClassLoader classLoader() {
-    return MigrationSafetyTest.class.getClassLoader();
   }
 }

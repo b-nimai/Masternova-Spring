@@ -23,30 +23,16 @@ spec:
     metadata:
       labels: {{- include "masternova.labels" $c | nindent 8 }}
     spec:
-      enableServiceLinks: false
-      # one per node where possible: a drain or a node failure takes at most one replica
-      topologySpreadConstraints:
-        - maxSkew: 1
-          topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: ScheduleAnyway
-          labelSelector:
-            matchLabels: {{- include "masternova.selectorLabels" $c | nindent 14 }}
-      automountServiceAccountToken: false
-      securityContext:
-        seccompProfile: { type: RuntimeDefault }
+      {{- include "masternova.podSpec" dict | nindent 6 }}
+      {{- include "masternova.spreadAcrossNodes" $c | nindent 6 }}
       containers:
         - name: web
           image: {{ include "masternova.image" (dict "root" . "app" "web") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: [{ name: http, containerPort: 80 }]
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            # nginx's master starts as root to bind :80, then drops to `nginx`: compose's exact set.
-            # `baseline` allows it; the reason the namespace can't enforce `restricted`.
-            capabilities:
-              drop: [ALL]
-              add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
+          # nginx's master starts as root to bind :80, then drops to `nginx`: compose's exact set.
+          # `baseline` allows it; the reason the namespace can't enforce `restricted`.
+          {{- include "masternova.restrictedContainer" (dict "add" (list "CHOWN" "SETUID" "SETGID" "NET_BIND_SERVICE")) | nindent 10 }}
           resources: {{- toYaml .Values.web.resources | nindent 12 }}
           livenessProbe:
             httpGet: { path: /healthz, port: http }

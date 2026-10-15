@@ -1,6 +1,7 @@
 {{- if .Values.seaweedfs.enabled }}
 {{- $s := .Values.seaweedfs -}}
 {{- $c := dict "root" . "component" "seaweedfs" -}}
+{{- $creds := list (dict "name" "AWS_ACCESS_KEY_ID" "value" "masternova") (dict "name" "AWS_SECRET_ACCESS_KEY" "value" "masternova-dev-secret") -}}
 # S3 for media (ADR-0012) in one pod, data on a PVC. Dev-only credentials, as in compose.
 apiVersion: v1
 kind: Service
@@ -30,9 +31,7 @@ spec:
         - name: seaweedfs
           image: {{ $s.image }}
           args: [server, -s3, -dir=/data, -volume.max=0]
-          env:
-            - { name: AWS_ACCESS_KEY_ID, value: masternova }
-            - { name: AWS_SECRET_ACCESS_KEY, value: masternova-dev-secret }
+          env: {{- toYaml $creds | nindent 12 }}
           ports: [{ name: s3, containerPort: 8333 }]
           readinessProbe:
             httpGet: { path: /healthz, port: s3 }
@@ -67,8 +66,7 @@ spec:
         - name: aws
           image: amazon/aws-cli:2.31.0
           env:
-            - { name: AWS_ACCESS_KEY_ID, value: masternova }
-            - { name: AWS_SECRET_ACCESS_KEY, value: masternova-dev-secret }
+            {{- toYaml $creds | nindent 12 }}
             - { name: AWS_DEFAULT_REGION, value: us-east-1 }
             - { name: BUCKET, value: {{ $s.bucket }} }
             - name: CORS

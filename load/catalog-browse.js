@@ -7,15 +7,15 @@
 //   VUS=40 HOLD=5m k6 run load/catalog-browse.js
 import http from 'k6/http';
 import { check, sleep } from 'k6';
+import { BASE, insecureSkipTLSVerify } from './lib.js';
 
-const BASE = __ENV.BASE_URL || 'https://masternova.localhost:8443';
+const VUS = Number(__ENV.VUS || 30);
 
 export const options = {
-  // the cluster's certificate comes from its own local CA (deploy/k3d/local-ca.yaml)
-  insecureSkipTLSVerify: BASE.includes('.localhost'),
+  insecureSkipTLSVerify,
   stages: [
-    { duration: '30s', target: Number(__ENV.VUS || 30) },
-    { duration: __ENV.HOLD || '3m', target: Number(__ENV.VUS || 30) },
+    { duration: '30s', target: VUS },
+    { duration: __ENV.HOLD || '3m', target: VUS },
     { duration: '15s', target: 0 },
   ],
   thresholds: {

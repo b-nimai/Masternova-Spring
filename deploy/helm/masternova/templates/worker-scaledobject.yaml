@@ -27,36 +27,28 @@ spec:
           # ⭐ one pod at a time: a worker leaving mid-transcode releases its job (uncounted) and
           #    another starts it over, so shrinking fast wastes encodes
           policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
+  # outbox-lag: seconds since the most overdue DUE message became due (backoff isn't lag);
+  #   desired = ceil(lag / target): 30 s → 1, 60 s (the freshness SLO's edge) → 2.
+  # transcode-queue: jobs due that no worker has picked up, per worker's slots.
   triggers:
-    # Outbox lag: seconds since the most overdue DUE message became due (backoff isn't lag).
-    # desired = ceil(lag / target): 30 s → 1, 60 s (the freshness SLO's edge) → 2.
+    {{- $pg := $a.postgres }}
+    {{- $db := include "masternova.database" . | fromJson }}
+    {{- range list
+      (dict "name" "outbox-lag" "target" $a.outboxLagSecondsPerWorker "query" "SELECT COALESCE(EXTRACT(EPOCH FROM now() - min(next_attempt_at)), 0) FROM outbox_message WHERE status IN ('PENDING', 'PROCESSING') AND next_attempt_at <= now()")
+      (dict "name" "transcode-queue" "target" $a.queuedJobsPerWorker "query" "SELECT count(*) FROM pipeline_job WHERE status = 'PENDING' AND next_attempt_at <= now()") }}
     - type: postgresql
-      name: outbox-lag
+      name: {{ .name }}
+      useCachedMetrics: true # the HPA's reads reuse the last poll's answer, not a second query
       metadata:
-        host: {{ .Values.autoscaling.postgres.host }}
-        port: "5432"
-        dbName: {{ .Values.autoscaling.postgres.database }}
-        userName: {{ .Values.autoscaling.postgres.user }}
-        sslmode: {{ .Values.autoscaling.postgres.sslmode }}
-        query: >-
-          SELECT COALESCE(EXTRACT(EPOCH FROM now() - min(next_attempt_at)), 0)
-            FROM outbox_message
-           WHERE status IN ('PENDING', 'PROCESSING') AND next_attempt_at <= now()
-        targetQueryValue: {{ $a.outboxLagSecondsPerWorker | quote }}
+        host: {{ $pg.host }}
+        port: {{ $db.port | quote }}
+        dbName: {{ $db.name }}
+        userName: {{ $pg.user }}
+        sslmode: {{ $pg.sslmode }}
+        query: {{ .query | quote }}
+        targetQueryValue: {{ .target | quote }}
       authenticationRef: { name: masternova-postgres-reader, kind: ClusterTriggerAuthentication }
-    # Transcode queue: jobs due that no worker has picked up, per worker's slots.
-    - type: postgresql
-      name: transcode-queue
-      metadata:
-        host: {{ .Values.autoscaling.postgres.host }}
-        port: "5432"
-        dbName: {{ .Values.autoscaling.postgres.database }}
-        userName: {{ .Values.autoscaling.postgres.user }}
-        sslmode: {{ .Values.autoscaling.postgres.sslmode }}
-        query: >-
-          SELECT count(*) FROM pipeline_job WHERE status = 'PENDING' AND next_attempt_at <= now()
-        targetQueryValue: {{ $a.queuedJobsPerWorker | quote }}
-      authenticationRef: { name: masternova-postgres-reader, kind: ClusterTriggerAuthentication }
+    {{- end }}
 ---
 # The password by reference, never inline. CLUSTER-scoped: its Secret is read from KEDA's own
 # namespace, the only one KEDA may read Secrets in — a namespaced TriggerAuthentication would
@@ -68,5 +60,5 @@ metadata:
   labels: {{- include "masternova.labels" (dict "root" . "component" "worker") | nindent 4 }}
 spec:
   secretTargetRef:
-    - { parameter: password, name: {{ .Values.autoscaling.postgres.passwordSecret }}, key: password }
+    - { parameter: password, name: {{ $a.postgres.passwordSecret }}, key: password }
 {{- end }}
