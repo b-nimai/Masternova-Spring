@@ -428,7 +428,7 @@ without hammering the database.
 
 | # | Task | Java / Spring concept | Angular concept | Pattern & force | Est | Status | Date |
 |---|---|---|---|---|---|---|---|
-| 10.1 | `docs/lld/progress.md` + ADR (write-back, accepted 30 s loss) | — | — | — | 1 h | ☐ | |
+| 10.1 | `docs/lld/progress.md` + ADRs. **ADR-0022** write-back: heartbeats (15 s) merged into a Redis hash by a Lua script, `RENAME dirty → flushing` + one batched transaction every 30 s on one replica (ShedLock); the merge (max up, last = newest) is a **semilattice**, so a crashed flush is just flushed again; reads merge the buffer (resume at once), the dashboard reads rollups ≤ 30 s behind; Redis down → write-through; buffer safe from eviction (`volatile-lru`); ≤ 30 s accepted loss. **ADR-0021** (amends 0005, 0019 §4): enrollment is an `@ApplicationModuleListener` on `EntitlementGranted`/`Revoked` (all three sources, never twice), durable through Modulith's **JDBC registry** (only module listeners registered, completed rows deleted, staleness → `FAILED` → a ShedLock'd resubmitter, 10 attempts, no replay on restart); events carry their time, a revoke-first leaves a tombstone. Beacon credential in the body (sendBeacon can't send headers), renewed by each heartbeat | — | — | — | 1 h | ✅ | 2026-10-15 |
 | 10.2 | Enrollment from `OrderPaid` / free enrollment | `@ApplicationModuleListener` | — | Observer | 2 h | ☐ | |
 | 10.3 | Heartbeats → Redis write-back buffer, flushed every 30 s | Redis hashes, `@Scheduled` | — | **Decorator** (write-back) | 3 h | ☐ | |
 | 10.4 | Monotonic `maxPositionSeconds`, % complete rollups | SQL `GREATEST`, upserts | — | — | 2 h | ☐ | |

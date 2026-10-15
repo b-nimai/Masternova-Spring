@@ -1,6 +1,7 @@
 # ADR-0005 — A hand-rolled transactional outbox over Spring Modulith's event publication registry
 
 **Status:** accepted · **Date:** 2026-10-02 · **Deciders:** Nimai
+**Amended by:** [ADR-0021](0021-modulith-registry-for-in-process-module-listeners.md) (2026-10-15): the "revisit when" happened; the registry now carries `@ApplicationModuleListener`s only, the outbox stays the one cross-process mechanism.
 **Context links:** [`docs/lld/platform-kernel.md`](../lld/platform-kernel.md) · [pattern 17](../../patterns/docs/17-transactional-outbox.md) · ADR-0001 (Modulith monolith + worker)
 
 ## Context
