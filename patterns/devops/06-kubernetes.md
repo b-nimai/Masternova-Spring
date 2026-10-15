@@ -6,7 +6,7 @@
 > the cluster pulls it.
 
 **Roadmap:** D4.1–D4.8 · **Last updated:** 2026-10-15
-**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, Traefik config, local CA), [`deploy/k8s/`](../../deploy/k8s/) (raw manifests), `Makefile` (`k8s-*` targets)
+**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, Traefik config, local CA), [`deploy/k8s/`](../../deploy/k8s/) (raw manifests, CNPG `Cluster`, Redis values, the migrate Job), `Makefile` (`k8s-*` targets)
 **Try it:** `make k8s-up k8s-platform k8s-images k8s-apply`, then https://masternova.localhost:8443 (§3.3) or `make k8s-e2e`.
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
@@ -16,6 +16,7 @@
 | 1 | [Cluster anatomy, and a cluster on a laptop](#1-cluster-anatomy-and-a-cluster-on-a-laptop-) | ⭐⭐⭐ | D4.1 |
 | 2 | [The core objects, written by hand](#2-the-core-objects-written-by-hand-) | ⭐⭐⭐ | D4.2 |
 | 3 | [Ingress and TLS](#3-ingress-and-tls-) | ⭐⭐⭐ | D4.3 |
+| 4 | [Stateful workloads: an operator, a chart, a Job](#4-stateful-workloads-an-operator-a-chart-a-job-) | ⭐⭐⭐ | D4.4 |
 | 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ | — |
 | 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ | — |
 | 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ | — |
@@ -322,6 +323,99 @@ transcode on the worker → HLS preview plays**. **13 passed (40 s).** One test 
 
 ---
 
+## 4. Stateful workloads: an operator, a chart, a Job ⭐⭐⭐
+
+### 4.1 Postgres through an operator (CloudNativePG)
+
+D4.2's StatefulSet ran Postgres, but nothing *operated* it: no replica, no failover, no backups,
+no safe minor upgrade. An **operator** is a controller plus CRDs that encodes that runbook.
+You declare a `Cluster`, and it does the rest. [`infra/postgres.yaml`](../../deploy/k8s/infra/postgres.yaml):
+
+```yaml
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata: { name: masternova-db }
+spec:
+  instances: 2                      # primary + hot standby (streaming replication)
+  imageName: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie   # has pgvector
+  bootstrap:
+    initdb:
+      owner: masternova
+      secret: { name: masternova-db }               # OUR basic-auth Secret: the apps mount the same one
+      postInitApplicationSQL: [CREATE EXTENSION IF NOT EXISTS vector, …]   # as superuser, once
+  affinity: { enablePodAntiAffinity: true, podAntiAffinityType: required } # never both on one node
+```
+
+| It created | What for |
+|---|---|
+| pods `masternova-db-1` (primary), `-2` (standby), on different nodes | the instances; *no* StatefulSet: the operator manages pods and PVCs itself |
+| Services `masternova-db-rw` / `-ro` / `-r` | primary / standbys / any. `DATABASE_URL` points at `-rw`; after a failover the operator moves the label and the Service follows |
+| labels `cnpg.io/instanceRole=primary` | how `make k8s-seed` finds the current primary |
+
+- **Extensions vs the owner.** pgvector isn't a *trusted* extension (its `.control` file has no
+  `trusted = true`, checked in the image), so the database owner, who isn't a superuser,
+  can't `CREATE` it. `postInitApplicationSQL` runs as the superuser at creation, and V1's `CREATE
+  EXTENSION IF NOT EXISTS` becomes a no-op. RDS (D6) has the same split: an admin creates
+  extensions, the app migrates.
+- `max_connections: 100` against 2 api pods × Hikari's 10, the workers and the migrate Job, with
+  room for the HPA (D4.6). Connections are the first wall horizontal scaling hits.
+- The operator itself is a platform add-on (`make k8s-platform`: chart 0.29.1, namespace
+  `cnpg-system`). Failover is drilled in D5.3, backups in D5.4.
+
+### 4.2 Redis from a chart
+
+The [CloudPirates chart](../../deploy/k8s/charts/redis-values.yaml) (official `redis` image,
+Apache-2.0; Bitnami's free images ended in 2025): standalone, **no persistence**, a password from
+`masternova-redis`, and `allkeys-lru` within 96 MB. LRU eviction is safe only because of what's
+in Redis. Checked: the entitlement cache (ADR-0016, re-read from Postgres on a miss) and the
+progress pub/sub (not stored). ShedLock is JDBC. `fullnameOverride: redis` keeps the Service
+name, so `REDIS_HOST` didn't change.
+
+The password reaches Spring as a **file named after the property**: the projected volume maps the
+Secret's key to `/run/secrets/spring.data.redis.password`, and `configtree` binds it. No code or
+`application.yaml` change. Verified: `redis-cli` without the password → `WRONGPASS`; with it,
+`dbsize` = 1 (the cached entitlement row from the e2e checkout).
+
+### 4.3 Migrations as a Job, before the rollout ⭐⭐⭐
+
+```mermaid
+sequenceDiagram
+  participant M as make k8s-apply (Helm hook / Argo PreSync later)
+  participant J as Job db-migrate (api image)
+  participant DB as masternova-db-rw
+  participant D as Deployment api
+  M->>J: create (new image tag)
+  J->>DB: Flyway migrate (one pod, one lock)
+  J-->>M: Complete (exit 0)
+  M->>D: apply → rolling update
+  Note over D: SPRING_FLYWAY_ENABLED=false<br/>Hibernate validate still checks the schema
+```
+
+In compose every api start migrates. With N replicas that means:
+
+- N pods race for Flyway's lock;
+- a long migration blows the startup probe, so the kubelet kills the pod *mid-migration*;
+- a failed migration looks like a half-rolled-out, crash-looping Deployment.
+
+[`migrate/db-migrate.yaml`](../../deploy/k8s/migrate/db-migrate.yaml) moves the schema first,
+once, and the rollout starts only if it succeeded.
+
+- **Same image as the api:** the migrations live in its jar, so they can never drift from the
+  code that expects them.
+- **How it exits:** `-Dspring.context.exit=onRefresh`, the Dockerfile's AOT-training trick. Flyway
+  runs during the context refresh, then the JVM exits 0 before Tomcat or any scheduler starts.
+  Measured: **9 s**, `1 succeeded`.
+- `restartPolicy: Never` + `backoffLimit: 2`: a failed pod stays around for `kubectl logs`.
+  Flyway on Postgres is transactional per migration, so a retry resumes cleanly.
+- A Job's pod template is immutable, so `make k8s-apply` deletes and recreates it for every
+  apply, then runs `kubectl wait --for=condition=Complete` before applying the Deployments. D4.5
+  turns this into a Helm `pre-upgrade` hook, which Argo CD runs as a `PreSync` hook.
+- The startup probe budget dropped from 2 min to 1 min: the api no longer migrates.
+
+Verified after the switch: `make k8s-e2e` **13 passed** on CNPG + Redis with auth.
+
+---
+
 ## 8. Common mistakes ⭐⭐⭐
 
 | Mistake | Instead |
@@ -336,6 +430,9 @@ transcode on the worker → HLS preview plays**. **13 passed (40 s).** One test 
 | Changing a ConfigMap and expecting pods to see it | env is read at start: roll the pods (Helm: a checksum annotation, §5) |
 | `externalTrafficPolicy: Cluster` in front of anything that cares about the client IP | `Local` + an ingress pod on every node (or PROXY protocol) |
 | A self-signed certificate per host | one CA issuer; trust it once; swap it for ACME in production |
+| Every replica runs migrations at startup | one Job before the rollout; the app validates, never migrates |
+| A hand-rolled database StatefulSet in production | an operator (CNPG): failover, switchover, backups as declared state |
+| `allkeys-lru` on a Redis that holds real state | only on a pure cache; know what's in it first |
 
 ---
 
@@ -364,6 +461,17 @@ trust `X-Forwarded-For` only from the controller: Traefik drops a client's own h
 Tomcat's `RemoteIpValve` trusts only internal addresses. I measured both halves with a whoami pod
 before trusting it with IP-bound playback tokens.
 
+**Q: How do you run database migrations on Kubernetes?**
+As a Job that runs before the new pods roll out: a Helm `pre-upgrade` hook, an Argo CD `PreSync`
+hook. Same image as the app, so migrations and code can't drift. The app itself runs with
+migrations off and the ORM in `validate` mode, so a skipped migration fails loudly. The schema
+changes have to be backward compatible with the running version (expand → contract, D4.8).
+
+**Q: What does an operator give you over a StatefulSet?**
+A StatefulSet gives stable names and volumes, nothing more. An operator encodes the operational
+knowledge: replication, failover that moves the `-rw` Service to the new primary, rolling minor
+upgrades with a switchover, and backups, all as declared state on one `Cluster` object.
+
 ---
 
 ## 10. 30-second recall
@@ -374,3 +482,4 @@ before trusting it with IP-bound playback tokens.
 - requests schedule, limits enforce; the JVM sizes itself from the limits.
 - `restricted` security context on the apps; Secrets as files; `enableServiceLinks: false`.
 - Ingress = rules, controller = Traefik; cert-manager issues from one local CA; `Local` keeps the client IP.
+- Operators run stateful systems (CNPG: `-rw` follows the primary); migrations = one Job before the rollout.

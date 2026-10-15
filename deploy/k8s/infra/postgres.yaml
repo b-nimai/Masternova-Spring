@@ -1,52 +1,47 @@
-# Postgres as a plain StatefulSet: the "by hand" version, replaced by the CloudNativePG operator
-# in D4.4. A StatefulSet (not a Deployment) gives the pod a stable name (postgres-0) and its OWN
-# PersistentVolumeClaim, which survives the pod being deleted or rescheduled.
-apiVersion: v1
-kind: Service
+# Postgres through the CloudNativePG operator (`make k8s-platform` installs it). This one object
+# replaces D4.2's hand-written StatefulSet: the operator creates the pods, PVCs, Services and
+# replication, and does failover, switchover and backups (D5.4) — the runbook as code.
+#
+# Services it creates (the app uses -rw):
+#   masternova-db-rw  → the primary (reads + writes)
+#   masternova-db-ro  → standbys only
+#   masternova-db-r   → any instance
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
 metadata:
-  name: postgres
+  name: masternova-db
   namespace: masternova
 spec:
-  selector: { app.kubernetes.io/name: postgres }
-  ports: [{ name: postgres, port: 5432 }]
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: postgres
-  namespace: masternova
-spec:
-  serviceName: postgres
-  replicas: 1 # one primary, no failover: that's what the operator adds
-  selector:
-    matchLabels: { app.kubernetes.io/name: postgres }
-  template:
-    metadata:
-      labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: masternova }
-    spec:
-      enableServiceLinks: false # see app/api.yaml
-      containers:
-        - name: postgres
-          image: pgvector/pgvector:pg17
-          env:
-            - { name: POSTGRES_DB, value: masternova }
-            - name: POSTGRES_USER
-              valueFrom: { secretKeyRef: { name: masternova-db, key: username } }
-            - name: POSTGRES_PASSWORD
-              valueFrom: { secretKeyRef: { name: masternova-db, key: password } }
-            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata } # a subdir: the volume root has lost+found
-          ports: [{ name: postgres, containerPort: 5432 }]
-          readinessProbe:
-            exec: { command: [sh, -c, 'pg_isready -U "$POSTGRES_USER" -d masternova'] }
-            periodSeconds: 5
-          resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits: { memory: 512Mi }
-          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
-  # ⭐ One PVC per replica, created from this template and named data-postgres-0. k3s's
-  #    local-path provisioner backs it with a directory on the node the pod landed on.
-  volumeClaimTemplates:
-    - metadata: { name: data }
-      spec:
-        accessModes: [ReadWriteOnce]
-        resources: { requests: { storage: 2Gi } }
+  instances: 2 # a primary + a hot standby (streaming replication): the failover drill (D5.3) needs both
+  # "standard" = PostgreSQL + common extensions; pgvector is in it (checked: vector.control). The
+  # operator picks no image by default that has it, so it's named, and pinned to the major.
+  imageName: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie
+  primaryUpdateStrategy: unsupervised # a minor-version change: standbys first, then a switchover
+  bootstrap:
+    initdb:
+      database: masternova
+      owner: masternova
+      # ⭐ The owner's password comes from OUR Secret (`make k8s-secrets`, kubernetes.io/basic-auth),
+      #    the same one the apps mount: nothing to copy from an operator-generated secret.
+      secret: { name: masternova-db }
+      # ⭐ Run as the SUPERUSER in the app database, once, at creation. pgvector is not a
+      #    "trusted" extension, so the owner (not a superuser) can't CREATE it, and V1's
+      #    `CREATE EXTENSION IF NOT EXISTS` becomes a no-op here. On RDS (D6) the same split
+      #    holds: an admin creates extensions, the app migrates.
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS citext
+        - CREATE EXTENSION IF NOT EXISTS vector
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm
+  storage:
+    size: 2Gi # local-path: a directory on the node the instance lands on
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  postgresql:
+    parameters:
+      shared_buffers: 128MB # 1/4 of the limit is the usual starting point
+      max_connections: '100' # 2 api × 10 (Hikari) + workers + the migrate Job, with room for HPA (D4.6)
+  # one instance per node: a node drain (D4.8) or failure never takes both
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required

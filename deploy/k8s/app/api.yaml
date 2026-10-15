@@ -43,6 +43,7 @@ spec:
           envFrom: [{ configMapRef: { name: masternova-config } }]
           env:
             - { name: SECURE_COOKIES, value: 'true' } # the refresh cookie only travels over https (ingress.yaml)
+            - { name: SPRING_FLYWAY_ENABLED, value: 'false' } # the db-migrate Job owns the schema (migrate/)
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
@@ -62,7 +63,7 @@ spec:
           startupProbe:
             httpGet: { path: /actuator/health/liveness, port: http }
             periodSeconds: 2
-            failureThreshold: 60 # up to 2 min to boot (Flyway on a fresh database included)
+            failureThreshold: 30 # up to 1 min to boot (~7 s measured); migrations run in the Job
           livenessProbe:
             httpGet: { path: /actuator/health/liveness, port: http }
             periodSeconds: 10
@@ -99,3 +100,6 @@ spec:
                   items:
                     - { key: username, path: DATABASE_USER }
                     - { key: password, path: DATABASE_PASSWORD }
+              - secret: # Spring's configtree turns the file name into the property name
+                  name: masternova-redis
+                  items: [{ key: password, path: spring.data.redis.password }]

@@ -7,7 +7,7 @@ metadata:
   name: masternova-config
   namespace: masternova
 data:
-  DATABASE_URL: jdbc:postgresql://postgres:5432/masternova
+  DATABASE_URL: jdbc:postgresql://masternova-db-rw:5432/masternova # CNPG's primary Service
   REDIS_HOST: redis
   REDIS_PORT: '6379'
   STORAGE_ENDPOINT: http://seaweedfs:8333 # how pods reach storage …

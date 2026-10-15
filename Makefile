@@ -16,7 +16,7 @@ nuke: ## Stop everything AND delete volumes (fresh database)
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
-	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret db_password; do \
+	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret db_password redis_password; do \
 	  [ -s secrets/$$f ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/$$f; \
 	    chmod 644 secrets/$$f; echo "created secrets/$$f"; }; \
 	done
@@ -90,7 +90,10 @@ k8s-down: ## Delete the local k3d cluster and its registry (all cluster data is 
 	k3d cluster delete masternova
 
 # Cluster add-ons, each in its own namespace, versions pinned (helm upgrade --install is idempotent)
-k8s-platform: ## Install the cluster add-ons: cert-manager (+ the local CA)
+k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ the local CA), CloudNativePG
+	kubectl apply -f deploy/k3d/traefik-config.yaml
+	helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update >/dev/null
+	helm upgrade --install cnpg cnpg/cloudnative-pg --version 0.29.1 -n cnpg-system --create-namespace --wait
 	helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
 	helm upgrade --install cert-manager jetstack/cert-manager --version v1.21.2 \
 	  -n cert-manager --create-namespace --set crds.enabled=true --wait
@@ -116,12 +119,23 @@ k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files
 	kubectl -n masternova create secret generic masternova-db --type=kubernetes.io/basic-auth \
 	  --from-literal=username=masternova --from-file=password=secrets/db_password \
 	  --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n masternova create secret generic masternova-redis --from-file=password=secrets/redis_password \
+	  --dry-run=client -o yaml | kubectl apply -f -
 
 k8s-apply: k8s-secrets ## Apply the raw manifests in deploy/k8s with the images of :$(TAG)
 	kubectl apply -f deploy/k8s/infra
+	helm upgrade --install redis oci://registry-1.docker.io/cloudpirates/redis --version 0.37.2 \
+	  -n masternova -f deploy/k8s/charts/redis-values.yaml --wait
+	kubectl -n masternova wait cluster/masternova-db --for=condition=Ready --timeout=300s
+	sed 's|:TAG$$|:$(TAG)|' deploy/k8s/app/config.yaml | kubectl apply -f -
+	@# a Job's pod template is immutable: replace it, then wait — the rollout starts only on success
+	kubectl -n masternova delete job db-migrate --ignore-not-found
+	sed 's|:TAG$$|:$(TAG)|' deploy/k8s/migrate/db-migrate.yaml | kubectl apply -f -
+	kubectl -n masternova wait job/db-migrate --for=condition=Complete --timeout=600s
 	for f in deploy/k8s/app/*.yaml; do sed 's|:TAG$$|:$(TAG)|' $$f; echo ---; done | kubectl apply -f -
 
-K8S_PSQL := kubectl -n masternova exec -i postgres-0 -- sh -c 'psql -q -U "$$POSTGRES_USER" -d masternova
+# the CURRENT primary (after a failover it's no longer instance 1), as the superuser over the local socket
+K8S_PSQL = kubectl -n masternova exec -i $$(kubectl -n masternova get pod -l cnpg.io/cluster=masternova-db,cnpg.io/instanceRole=primary -o name) -c postgres -- sh -c 'psql -q -d masternova
 k8s-seed: ## Seed dev catalog data into the cluster's postgres: make k8s-seed COURSES=60
 	$(K8S_PSQL) -v courses=$(or $(COURSES),200)' < docs/db/seed-catalog.sql
 

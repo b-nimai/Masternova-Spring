@@ -72,3 +72,6 @@ spec:
                   items:
                     - { key: username, path: DATABASE_USER }
                     - { key: password, path: DATABASE_PASSWORD }
+              - secret: # Spring's configtree turns the file name into the property name
+                  name: masternova-redis
+                  items: [{ key: password, path: spring.data.redis.password }]
