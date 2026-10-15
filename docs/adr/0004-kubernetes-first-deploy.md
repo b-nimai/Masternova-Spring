@@ -1,6 +1,6 @@
 # ADR-0004 — Local Kubernetes + GitOps first, AWS last and optional
 
-**Status:** accepted · **Date:** 2026-10-02 · **Deciders:** Nimai
+**Status:** accepted; §2's "CI bumps the tag" amended by [ADR-0020](0020-gitops-human-committed-tag-app-of-apps.md) · **Date:** 2026-10-02 · **Deciders:** Nimai
 
 ## Context
 

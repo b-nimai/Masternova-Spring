@@ -24,6 +24,13 @@ spec:
       labels: {{- include "masternova.labels" $c | nindent 8 }}
     spec:
       enableServiceLinks: false
+      # one per node where possible: a drain or a node failure takes at most one replica
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {{- include "masternova.selectorLabels" $c | nindent 14 }}
       automountServiceAccountToken: false
       securityContext:
         seccompProfile: { type: RuntimeDefault }

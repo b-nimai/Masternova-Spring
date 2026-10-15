@@ -1,6 +1,6 @@
 # Runbooks
 
-**Last updated:** 2026-10-13
+**Last updated:** 2026-10-15
 
 One runbook per alert, written in Phase D3 when the alert is created. Each one answers four
 questions:
@@ -22,3 +22,9 @@ questions:
 Every alert's `runbook_url` annotation links here, so the notification email carries the link.
 Locally, notifications land in Mailpit (<http://localhost:8026>) through Alertmanager
 (<http://localhost:9094>).
+
+## Operations
+
+| Task | Runbook |
+|---|---|
+| Deploy (GitOps), roll back, failed migration, drain a node | [deploy-and-rollback.md](deploy-and-rollback.md) |

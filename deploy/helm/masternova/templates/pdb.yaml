@@ -1,0 +1,23 @@
+# Voluntary disruptions (a node drain, a cluster upgrade, the autoscaler removing a node) may
+# evict at most ONE pod of each at a time, and only while the rest are ready: a drain WAITS
+# instead of taking the last api pod down. maxUnavailable (not minAvailable: N) stays right as
+# the HPA moves the count. Involuntary ones (a node dying) it can't stop — that's what 2+
+# replicas on 2+ nodes are for.
+#
+# No PDB for the worker: with one replica, "keep 1" would block every drain forever; a worker
+# that's evicted mid-job releases it and another picks it up (devops/06 §8).
+{{- range $name := list "api" "web" }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  labels: {{- include "masternova.labels" (dict "root" $ "component" $name) | nindent 4 }}
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {{- include "masternova.selectorLabels" (dict "root" $ "component" $name) | nindent 6 }}
+  # an unready pod may be evicted even when the budget is spent: a crash-looping pod must never
+  # block a drain (the default, IfHealthyBudget, would)
+  unhealthyPodEvictionPolicy: AlwaysAllow
+{{- end }}

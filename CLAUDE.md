@@ -21,10 +21,11 @@ seam: use a concrete class until a second implementation is real or planned.
 |---|---|
 | `backend/` | Maven multi-module: `kernel` (plain Java, shared), `api` (Spring Boot :8080, Modulith), `worker` (Spring Boot :8090) |
 | `frontend/` | Angular 22 (pnpm, Material, Vitest, angular-eslint) |
-| `e2e/` | Playwright browser tests against the full container stack (`make stack && make e2e`) |
+| `e2e/` | Playwright browser tests against the full container stack (`make stack && make e2e`; the cluster: `make k8s-e2e`) |
+| `load/` | k6 scripts: catalog browsing (HPA), the zero-downtime drill (`rollout-drill.js`) |
 | `patterns/` | Pattern catalog (`README.md`), notes (`docs/`), Spring-free runnable copies (`lab/`) |
 | `docs/` | `adr/` · `lld/` · `hld/` · `api/conventions.md` · `runbooks/` |
-| `deploy/` | Helm, Argo CD (D4) and Terraform (D6), filled in by the DevOps phases |
+| `deploy/` | `k3d/` (local cluster + add-on config), `helm/` (apps + infra charts), `argocd/` (GitOps), `observability/`; Terraform (D6) |
 | `compose.yaml`, `Makefile` | Local stack and day-to-day commands (`make help`) |
 
 ## 2. Commands
@@ -42,6 +43,13 @@ make obs         # observability profile: Grafana :3001, Prometheus :9091, Tempo
 make scan        # Trivy on all images
 make e2e         # Playwright browser tests against the running stack
 make release VERSION=X.Y.Z  # tag a release from a clean main (release.yml promotes the images)
+
+# Kubernetes (D4, devops/06): k3d on :8082/:8443, https://masternova.localhost:8443
+make k8s-up k8s-platform     # cluster + registry :5050; cert-manager, CNPG, KEDA, Argo CD
+make k8s-images k8s-deploy   # build + push :sha-<commit>, install both charts (the inner loop)
+make k8s-gitops              # hand the cluster to Argo CD (syncs main)
+make k8s-bump TAG=sha-abc1234  # GitOps deploy: checks GHCR, commits the tag; then PR + merge
+make helm-check k8s-e2e      # lint/validate charts · Playwright against the cluster
 ```
 
 The JDK is Homebrew's OpenJDK 26 (the build targets `release 25`; CI uses Temurin 25). A
@@ -133,6 +141,8 @@ When a pattern lands in real code:
 - **Money:** minor units (`long`) + currency. Never `double`.
 - **Time:** inject `Clock`. Never call `Instant.now()` bare.
 - **Schema:** Flyway only (`V<n>__<what>.sql`). Never edit an applied migration. Hibernate is `validate`.
+  Migrations run *before* the rollout, so each must work with the previous release: drop/rename/retype
+  only in a `-- contract: V<n>` migration after an expand (`MigrationSafetyTest`).
 - **Injection:** constructor only. No field injection.
 - **Config:** env var over `application.yaml` default. Secrets never committed.
 - **Tests:**

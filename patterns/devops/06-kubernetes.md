@@ -6,7 +6,7 @@
 > the cluster pulls it.
 
 **Roadmap:** D4.1–D4.8 · **Last updated:** 2026-10-15
-**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, namespace, Traefik config, local CA, KEDA + Argo CD values), [`deploy/argocd/`](../../deploy/argocd/) (project, app-of-apps, `bump.sh`), [`deploy/helm/masternova/`](../../deploy/helm/masternova/) (the apps' chart), [`deploy/helm/masternova-infra/`](../../deploy/helm/masternova-infra/) (CNPG `Cluster`, Redis, SeaweedFS, Mailpit), `Makefile` (`k8s-*`, `helm-check`)
+**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, namespace, Traefik config, local CA, KEDA + Argo CD values), [`deploy/argocd/`](../../deploy/argocd/) (project, app-of-apps, `bump.sh`), [`deploy/helm/masternova/`](../../deploy/helm/masternova/) (the apps' chart), [`deploy/helm/masternova-infra/`](../../deploy/helm/masternova-infra/) (CNPG `Cluster`, Redis, SeaweedFS, Mailpit), `Makefile` (`k8s-*`, `helm-check`), [`load/`](../../load/) (k6), [`MigrationSafetyTest`](../../backend/api/src/test/java/com/masternova/api/MigrationSafetyTest.java)
 **Try it:** `make k8s-up k8s-platform k8s-images k8s-deploy`, then https://masternova.localhost:8443 (§3) or `make k8s-e2e`.
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
@@ -20,9 +20,10 @@
 | 5 | [Helm: two charts, values per environment](#5-helm-two-charts-values-per-environment-) | ⭐⭐⭐ | D4.5 |
 | 6 | [Autoscaling: HPA on CPU, KEDA on queues](#6-autoscaling-hpa-on-cpu-keda-on-queues-) | ⭐⭐⭐ | D4.6 |
 | 7 | [GitOps with Argo CD](#7-gitops-with-argo-cd-) | ⭐⭐⭐ | D4.7 |
-| 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ | — |
-| 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ | — |
-| 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ | — |
+| 8 | [Zero downtime, measured](#8-zero-downtime-measured-) | ⭐⭐⭐ | D4.8 |
+| 9 | [Common mistakes](#9-common-mistakes-) | ⭐⭐⭐ | — |
+| 10 | [Interview Q&A](#10-interview-qa-) | ⭐⭐⭐ | — |
+| 11 | [30-second recall](#11-30-second-recall) | ⭐⭐⭐ | — |
 
 ---
 
@@ -443,7 +444,7 @@ Verified after the switch: `make k8s-e2e` **13 passed** on CNPG + Redis with aut
 - **Secrets are not in either chart.** Both reference existing Secrets by name (`secrets.app`,
   `ownerSecret`…), created out of band (`make k8s-secrets`). Putting them in values would put
   them in git, or in Helm's release Secret in clear base64. Sealed Secrets / External Secrets are
-  the next step (§8).
+  the next step (§9).
 
 ### 5.2 Values: defaults for a real environment, overrides per environment
 
@@ -694,11 +695,117 @@ the local one. Everything else is the committed code.
 
 From an empty laptop to a running system, out of git: **≈ 5.6 minutes**. That's the disaster
 recovery story, and it's the reason Secrets are the only thing created by hand (`make
-k8s-secrets`). The next step is Sealed Secrets or External Secrets (§8).
+k8s-secrets`). The next step is Sealed Secrets or External Secrets (§9).
 
 ---
 
-## 8. Common mistakes ⭐⭐⭐
+## 8. Zero downtime, measured ⭐⭐⭐
+
+### 8.1 What has to be true
+
+| Moment | What keeps requests alive | Where |
+|---|---|---|
+| a new pod starts | readiness gates traffic; `maxSurge: 1, maxUnavailable: 0` | §2 |
+| an old pod stops | `preStop` sleep 5 s (endpoint removal races SIGTERM), Spring's graceful drain, 45 s grace | §2.5 |
+| a node is drained | **PodDisruptionBudget** `maxUnavailable: 1` + replicas **spread** over nodes | `templates/pdb.yaml`, `topologySpreadConstraints` |
+| the schema changes | the migration runs *before* the rollout, so it must suit the **old** code too: expand → switch → contract | `MigrationSafetyTest` |
+
+The load for every drill is [`load/rollout-drill.js`](../../load/rollout-drill.js): 10 VUs
+browsing the catalog (`CourseSummary` reads `course.subtitle`) and 2 VUs as the seed instructor,
+creating courses and rewriting their details. Each write is **read back**, so a broken
+dual-write fails a check even when every status is 200. Thresholds: 0 failed requests, 0 failed
+checks.
+
+- **PDBs:** `maxUnavailable: 1` (not `minAvailable: N`, which goes stale as the HPA moves the
+  count), plus `unhealthyPodEvictionPolicy: AlwaysAllow` so a crash-looping pod can't block a
+  drain. No worker PDB: with one replica, "keep 1" blocks every drain forever.
+- **Spread:** `topologySpreadConstraints` on the hostname, `ScheduleAnyway`. Two api pods on one
+  node means one drain takes both, or the PDB blocks it.
+
+### 8.2 Drill 1: a rolling update (D4.7's GitOps push)
+
+A tag bump synced by Argo CD, under 10 VUs: **0 failed / 9,710**. Each expand–contract step
+below is another rolling update under the full read + write load.
+
+### 8.3 Drill 2: draining the database primary's node
+
+`kubectl drain k3d-masternova-agent-0` under the drill load. The node held an api pod, a web
+pod, Redis and **the CNPG primary**:
+
+1. api and web pods were evicted one at a time (the PDB) and rescheduled on the other nodes;
+2. the primary's eviction was **refused** ("would violate the pod's disruption budget": CNPG's
+   own `masternova-db-primary` PDB, 0 disruptions allowed);
+3. CNPG noticed the cordon (`SwitchingOver: Current primary is running on unschedulable node`),
+   **promoted the standby**, and the next eviction attempt went through, about 20 s in. No human
+   step;
+4. `masternova-db-1` stayed **Pending** while the node was cordoned: its `local-path` volume
+   lives on that node. The database ran on one instance until `kubectl uncordon`, then the old
+   primary **rejoined as a standby in 16 s**.
+
+**Result: 4 failed of 12,371 (0.03 %).** Every one came from the switchover itself, from the logs:
+`FATAL: terminating connection due to administrator command` (`57P01`) at 08:00:33, the old
+primary's fast shutdown killing in-flight transactions (3 catalog reads, 1 course create). The
+api/web evictions caused **none**. Redis moved too (one replica: about 20 s unreachable): only
+`Cannot reconnect to redis` warnings, no failed request, because the entitlement cache falls
+through to Postgres (ADR-0016) as designed.
+
+So a primary switchover is a sub-second write outage that **clients must retry**. The failed POST
+carried an `Idempotency-Key`, so retrying it is safe: that's the point of the keys. Retrying
+`57P01` server-side, or a PgBouncer `Pooler` that pauses during switchover, is the next step.
+
+### 8.4 Drill 3: renaming a column, safely and unsafely ⭐⭐⭐
+
+On a throwaway branch (never merged), `course.subtitle` → `tagline`, four api builds, each
+deployed by a git push to the mirror (§7.4) under the drill load:
+
+| Release | Migration (PreSync, before the rollout) | Code | Failed requests |
+|---|---|---|---|
+| 1 · **expand** | `ADD COLUMN tagline`, backfill, a trigger that copies whichever column a version wrote | reads/writes `subtitle` | **0 / 5,558** |
+| 2 · **switch** | — | reads/writes `tagline` (old pods still write `subtitle` during the rollout) | **0 / 5,505**; 1,269 rows, **0** with `subtitle ≠ tagline` |
+| 3 · **contract** | drop the trigger, `DROP COLUMN subtitle` | (unchanged) | **0 / 5,256** |
+| 4 · **unsafe**: the same kind of change in ONE release | `RENAME COLUMN tagline TO subtitle` | reads/writes `subtitle` | **4,535 / 6,487 (69.9 %)** for the 129 s rollout; 0 once it finished |
+
+Why release 4 fails: the migration runs first, and the **old pods keep serving until the rollout
+replaces them**, each failing every query on `course` (create: 91 % failed). The HPA added pods
+during the error storm, so the rollout had more pods to replace and took longer: a bad
+migration makes its own outage longer. A rollback wouldn't have helped either. The previous image
+reads `tagline`, which no longer exists: **an image rollback doesn't roll back the schema.** That
+follows from the table above; it wasn't run.
+
+The trigger in release 1 is what makes release 2's rollout safe: during it, old pods write
+`subtitle` and new pods write `tagline`, and the trigger copies each write to the other column.
+The drill's read-back checks are what prove it, not the status codes.
+
+### 8.5 The lesson as a build rule: `MigrationSafetyTest`
+
+[`MigrationSafetyTest`](../../backend/api/src/test/java/com/masternova/api/MigrationSafetyTest.java)
+(plain JUnit, no Spring or DB) reads every migration Flyway would run (the api's, the
+test-only ones, and the **messaging jar's** V2/V16) and fails on `DROP TABLE|COLUMN`, `RENAME`,
+`ALTER COLUMN … TYPE` and `SET NOT NULL`, unless the file's first line is `-- contract: V<n>`
+naming an **older, existing** expand migration. Relaxing a constraint (`DROP NOT NULL`) is
+allowed: it never breaks the old writer.
+
+**It failed its own mutation check at first.** With the drill's V23 and V24 copied in, it still
+passed. `getResource("/db/migration")` returned the *test* classpath's directory (a test-only
+`V1000`), which hid the real ones. Fixed by enumerating every `db/migration` resource, jars
+included, and asserting V1, V2, V16 and V21 are seen. After the fix: the clean tree passes; with
+the drill's files, `V23: 'DROP COLUMN' breaks the release still running…` and `V24: 'RENAME
+COLUMN tagline TO'…`.
+
+**Clean-up after the drill:** the schema was back to its original shape (V24 renamed it back;
+checked in `information_schema`), and the three drill rows were deleted from
+`flyway_schema_history` (otherwise Phase 10's real V22 would collide with them). The real code
+redeployed through git: **0 failed / 5,187**, Flyway "up to date".
+
+### 8.6 What's next (D5)
+
+`CREATE INDEX` without `CONCURRENTLY` locks writes on a large table: the next rule for the test,
+together with Flyway's `executeInTransaction=false` for those files. Chaos drills (D5.3) repeat
+§8.3 *without* the cordon: a node killed, not drained.
+
+---
+
+## 9. Common mistakes ⭐⭐⭐
 
 | Mistake | Instead |
 |---|---|
@@ -729,10 +836,16 @@ k8s-secrets`). The next step is Sealed Secrets or External Secrets (§8).
 | `resources-finalizer` / prune on the database | `Prune=false,Delete=false` on the Cluster; no finalizer on the infra Application |
 | CI with cluster credentials pushing deploys | pull: the cluster syncs from git; CI only publishes images |
 | A tag in git that CI never published | check the registry before committing the bump (`bump.sh`) |
+| Renaming / dropping / retyping a column in one release | expand → switch → contract, three releases; `MigrationSafetyTest` enforces it |
+| "We can always roll back the image" | not past a migration: an image rollback doesn't roll back the schema |
+| `minAvailable: N` PDBs, or a PDB on a single replica | `maxUnavailable: 1`; no PDB for a singleton |
+| All replicas on one node | `topologySpreadConstraints` on the hostname |
+| Expecting a DB switchover to be invisible | in-flight transactions die (`57P01`): clients retry, writes carry idempotency keys |
+| A rule test that never failed | mutation-check it: ours passed vacuously until the drill's files went in |
 
 ---
 
-## 9. Interview Q&A ⭐⭐⭐
+## 10. Interview Q&A ⭐⭐⭐
 
 **Q: What happens between `kubectl apply -f deployment.yaml` and a running container?**
 The API server validates and stores the Deployment. The Deployment controller creates a
@@ -790,9 +903,23 @@ from git. I rebuilt this one from nothing in under 6 minutes, everything except 
 App-of-apps with sync waves, plus the Application health check that Argo removed in 2.x, or a
 later wave won't wait. Inside an app, hooks: PreSync for migrations.
 
+**Q: How do you rename a column with zero downtime?**
+Three releases. Expand: add the new column, backfill, and keep both in sync (a trigger, or
+dual writes) while the code still uses the old one. Switch: the code moves to the new column;
+during that rollout old pods write the old column and the sync covers them. Contract: drop the
+old column once no running version reads it. I measured it: 0 failures across all three under
+load, against 70 % failures for the one-step rename, because the migration runs before the
+rollout and the old pods keep serving.
+
+**Q: What happens to your database when you drain its node?**
+CNPG's PDB refuses to evict the primary. CNPG sees the cordon and switches over to the standby;
+then the eviction goes through. In-flight transactions on the old primary die (4 requests in
+12,371), so clients retry, and writes carry idempotency keys. With node-local volumes, the old
+instance waits for its node and rejoins as a standby (16 s).
+
 ---
 
-## 10. 30-second recall
+## 11. 30-second recall
 
 - Everything talks to the **API server**; controllers reconcile desired → actual, forever.
 - Deployment → ReplicaSet → Pods; a **Service** = label selector + stable IP/DNS over *ready* pods.
@@ -804,3 +931,4 @@ later wave won't wait. Inside an app, hooks: PreSync for migrations.
 - Two charts (infra, apps); `values.yaml` safe, `values-<env>.yaml` small; config checksum rolls pods; lint + kubeconform in CI.
 - HPA on CPU (% of request) for the api; KEDA on queue lag/depth for the worker; audit the operator's RBAC.
 - GitOps = pull: root app-of-apps, waves + health check, PreSync migration, selfHeal; deploy = a commit of the tag; rebuild from git ≈ 6 min.
+- Zero downtime = readiness + surge + preStop + PDB + spread + **expand → switch → contract** (0 vs 70 % failed, measured).

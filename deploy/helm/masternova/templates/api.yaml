@@ -27,6 +27,13 @@ spec:
       annotations: {{- include "masternova.configChecksum" . | nindent 8 }}
     spec:
       {{- include "masternova.jvmPodSpec" . | nindent 6 }}
+      # one per node where possible: a drain or a node failure takes at most one replica
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {{- include "masternova.selectorLabels" $c | nindent 14 }}
       terminationGracePeriodSeconds: 45 # preStop 5 s + Spring's 30 s drain + margin
       containers:
         - name: api
