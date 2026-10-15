@@ -1,0 +1,56 @@
+{{- if .Values.worker.autoscaling.enabled }}
+{{- $c := dict "root" . "component" "db-grants" -}}
+{{- $pg := .Values.autoscaling.postgres -}}
+# What the autoscaler may read: the two columns its two queries filter on, nothing else. Not
+# pg_read_all_data (every table: password hashes, refresh tokens, orders), and not a Flyway
+# migration (who may read the schema is deployment config: the role doesn't exist in compose or
+# tests). A PreSync hook AFTER db-migrate (weight 1 > 0), as the tables' owner; GRANT is idempotent.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-grants
+  labels: {{- include "masternova.labels" $c | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "1"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 120
+  template:
+    metadata:
+      labels: {{- include "masternova.labels" $c | nindent 8 }}
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70 # postgres in the alpine image
+        runAsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: psql
+          image: postgres:17-alpine
+          command: [/bin/sh, -c]
+          args:
+            - |
+              set -e
+              export PGPASSWORD="$(cat /run/secrets/DATABASE_PASSWORD)"
+              psql "host=$PGHOST dbname=$PGDATABASE user=$(cat /run/secrets/DATABASE_USER) sslmode={{ $pg.sslmode }}" \
+                -v ON_ERROR_STOP=1 -v reader={{ $pg.user }} <<'SQL'
+              GRANT SELECT (status, next_attempt_at) ON outbox_message TO :"reader";
+              GRANT SELECT (status, next_attempt_at) ON pipeline_job TO :"reader";
+              SQL
+          env:
+            - { name: PGHOST, value: masternova-db-rw }
+            - { name: PGDATABASE, value: {{ $pg.database }} }
+          {{- include "masternova.restrictedContainer" . | nindent 10 }}
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { memory: 64Mi }
+          volumeMounts:
+            - { name: secrets, mountPath: /run/secrets, readOnly: true }
+      volumes:
+        {{- include "masternova.secretsVolume" (dict "root" . "redis" false "appKeys" (list)) | nindent 8 }}
+{{- end }}

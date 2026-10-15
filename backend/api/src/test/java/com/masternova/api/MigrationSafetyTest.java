@@ -12,7 +12,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.regex.Matcher;
@@ -25,24 +27,67 @@ import org.junit.jupiter.api.Test;
  *
  * <p>⭐ On Kubernetes the migration runs BEFORE the rollout (the db-migrate PreSync hook), and the
  * old pods keep serving until the rollout ends. So every migration must work with the previous
- * release's code. Dropping, renaming or retyping a column breaks it: measured in the D4.8 drill
- * (devops/06 §8). Such a change takes three releases (expand → switch → contract), and only the
- * last one may contain the destructive statement. It says so in its first line:
+ * release's code: reads must still find what they read, writes must still be accepted. Dropping,
+ * renaming or retyping something it uses breaks the reads; a new NOT NULL column without a default,
+ * a new constraint or a stricter type breaks the writes. Measured in the D4.8 drill (devops/06 §8):
+ * a one-release rename failed 70 % of requests during its rollout. Such a change takes three
+ * releases (expand → switch → contract), and only the last one may contain the breaking statement.
+ * It says so in its first line:
  *
  * <pre>-- contract: V22 (expand) — every running release reads course.tagline since then</pre>
  *
- * The expand migration it names must exist and be older. No Spring, no database: the rule is text.
+ * The expand migration it names must exist and be older. No Spring, no database: the rule is text,
+ * checked statement by statement.
  */
 class MigrationSafetyTest {
 
-  /** DDL that breaks the code of the release before it. */
-  private static final Pattern DESTRUCTIVE =
+  /**
+   * V1–V21 shipped before deployments rolled out under load (D4): each api pod migrated at its own
+   * start, against no older running version. V9's stricter currency CHECK would fail the rule
+   * today.
+   */
+  private static final int ROLLING_DEPLOYS_SINCE = 22;
+
+  private static final String ID = "(?:\"[^\"]+\"|\\w+)"; // plain or "quoted"
+  private static final String ALTER_TABLE = "^ALTER TABLE (?:IF EXISTS )?(?:ONLY )?" + ID + " ";
+
+  /** What breaks the release before it, matched against ONE statement (upper case, one space). */
+  private static final Map<String, Pattern> BREAKING = new LinkedHashMap<>();
+
+  static {
+    rule(
+        "drops a table, view, type, function or sequence",
+        "^DROP (?:TABLE|VIEW|MATERIALIZED VIEW|TYPE|FUNCTION|SEQUENCE)\\b");
+    rule("empties a table", "^TRUNCATE\\b");
+    rule("renames a table or column", ALTER_TABLE + ".*\\bRENAME (?!CONSTRAINT\\b)");
+    rule(
+        "drops a column",
+        ALTER_TABLE
+            + ".*\\bDROP (?!CONSTRAINT\\b|DEFAULT\\b|NOT NULL\\b|IDENTITY\\b|EXPRESSION\\b)"
+            + "(?:COLUMN )?(?:IF EXISTS )?"
+            + ID);
+    rule(
+        "changes a column's type",
+        ALTER_TABLE + ".*\\bALTER (?:COLUMN )?" + ID + " (?:SET DATA )?TYPE\\b");
+    rule("makes a column NOT NULL", ALTER_TABLE + ".*\\bSET NOT NULL\\b");
+    rule(
+        "adds a constraint the old writer may violate",
+        ALTER_TABLE
+            + ".*\\bADD (?:CONSTRAINT "
+            + ID
+            + " )?(?:CHECK|UNIQUE|FOREIGN KEY|PRIMARY KEY|EXCLUDE)\\b");
+  }
+
+  /** An ADD clause that adds a column (not a constraint). */
+  private static final Pattern ADD_COLUMN =
       Pattern.compile(
-          "\\bDROP\\s+(TABLE|COLUMN)\\b"
-              + "|\\bRENAME\\s+(COLUMN\\s+\\w+\\s+)?TO\\b"
-              + "|\\bALTER\\s+COLUMN\\s+\\w+\\s+(SET\\s+DATA\\s+)?TYPE\\b"
-              + "|\\bALTER\\s+COLUMN\\s+\\w+\\s+SET\\s+NOT\\s+NULL\\b",
-          Pattern.CASE_INSENSITIVE);
+          "^(?:"
+              + ALTER_TABLE
+              + ")?ADD (?:COLUMN )?(?!CONSTRAINT\\b|CHECK\\b|UNIQUE\\b|FOREIGN\\b|PRIMARY\\b|EXCLUDE\\b)");
+
+  private static void rule(String what, String regex) {
+    BREAKING.put(what, Pattern.compile(regex));
+  }
 
   private static final Pattern CONTRACT = Pattern.compile("^--\\s*contract:\\s*V(\\d+)\\b");
   private static final Pattern VERSION = Pattern.compile("^V(\\d+)__\\w+\\.sql$");
@@ -55,33 +100,56 @@ class MigrationSafetyTest {
         .containsKeys(1, 2, 16, 21);
 
     List<String> problems = new ArrayList<>();
-    migrations.forEach((version, sql) -> problems.addAll(check(version, sql, migrations)));
+    migrations.forEach(
+        (version, sql) -> {
+          if (version >= ROLLING_DEPLOYS_SINCE) {
+            problems.addAll(check(version, sql, migrations));
+          }
+        });
 
     assertThat(problems).as("migrations that break the release still running").isEmpty();
   }
 
   @Test
   void additiveChangesPass() {
-    assertThat(check(30, "ALTER TABLE course ADD COLUMN tagline VARCHAR(200);", Map.of()))
-        .isEmpty();
-    assertThat(check(30, "CREATE INDEX course_tagline_idx ON course (tagline);", Map.of()))
-        .isEmpty();
-    assertThat(check(30, "ALTER TABLE course ALTER COLUMN tagline DROP NOT NULL;", Map.of()))
-        .as("relaxing a constraint never breaks the old writer")
-        .isEmpty();
+    for (String sql :
+        List.of(
+            "ALTER TABLE course ADD COLUMN tagline VARCHAR(200);",
+            "ALTER TABLE course ADD COLUMN level_rank INT NOT NULL DEFAULT 0;",
+            "ALTER TABLE course ADD COLUMN IF NOT EXISTS rank INT DEFAULT 0 NOT NULL;",
+            "CREATE TABLE review (id UUID PRIMARY KEY, body TEXT NOT NULL);",
+            "CREATE INDEX course_tagline_idx ON course (tagline);",
+            "ALTER INDEX course_tagline_idx RENAME TO course_tagline_ix;",
+            "ALTER TABLE course ALTER COLUMN tagline DROP NOT NULL;",
+            "ALTER TABLE course DROP CONSTRAINT course_currency_ck;",
+            "ALTER TABLE course ALTER COLUMN tagline DROP DEFAULT;")) {
+      assertThat(check(30, sql, Map.of())).as(sql).isEmpty();
+    }
   }
 
   @Test
-  void destructiveChangesFailWithoutAContractLine() {
-    assertThat(check(30, "ALTER TABLE course RENAME COLUMN subtitle TO tagline;", Map.of()))
-        .singleElement(org.assertj.core.api.InstanceOfAssertFactories.STRING)
-        .contains("V30", "RENAME COLUMN subtitle TO");
-    assertThat(check(30, "alter table course drop column subtitle;", Map.of())).hasSize(1);
-    assertThat(check(30, "ALTER TABLE course RENAME TO courses;", Map.of())).hasSize(1);
-    assertThat(check(30, "ALTER TABLE course ALTER COLUMN level TYPE text;", Map.of())).hasSize(1);
-    assertThat(check(30, "ALTER TABLE course ALTER COLUMN title SET NOT NULL;", Map.of()))
-        .hasSize(1);
-    assertThat(check(30, "DROP TABLE course_old;", Map.of())).hasSize(1);
+  void breakingChangesFailWithoutAContractLine() {
+    for (String sql :
+        List.of(
+            "ALTER TABLE course RENAME COLUMN subtitle TO tagline;",
+            "ALTER TABLE course RENAME subtitle TO tagline;",
+            "ALTER TABLE course RENAME TO courses;",
+            "alter table course drop column subtitle;",
+            "ALTER TABLE course DROP subtitle;",
+            "ALTER TABLE course DROP COLUMN IF EXISTS \"subtitle\";",
+            "ALTER TABLE course ALTER COLUMN level TYPE text;",
+            "ALTER TABLE course ALTER \"level\" SET DATA TYPE text;",
+            "ALTER TABLE course ALTER COLUMN title SET NOT NULL;",
+            "ALTER TABLE course ADD COLUMN tagline TEXT NOT NULL;",
+            "ALTER TABLE course ADD tagline TEXT NOT NULL, ADD rank INT DEFAULT 0;",
+            "ALTER TABLE course ADD CONSTRAINT course_currency_ck CHECK (currency = 'INR');",
+            "ALTER TABLE course ADD UNIQUE (slug);",
+            "DROP TABLE course_old;",
+            "DROP VIEW course_stats;",
+            "DROP FUNCTION course_sync_tagline();",
+            "TRUNCATE course_old;")) {
+      assertThat(check(30, sql, Map.of())).as(sql).singleElement().asString().contains("V30");
+    }
   }
 
   @Test
@@ -101,20 +169,37 @@ class MigrationSafetyTest {
   @Test
   void commentsAreNotStatements() {
     assertThat(check(30, "-- later: DROP COLUMN subtitle\nSELECT 1;", Map.of())).isEmpty();
-    assertThat(check(30, "/* RENAME COLUMN a TO b */ SELECT 1;", Map.of())).isEmpty();
+    assertThat(check(30, "/* ALTER TABLE a RENAME b TO c; */ SELECT 1;", Map.of())).isEmpty();
   }
 
   static List<String> check(int version, String sql, Map<Integer, String> all) {
-    String firstLine = sql.strip().lines().findFirst().orElse("");
-    Matcher contract = CONTRACT.matcher(firstLine);
-    Matcher destructive = DESTRUCTIVE.matcher(withoutComments(sql));
-    if (!destructive.find()) {
+    List<String> breaking = new ArrayList<>();
+    for (String statement : withoutComments(sql).split(";")) {
+      String normal = statement.strip().replaceAll("\\s+", " ").toUpperCase(Locale.ROOT);
+      BREAKING.forEach(
+          (what, rule) -> {
+            if (rule.matcher(normal).find()) {
+              breaking.add("'%s' %s".formatted(normal, what));
+            }
+          });
+      // ⭐ in code, not one regex: nested "anything but DEFAULT" quantifiers backtracked forever
+      if (normal.startsWith("ALTER TABLE ")) {
+        for (String clause : normal.split(",")) {
+          String c = clause.strip();
+          if (ADD_COLUMN.matcher(c).find() && c.contains(" NOT NULL") && !c.contains(" DEFAULT ")) {
+            breaking.add("'%s' adds a NOT NULL column without a default".formatted(normal));
+          }
+        }
+      }
+    }
+    if (breaking.isEmpty()) {
       return List.of();
     }
+    Matcher contract = CONTRACT.matcher(sql.strip().lines().findFirst().orElse(""));
     if (!contract.find()) {
       return List.of(
-          "V%d: '%s' breaks the release still running during the rollout. Expand first; this"
-                  .formatted(version, destructive.group().replaceAll("\\s+", " "))
+          "V%d: %s — breaks the release still running during the rollout. Expand first; this"
+                  .formatted(version, String.join("; ", breaking))
               + " belongs in a later contract migration whose first line is '-- contract: V<n>'");
     }
     int expand = Integer.parseInt(contract.group(1));

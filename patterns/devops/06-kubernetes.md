@@ -604,9 +604,13 @@ private key and every app credential. Fixed in
    still `yes` through the `*/*` rule;
 2. `rbac.enabledCustomScaledRefKinds: false`: we scale a Deployment, which KEDA supports
    without that rule;
-3. a **read-only Postgres role** `keda_reader` (a CNPG *managed role*, `inRoles:
-   [pg_read_all_data]`, connection limit 4) instead of the app owner's credentials. Verified:
-   `SELECT` works, `DELETE` → `permission denied`;
+3. a **read-only Postgres role** `keda_reader` (a CNPG *managed role*, connection limit 4) instead
+   of the app owner's credentials. First it was in `pg_read_all_data`. Verified: `SELECT` works,
+   `DELETE` → `permission denied`. The phase review caught that "read-only" still meant *every
+   table*: password hashes, refresh tokens, orders. Now the role is a bare login, and the apps'
+   [`db-grants`](../../deploy/helm/masternova/templates/db-grants-job.yaml) PreSync hook (weight 1,
+   after `db-migrate`) grants `SELECT (status, next_attempt_at)` on the two queue tables, as their
+   owner. That's exactly what the two queries filter on;
 4. a `ClusterTriggerAuthentication`, whose Secret is read from KEDA's namespace: the reader
    password is created in both namespaces by `make k8s-secrets`.
 
@@ -642,7 +646,7 @@ flowchart TB
   root -->|"wave 1: only once infra is Healthy"| apps["Application masternova<br/>deploy/helm/masternova + values-local.yaml"]
   apps -.->|PreSync hook| mig[Job db-migrate]
   infra -.->|PostSync hook| mi[Job media-init]
-  proj["AppProject masternova<br/>1 repo · 2 namespaces · no Secrets · 1 cluster kind"] -.fences.- root & infra & apps
+  proj["AppProject masternova<br/>1 repo · 1 namespace · no Secrets · 1 cluster kind"] -.fences.- root & infra & apps
 ```
 
 - **App-of-apps.** The root syncs [`deploy/argocd/apps/`](../../deploy/argocd/apps/), whose
@@ -654,9 +658,17 @@ flowchart TB
   stops the sync before any pod rolls), `post-install` → PostSync, `before-hook-creation` →
   `BeforeHookCreation`. The charts didn't change.
 - **The AppProject is a fence.** The `default` project allows any repo, namespace and kind.
-  [`project.yaml`](../../deploy/argocd/project.yaml): this repo only, namespaces
-  `masternova` + `argocd`, cluster-scoped kinds limited to `ClusterTriggerAuthentication`, and
-  **`Secret` blacklisted**: a chart that started templating one fails to sync.
+  [`project.yaml`](../../deploy/argocd/project.yaml): this repo only, namespace `masternova`,
+  cluster-scoped kinds limited to `ClusterTriggerAuthentication`, and **`Secret` blacklisted**:
+  a chart that started templating one fails to sync.
+  - **Found in the phase's security review:** the first version also let `masternova` deploy
+    into `argocd` (for the child Applications). That meant a file in `deploy/argocd/apps` could
+    create *any* namespaced kind there, `argocd-rbac-cm` included (an admin UI without a login).
+    ⭐ Argo CD doesn't check which `project` a child Application names, so a child saying
+    `project: default` got everything.
+  - Now: the root has its own project (`masternova-root`: `Application` objects in `argocd`,
+    nothing else), and the built-in `default` project is **emptied** (no repos, destinations or
+    kinds).
 - **The database is protected from GitOps itself.** The CNPG `Cluster` carries
   `argocd.argoproj.io/sync-options: Prune=false,Delete=false` (and `helm.sh/resource-policy:
   keep`), and the infra Application has **no** `resources-finalizer`. Neither a deleted line nor
@@ -785,12 +797,27 @@ test-only ones, and the **messaging jar's** V2/V16) and fails on `DROP TABLE|COL
 naming an **older, existing** expand migration. Relaxing a constraint (`DROP NOT NULL`) is
 allowed: it never breaks the old writer.
 
+**What it catches** (after the phase review widened it; see below), per statement, with or
+without the optional `COLUMN` keyword and with quoted identifiers:
+
+- reads that break: dropping a table, view, type, function or sequence; `TRUNCATE`; renaming a
+  table or column; dropping a column; changing a column's type;
+- writes that break: `SET NOT NULL`; `ADD … NOT NULL` without a `DEFAULT` (the old INSERTs omit
+  the column); `ADD CONSTRAINT`/`CHECK`/`UNIQUE`/FK (old writers may violate it).
+
+It doesn't flag `ALTER INDEX … RENAME` or relaxations (`DROP NOT NULL`, `DROP CONSTRAINT`,
+`DROP DEFAULT`). V1–V21 are grandfathered (`ROLLING_DEPLOYS_SINCE = 22`): they shipped when each
+api pod migrated at its own start, and V9's stricter currency `CHECK` would fail the rule today.
+
 **It failed its own mutation check at first.** With the drill's V23 and V24 copied in, it still
 passed. `getResource("/db/migration")` returned the *test* classpath's directory (a test-only
 `V1000`), which hid the real ones. Fixed by enumerating every `db/migration` resource, jars
 included, and asserting V1, V2, V16 and V21 are seen. After the fix: the clean tree passes; with
-the drill's files, `V23: 'DROP COLUMN' breaks the release still running…` and `V24: 'RENAME
-COLUMN tagline TO'…`.
+the drill's files, V23 (`DROP FUNCTION` + `DROP COLUMN`) and V24 (`RENAME COLUMN`) fail, plus a
+V25 test file with V9's `CHECK` and an `ADD … NOT NULL`. On the way, one regex for "NOT NULL with
+no DEFAULT in the same clause" (nested negative-lookahead quantifiers) **backtracked
+catastrophically**: a 0.1 s test ran past 10 minutes. That rule is plain code now: split on
+commas, then two `contains`.
 
 **Clean-up after the drill:** the schema was back to its original shape (V24 renamed it back;
 checked in `information_schema`), and the three drill rows were deleted from
@@ -842,6 +869,9 @@ together with Flyway's `executeInTransaction=false` for those files. Chaos drill
 | All replicas on one node | `topologySpreadConstraints` on the hostname |
 | Expecting a DB switchover to be invisible | in-flight transactions die (`57P01`): clients retry, writes carry idempotency keys |
 | A rule test that never failed | mutation-check it: ours passed vacuously until the drill's files went in |
+| A child Application's `project` trusted by the root's | Argo CD doesn't check it: empty the `default` project; the root gets a project of its own |
+| "Read-only" DB role = `pg_read_all_data` | grant the exact columns the scaler reads |
+| Emergency `automated: null` on a child of a self-healing root | pause the root first, or the patch is reverted in seconds |
 
 ---
 

@@ -16,7 +16,8 @@ ports:
     nodeFilters: [loadbalancer]
 registries:
   # ⭐ A registry container next to the cluster: `docker push localhost:5050/…` from the host, and the
-  #    nodes pull the same image as k3d-registry.localhost:5050/… (k3d writes the mirror config).
+  #    nodes pull the same image as registry.localhost:5050/… (k3d writes the mirror into each
+  #    node's registries.yaml).
   #    No `k3d image import` tarballs: pushing to a registry is what CI does, so the local loop
   #    rehearses the real one.
   create:

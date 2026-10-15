@@ -34,13 +34,12 @@ spec:
   {{- if .name }}
   managed:
     roles:
-      # ⭐ pg_read_all_data (PG 14+): SELECT on every table, no INSERT/UPDATE/DELETE, no DDL.
-      #    Narrower would be a GRANT per table, which couples the schema's migrations to this role.
+      # ⭐ A login and nothing else. What it may read is granted column by column by the apps'
+      #    db-grants hook (the tables are the apps'): status + next_attempt_at of the two queues.
       - name: {{ .name }}
         ensure: present
         login: true
         connectionLimit: 4
-        inRoles: [pg_read_all_data]
         passwordSecret: { name: {{ .secret }} }
   {{- end }}
   {{- end }}

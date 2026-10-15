@@ -30,8 +30,9 @@ runs. Building it in D4 hit three constraints:
 3. **App-of-apps.** One root Application (`deploy/argocd/root.yaml`, the only object applied by
    hand) syncs both, in sync waves (infra 0, apps 1), with the Application health check restored
    so wave 1 waits for wave 0 to be Healthy.
-4. **Fences.** An AppProject limited to this repo, two namespaces, one cluster-scoped kind and
-   **no Secrets**. The database opts out of prune and delete.
+4. **Fences.** An AppProject limited to this repo, one namespace, one cluster-scoped kind and
+   **no Secrets**; the root in a project that may create only Applications; the built-in
+   `default` project emptied. The database opts out of prune and delete.
 
 ## Consequences
 

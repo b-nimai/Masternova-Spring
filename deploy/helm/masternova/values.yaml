@@ -17,17 +17,16 @@ secrets:
 
 # Non-secret settings → ConfigMap `masternova-config` → env of api, worker and the migrate Job.
 # A free-form map: these are the apps' own env names (application.yaml), not a second vocabulary.
+# ⭐ No dev-only service names here (mailpit, seaweedfs): each environment says where its mail and
+#    storage are (values-local.yaml), e.g. MAIL_PROVIDER=resend, or STORAGE_ENDPOINT="" for AWS S3.
 config:
   DATABASE_URL: jdbc:postgresql://masternova-db-rw:5432/masternova
   REDIS_HOST: redis
   REDIS_PORT: "6379"
-  STORAGE_ENDPOINT: http://seaweedfs:8333
   STORAGE_PUBLIC_ENDPOINT: ""
   WEB_URL: ""
   LOG_VERIFICATION_LINKS: "false"
   PAYMENT_PROVIDER: razorpay # fails closed: no keys, no start (commerce LLD §6)
-  SMTP_HOST: mailpit
-  SMTP_PORT: "1025"
   TRACING_SAMPLING_PROBABILITY: "0.1"
 
 api:

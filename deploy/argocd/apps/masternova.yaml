@@ -23,6 +23,6 @@ spec:
   destination: { server: https://kubernetes.default.svc, namespace: masternova }
   syncPolicy:
     automated: { prune: true, selfHeal: true }
-    retry: # a sync that lost a race (e.g. a CRD not yet served) is retried, not left failed
+    retry: # a sync that lost a race is retried: Argo CD never re-attempts a failed automated sync itself
       limit: 5
       backoff: { duration: 10s, factor: 2, maxDuration: 3m }

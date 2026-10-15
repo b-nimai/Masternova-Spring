@@ -7,6 +7,9 @@ image:
   tag: sha-5d7e9da # the newest commit with all three images on GHCR (CI fix in D4.5, ci.yml)
 
 config:
+  STORAGE_ENDPOINT: http://seaweedfs:8333 # the infra chart's SeaweedFS
+  SMTP_HOST: mailpit # the infra chart's Mailpit
+  SMTP_PORT: "1025"
   STORAGE_PUBLIC_ENDPOINT: https://s3.masternova.localhost:8443
   WEB_URL: https://masternova.localhost:8443
   PAYMENT_PROVIDER: fake # no Razorpay keys locally

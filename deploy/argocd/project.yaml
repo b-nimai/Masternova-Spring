@@ -9,11 +9,42 @@ spec:
   description: Masternova on the local k3d cluster (devops/06 §7)
   sourceRepos: [https://github.com/b-nimai/Masternova-Spring.git] # this repo, nothing else
   destinations:
-    - { server: https://kubernetes.default.svc, namespace: masternova } # the workloads
-    - { server: https://kubernetes.default.svc, namespace: argocd } # the root's child Applications
+    - { server: https://kubernetes.default.svc, namespace: masternova } # the workloads only
   # cluster-scoped kinds: only the one the charts need (KEDA's auth for the worker's scaler)
   clusterResourceWhitelist:
     - { group: keda.sh, kind: ClusterTriggerAuthentication }
   # ⭐ Secrets never come from git: a chart that started templating one would fail to sync
   namespaceResourceBlacklist:
     - { group: "", kind: Secret }
+---
+# The root's own project: it may create Application objects in `argocd`, and nothing else there.
+# (In `masternova`'s project, the argocd destination would let a file in deploy/argocd/apps
+# create ANY namespaced kind next to Argo CD itself: argocd-cm, argocd-rbac-cm — an admin UI
+# without a login. Security review, D4.)
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: masternova-root
+  namespace: argocd
+spec:
+  description: The app-of-apps root — Application objects only
+  sourceRepos: [https://github.com/b-nimai/Masternova-Spring.git]
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: argocd }
+  namespaceResourceWhitelist:
+    - { group: argoproj.io, kind: Application }
+---
+# ⭐ Argo CD does NOT check the `project` a child Application names: a file under
+#    deploy/argocd/apps could say `project: default`, and the built-in default project allows
+#    every repo, destination and kind (cluster-admin, through the controller). Emptied, it allows
+#    nothing; every Application here names its own project.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: argocd
+spec:
+  sourceRepos: []
+  destinations: []
+  clusterResourceWhitelist: []
+  namespaceResourceWhitelist: []

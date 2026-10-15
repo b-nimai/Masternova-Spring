@@ -22,3 +22,7 @@ spec:
     automated:
       prune: true # removed from git = removed from the cluster (the CNPG Cluster opts out, see its template)
       selfHeal: true # a `kubectl edit` is reverted: git is the only way to change the cluster
+    retry: # a sync that lost a race (a CRD or webhook not yet served on a fresh cluster) is retried:
+      # Argo CD never re-attempts a failed automated sync of the same commit on its own
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

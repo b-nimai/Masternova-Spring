@@ -34,9 +34,17 @@ drops (the switch release is fully rolled out).
   of requests against a renamed column). Roll **forward** with a fix, or, if the migration was
   an *expand* (additive), the previous image still works: revert the bump.
 - Never "fix" a failed sync with `kubectl edit`: `selfHeal` reverts it within seconds. Change
-  git, or for an emergency, pause automation on the Application first:
-  `kubectl -n argocd patch app masternova --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'`
-  (and restore it from git afterwards: the root re-syncs the Application).
+  git. For an emergency hand-edit, pause automation **on the root first**: it manages the
+  `masternova` Application and would revert a patch to it just as fast.
+
+  ```bash
+  off='{"spec":{"syncPolicy":{"automated":null}}}'
+  kubectl -n argocd patch app masternova-root --type merge -p "$off"
+  kubectl -n argocd patch app masternova      --type merge -p "$off"
+  ```
+
+  Afterwards, put the fix in git and restore both: `make k8s-gitops` re-applies the root, which
+  re-syncs its children.
 
 ## A failed migration (PreSync hook failed)
 

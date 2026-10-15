@@ -26,14 +26,30 @@ export const options = {
   },
 };
 
-export function setup() {
+function logIn() {
   const login = http.post(
     `${BASE}/api/v1/auth/login`,
     JSON.stringify({ email: 'instructor@seed.test', password: 'seed-password' }),
-    { headers: { 'Content-Type': 'application/json' } },
+    { headers: { 'Content-Type': 'application/json' }, tags: { name: 'login' } },
   );
   if (login.status !== 200) fail(`seed instructor login: ${login.status} (make k8s-seed first)`);
-  return { token: login.json('accessToken') }; // 15 min: longer than the drill
+  return login.json('accessToken');
+}
+
+export function setup() {
+  logIn(); // fail fast, before any load, if the seed instructor is missing
+}
+
+// Per VU: access tokens live 15 min and DURATION may be longer. Log in again after 10 min, so an
+// expired token is never mistaken for the deployment failing.
+let token = null;
+let tokenAt = 0;
+function currentToken() {
+  if (token === null || Date.now() - tokenAt > 10 * 60 * 1000) {
+    token = logIn();
+    tokenAt = Date.now();
+  }
+  return token;
 }
 
 export function browse() {
@@ -42,8 +58,8 @@ export function browse() {
   sleep(0.3);
 }
 
-export function author({ token }) {
-  const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+export function author() {
+  const headers = { Authorization: `Bearer ${currentToken()}`, 'Content-Type': 'application/json' };
   const created = http.post(
     `${BASE}/api/v1/instructor/courses`,
     JSON.stringify({ title: `Drill ${__VU}-${__ITER}`, categorySlug: 'web-development', level: 'BEGINNER', language: 'en' }),

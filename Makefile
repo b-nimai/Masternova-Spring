@@ -78,8 +78,13 @@ e2e: ## Browser e2e tests (Playwright) against the running stack: make stack && 
 	cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
 
 # ---- Kubernetes (Phase D4, patterns/devops/06): a local k3d cluster + its registry ----
-# Images are tagged with the commit (immutable, like CI's :sha-…) and a dirty tree gets -dirty.
-TAG ?= sha-$(shell git rev-parse --short=7 HEAD)$(shell git diff --quiet HEAD -- backend frontend || echo -dirty)
+# Images are tagged with the commit (immutable, like CI's :sha-…). A dirty tree adds a hash of the
+# uncommitted changes: every edit gets its own tag, so the pods really roll (pullPolicy
+# IfNotPresent would keep a re-pushed "-dirty" tag's old image). `:=`: computed once per make run.
+TAG ?= $(shell h=$$(git rev-parse --short=7 HEAD); \
+  git diff --quiet HEAD -- backend frontend && echo sha-$$h \
+  || echo sha-$$h-dirty-$$(git diff HEAD -- backend frontend | shasum | cut -c1-7))
+TAG := $(TAG)
 REGISTRY := localhost:5050
 
 k8s-up: ## Create the local k3d cluster (3 nodes, registry on :5050, ingress on :8082/:8443)
@@ -114,27 +119,35 @@ k8s-images: images ## Build the three images and push them to the cluster's regi
 	  docker push -q $(REGISTRY)/masternova-spring-$$img:$(TAG); \
 	done
 
-k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files (never from git)
+K8S_SECRETS_LOG := $(shell mktemp -u)
+k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files (never from git); restart pods if one changed
 	kubectl apply -f deploy/k3d/namespace.yaml
 	kubectl -n masternova create secret generic masternova-app \
 	  --from-file=JWT_ACCESS_SECRET=secrets/jwt_access_secret \
 	  --from-file=NOTIFICATION_TOKEN_SECRET=secrets/notification_token_secret \
 	  --from-file=PLAYBACK_TOKEN_SECRET=secrets/playback_token_secret \
 	  --from-file=ENTITLEMENT_PLAYBACK_SECRET=secrets/entitlement_playback_secret \
-	  --dry-run=client -o yaml | kubectl apply -f -
+	  --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG)
 	kubectl -n masternova create secret generic masternova-db --type=kubernetes.io/basic-auth \
 	  --from-literal=username=masternova --from-file=password=secrets/db_password \
-	  --dry-run=client -o yaml | kubectl apply -f -
+	  --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG)
 	kubectl -n masternova create secret generic masternova-redis --from-file=password=secrets/redis_password \
-	  --dry-run=client -o yaml | kubectl apply -f -
+	  --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG)
 	@# the read-only role KEDA queries with: CNPG creates it from the copy in masternova, KEDA
 	@# reads the copy in its own namespace (it may read no other namespace's Secrets)
 	for ns in masternova keda; do \
-	  kubectl create namespace $$ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null; \
+	  kubectl create namespace $$ns --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG) >/dev/null; \
 	  kubectl -n $$ns create secret generic masternova-db-reader --type=kubernetes.io/basic-auth \
 	    --from-literal=username=keda_reader --from-file=password=secrets/db_reader_password \
-	    --dry-run=client -o yaml | kubectl apply -f -; \
+	    --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG); \
 	done
+	@# Secrets are read once at JVM start (configtree), so a changed one restarts nothing by itself:
+	@# roll the apps. (A rolling restart briefly mixes old- and new-key pods: rotate signing keys in
+	@# a quiet moment.) The `restartedAt` annotation isn't in git, and Argo CD's diff ignores it.
+	@if grep -q ' configured' $(K8S_SECRETS_LOG); then \
+	  echo "a Secret changed: restarting api and worker"; \
+	  kubectl -n masternova rollout restart deploy/api deploy/worker 2>/dev/null || true; \
+	fi; rm -f $(K8S_SECRETS_LOG)
 
 # The inner loop: both charts, the apps on locally built images. Argo CD deploys the same charts
 # from git with GHCR images (D4.7). The infra release first: the apps' migration hook needs the DB.
