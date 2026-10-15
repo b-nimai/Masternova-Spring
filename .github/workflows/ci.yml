@@ -4,9 +4,10 @@
 #   frontend     → lint, unit tests (Vitest), production build
 #   workflows    → actionlint on every workflow file
 #   e2e          → the whole stack in compose + Playwright in Chromium (sign up, log in, reload, …)
-#   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL);
-#                  on main, push the scanned images to GHCR as :sha-<commit> and :main, with SBOM +
-#                  provenance attestations, and sign them keylessly with cosign
+#   images       → build all three Docker images for amd64 AND arm64 (each on its own native runner),
+#                  scan each with Trivy (fails on fixable HIGH/CRITICAL); on main, push the scanned
+#                  images by digest, with SBOM + provenance attestations
+#   publish      → on main: one tag for both platforms (:sha-<commit>, :main), signed keylessly with cosign
 #   helm         → lint both charts, validate what they render (kubeconform, CRD schemas included)
 # Versioned releases (vX.Y.Z tags) live in release.yml. Deploying is GitOps (D4.7): a commit that
 # changes the image tag in deploy/helm/masternova/values-local.yaml, synced by Argo CD.
@@ -192,63 +193,63 @@ jobs:
       - run: pnpm build
 
   images:
-    name: image (${{ matrix.name }})
+    name: image (${{ matrix.app.name }}, ${{ matrix.arch }})
     needs: [changes, backend, frontend]
     # run when either side changed and neither side failed (a skipped job is fine)
     if: >-
       !failure() && !cancelled() &&
       (needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true')
-    runs-on: ubuntu-latest
+    # ⭐ Native runners, not QEMU: the k3d nodes on an Apple-silicon laptop are arm64, and CI's
+    #    amd64-only images left the first GitOps deploy in ImagePullBackOff ("no match for platform
+    #    in manifest", devops/06 §7). Emulating arm64 makes a Maven build several times slower.
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     permissions:
       contents: read
       packages: write # push to ghcr.io with the workflow's own GITHUB_TOKEN (no stored secret)
-      id-token: write # an OIDC token for keyless cosign signing (no signing key to store or leak)
     env:
       # Only main publishes. PRs build and scan the same images but never push them.
       PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      IMAGE: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.app.name }}
     outputs:
       day: ${{ steps.day.outputs.day }} # e2e rebuilds from the same cache: same refresh key
     strategy:
       fail-fast: false
       matrix:
-        include:
+        app:
           - { name: api, context: backend, args: "APP=api" }
           - { name: worker, context: backend, args: "APP=worker\nPORT=8090" }
           - { name: web, context: frontend, args: "" }
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      - name: Image names, tags and OCI labels
+      - name: OCI labels
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
-          # sha-<7 chars>: immutable, one per commit (what deployments pin) · main: moving pointer
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=main,enable={{is_default_branch}}
+          images: ${{ env.IMAGE }}
       # The day busts the cached `apk upgrade` layer once a day (a CVE fixed upstream yesterday
       # must not hide behind last week's layer); the push below shares it, so it stays a cache hit.
       - name: Package refresh key
         id: day
         run: echo "day=$(date -u +%F)" >> "$GITHUB_OUTPUT"
-      - name: Build ${{ matrix.name }}
+      - name: Build ${{ matrix.app.name }} (${{ matrix.arch }})
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.context }}
+          context: ${{ matrix.app.context }}
           build-args: |
-            ${{ matrix.args }}
+            ${{ matrix.app.args }}
             GIT_SHA=${{ github.sha }}
             APK_REFRESH=${{ steps.day.outputs.day }}
-          tags: masternova-spring/${{ matrix.name }}:ci
+          tags: masternova-spring/${{ matrix.app.name }}:ci
           labels: ${{ steps.meta.outputs.labels }}
           load: true
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-from: type=gha,scope=${{ matrix.app.name }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app.name }}-${{ matrix.arch }}
       - name: Trivy scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: masternova-spring/${{ matrix.name }}:ci
+          image-ref: masternova-spring/${{ matrix.app.name }}:ci
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
@@ -260,33 +261,97 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Push ${{ matrix.name }}
+      # Untagged, by digest: the publish job puts both platforms under one tag once all are pushed.
+      - name: Push ${{ matrix.app.name }} (${{ matrix.arch }})
         if: env.PUBLISH == 'true'
         id: push
         uses: docker/build-push-action@v7
         with:
-          context: ${{ matrix.context }}
+          context: ${{ matrix.app.context }}
           build-args: |
-            ${{ matrix.args }}
+            ${{ matrix.app.args }}
             GIT_SHA=${{ github.sha }}
             APK_REFRESH=${{ steps.day.outputs.day }}
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          push: true
-          cache-from: type=gha,scope=${{ matrix.name }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.app.name }}-${{ matrix.arch }}
           # attestations stored next to the image: an SBOM of everything in it, and how it was built
           sbom: true
           provenance: mode=max
-      - uses: sigstore/cosign-installer@v4.1.2 # this action publishes no moving major tag
+      - name: Hand the digest to the publish job
         if: env.PUBLISH == 'true'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: mkdir -p "$RUNNER_TEMP/digests" && touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v7
+        if: env.PUBLISH == 'true'
+        with:
+          name: digest-${{ matrix.app.name }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: publish (${{ matrix.name }})
+    needs: images
+    # main only, and only when every platform of every image built, passed its scan and pushed
+    if: >-
+      !cancelled() && needs.images.result == 'success' &&
+      github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the workflow's own GITHUB_TOKEN (no stored secret)
+      id-token: write # an OIDC token for keyless cosign signing (no signing key to store or leak)
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [api, worker, web]
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: digest-${{ matrix.name }}-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          # sha-<7 chars>: immutable, one per commit (what deployments pin) · main: moving pointer
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=main,enable={{is_default_branch}}
+      # ⭐ A registry-side operation: one index that lists both platforms' manifests (and their
+      #    attestations); a node pulls the one matching its architecture.
+      - name: One tag, both platforms
+        id: index
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -- *
+          [ "$#" -eq 2 ] || { echo "expected 2 platform digests, got: $*"; exit 1; }
+          # shellcheck disable=SC2046,SC2086 # one -t per tag, one source per digest
+          docker buildx imagetools create $(printf -- '-t %s ' $TAGS) $(printf "$IMAGE@sha256:%s " "$@")
+          tag="$IMAGE:sha-${GITHUB_SHA::7}"
+          docker buildx imagetools inspect "$tag"
+          echo "digest=$(docker buildx imagetools inspect "$tag" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@v4.1.2 # this action publishes no moving major tag
       # ⭐ Keyless: GitHub's OIDC token proves "this workflow, this repo, this ref" to Sigstore,
       #    which issues a 10-minute certificate; the signature lands in the public Rekor log.
       #    Signing the DIGEST covers every tag that points at it, including later release tags.
       - name: Sign ${{ matrix.name }}
-        if: env.PUBLISH == 'true'
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/masternova-spring-${{ matrix.name }}
-          DIGEST: ${{ steps.push.outputs.digest }}
+          DIGEST: ${{ steps.index.outputs.digest }}
         run: cosign sign --yes "$IMAGE@$DIGEST"
 
   e2e:
@@ -300,7 +365,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      # The images job just built these; with the same inputs every layer comes from its cache.
+      # The images job just built these (amd64: this runner); with the same inputs every layer
+      # comes from its cache.
       - name: Load api image
         uses: docker/build-push-action@v7
         with:
@@ -311,7 +377,7 @@ jobs:
             APK_REFRESH=${{ needs.images.outputs.day }}
           tags: masternova-spring/api:local
           load: true
-          cache-from: type=gha,scope=api
+          cache-from: type=gha,scope=api-amd64
       - name: Load worker image
         uses: docker/build-push-action@v7
         with:
@@ -323,7 +389,7 @@ jobs:
             APK_REFRESH=${{ needs.images.outputs.day }}
           tags: masternova-spring/worker:local
           load: true
-          cache-from: type=gha,scope=worker
+          cache-from: type=gha,scope=worker-amd64
       - name: Load web image
         uses: docker/build-push-action@v7
         with:
@@ -333,7 +399,7 @@ jobs:
             APK_REFRESH=${{ needs.images.outputs.day }}
           tags: masternova-spring/web:local
           load: true
-          cache-from: type=gha,scope=web
+          cache-from: type=gha,scope=web-amd64
       - name: Start the stack
         run: |
           make secrets
@@ -373,7 +439,7 @@ jobs:
   #    single stable status, so the protection rule never needs editing.
   ci-ok:
     if: always()
-    needs: [changes, backend, patterns-lab, frontend, workflows, observability, helm, images, e2e]
+    needs: [changes, backend, patterns-lab, frontend, workflows, observability, helm, images, publish, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Every job succeeded or was skipped

@@ -1,7 +1,8 @@
 # Release: pushing a tag vX.Y.Z (as the repo owner, on a commit that is on main) …
 #   1. promotes the images CI already built, scanned and pushed for that commit (:sha-<commit>)
 #      to :X.Y.Z and :X.Y — no rebuild, so the release is byte-for-byte what was tested; if CI
-#      never built that commit (e.g. a docs-only merge), it builds, scans and pushes it here;
+#      never built that commit (e.g. a docs-only merge), it builds, scans and pushes it here
+#      (amd64 + arm64 like CI, but emulated: slow, and only for this rare path);
 #   2. attaches a CycloneDX SBOM of each released image (CI already signed the digest; a fresh
 #      build here is signed here);
 #   3. creates the GitHub Release with notes generated from the merged PRs.
@@ -108,7 +109,7 @@ jobs:
           tags: masternova-spring/${{ matrix.name }}:release
           labels: ${{ steps.meta.outputs.labels }}
           load: true
-          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-from: type=gha,scope=${{ matrix.name }}-amd64
       - name: Trivy scan
         if: steps.existing.outputs.found == 'false'
         uses: aquasecurity/trivy-action@v0.36.0
@@ -117,19 +118,25 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+      # arm64 for the k3d nodes on an Apple-silicon laptop (devops/06 §7); the scan above was amd64's
+      - uses: docker/setup-qemu-action@v4
+        if: steps.existing.outputs.found == 'false'
       - name: Push
         if: steps.existing.outputs.found == 'false'
         id: push
         uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
           build-args: |
             ${{ matrix.args }}
             GIT_SHA=${{ github.sha }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           push: true
-          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-from: |
+            type=gha,scope=${{ matrix.name }}-amd64
+            type=gha,scope=${{ matrix.name }}-arm64
           sbom: true
           provenance: mode=max
       - uses: sigstore/cosign-installer@v4.1.2 # this action publishes no moving major tag

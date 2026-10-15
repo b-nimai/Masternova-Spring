@@ -709,6 +709,44 @@ From an empty laptop to a running system, out of git: **≈ 5.6 minutes**. That'
 recovery story, and it's the reason Secrets are the only thing created by hand (`make
 k8s-secrets`). The next step is Sealed Secrets or External Secrets (§9).
 
+### 7.5 Found after the merge: CI's images were amd64 only ⭐⭐⭐
+
+§7.4 proved everything with **locally built** images. The first deploy from GHCR
+(`sha-91b7c3c`, the D4 merge) stopped at the PreSync hook: `db-migrate` sat in
+`ImagePullBackOff` with `no match for platform in manifest`. CI's runners are amd64, and the k3d
+nodes on an Apple-silicon laptop are **arm64**. `bump.sh` hadn't caught it: it checked that the
+tag *existed*, not *what it contained*.
+
+Nothing went down, and that is the design working: the hook failed **before** the rollout, so
+Argo CD never touched the Deployments and the old pods kept serving (HTTP 200 throughout).
+
+The fix, in [`ci.yml`](../../.github/workflows/ci.yml):
+
+```mermaid
+flowchart LR
+    subgraph images["images (6 jobs)"]
+        A["api · amd64<br/>ubuntu-latest"]
+        B["api · arm64<br/>ubuntu-24.04-arm"]
+        C["… worker, web"]
+    end
+    A -- "build, Trivy,<br/>push by digest" --> R[(GHCR)]
+    B -- "build, Trivy,<br/>push by digest" --> R
+    R --> P["publish (api)<br/>imagetools create:<br/>one index, both digests,<br/>:sha-… + :main"]
+    P --> S["cosign sign<br/>the index digest"]
+```
+
+- **Native arm64 runners**, not QEMU: emulating a Maven build is several times slower. Free on a
+  public repository.
+- Each platform is **built and scanned** on its own runner (on PRs too, so an arm64-only break
+  shows up before the merge), then pushed **untagged, by digest**.
+- A `publish` job per image tags one **index** listing both manifests (a registry-side
+  operation, like the release promotion) and signs its digest. A node pulls the manifest for its
+  own architecture.
+- `bump.sh` now reads the index and refuses a tag without **both** `amd64` and `arm64`. Tested:
+  `sha-91b7c3c` → `has no linux/arm64 image`.
+- `release.yml`'s rare "CI never built this commit" path builds both platforms too (QEMU there:
+  it is a fallback).
+
 ---
 
 ## 8. Zero downtime, measured ⭐⭐⭐
@@ -863,6 +901,7 @@ together with Flyway's `executeInTransaction=false` for those files. Chaos drill
 | `resources-finalizer` / prune on the database | `Prune=false,Delete=false` on the Cluster; no finalizer on the infra Application |
 | CI with cluster credentials pushing deploys | pull: the cluster syncs from git; CI only publishes images |
 | A tag in git that CI never published | check the registry before committing the bump (`bump.sh`) |
+| Images built only for CI's architecture | one index per tag with every platform your nodes run (an Apple-silicon laptop is arm64); check the platforms, not just the tag |
 | Renaming / dropping / retyping a column in one release | expand → switch → contract, three releases; `MigrationSafetyTest` enforces it |
 | "We can always roll back the image" | not past a migration: an image rollback doesn't roll back the schema |
 | `minAvailable: N` PDBs, or a PDB on a single replica | `maxUnavailable: 1`; no PDB for a singleton |
