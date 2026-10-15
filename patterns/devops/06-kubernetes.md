@@ -6,7 +6,7 @@
 > the cluster pulls it.
 
 **Roadmap:** D4.1–D4.8 · **Last updated:** 2026-10-15
-**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, namespace, Traefik config, local CA), [`deploy/helm/masternova/`](../../deploy/helm/masternova/) (the apps' chart), [`deploy/helm/masternova-infra/`](../../deploy/helm/masternova-infra/) (CNPG `Cluster`, Redis, SeaweedFS, Mailpit), `Makefile` (`k8s-*`, `helm-check`)
+**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, namespace, Traefik config, local CA, KEDA + Argo CD values), [`deploy/argocd/`](../../deploy/argocd/) (project, app-of-apps, `bump.sh`), [`deploy/helm/masternova/`](../../deploy/helm/masternova/) (the apps' chart), [`deploy/helm/masternova-infra/`](../../deploy/helm/masternova-infra/) (CNPG `Cluster`, Redis, SeaweedFS, Mailpit), `Makefile` (`k8s-*`, `helm-check`)
 **Try it:** `make k8s-up k8s-platform k8s-images k8s-deploy`, then https://masternova.localhost:8443 (§3) or `make k8s-e2e`.
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
@@ -19,6 +19,7 @@
 | 4 | [Stateful workloads: an operator, a chart, a Job](#4-stateful-workloads-an-operator-a-chart-a-job-) | ⭐⭐⭐ | D4.4 |
 | 5 | [Helm: two charts, values per environment](#5-helm-two-charts-values-per-environment-) | ⭐⭐⭐ | D4.5 |
 | 6 | [Autoscaling: HPA on CPU, KEDA on queues](#6-autoscaling-hpa-on-cpu-keda-on-queues-) | ⭐⭐⭐ | D4.6 |
+| 7 | [GitOps with Argo CD](#7-gitops-with-argo-cd-) | ⭐⭐⭐ | D4.7 |
 | 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ | — |
 | 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ | — |
 | 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ | — |
@@ -619,6 +620,84 @@ stop needing the old access.
 
 ---
 
+## 7. GitOps with Argo CD ⭐⭐⭐
+
+### 7.1 Push vs pull
+
+| | Push (CI runs `helm upgrade`) | **Pull (GitOps)** |
+|---|---|---|
+| who touches the cluster | CI, with cluster-admin credentials stored in GitHub | a controller *inside* the cluster |
+| a laptop cluster | unreachable from GitHub's runners | pulls from GitHub: works behind NAT (ADR-0004's reason) |
+| "what's running?" | whatever the last successful job did | the commit Argo CD reports as synced |
+| a `kubectl edit` in production | stays until the next deploy | **reverted** (`selfHeal`) |
+| rollback | re-run an old pipeline | `git revert` |
+
+### 7.2 The objects
+
+```mermaid
+flowchart TB
+  root["Application masternova-root<br/>(the one object applied by hand: make k8s-gitops)"]
+  root -->|"wave 0"| infra["Application masternova-infra<br/>deploy/helm/masternova-infra"]
+  root -->|"wave 1: only once infra is Healthy"| apps["Application masternova<br/>deploy/helm/masternova + values-local.yaml"]
+  apps -.->|PreSync hook| mig[Job db-migrate]
+  infra -.->|PostSync hook| mi[Job media-init]
+  proj["AppProject masternova<br/>1 repo · 2 namespaces · no Secrets · 1 cluster kind"] -.fences.- root & infra & apps
+```
+
+- **App-of-apps.** The root syncs [`deploy/argocd/apps/`](../../deploy/argocd/apps/), whose
+  Applications carry `sync-wave` annotations. ⭐ Argo CD stopped computing an Application's
+  *health* (2.x), so the root wouldn't wait for wave 0 to be healthy. A Lua health check for
+  `argoproj.io/Application` in [`argocd-values.yaml`](../../deploy/k3d/argocd-values.yaml)
+  restores it.
+- **Helm hooks become Argo hooks.** `pre-install,pre-upgrade` → **PreSync** (a failed migration
+  stops the sync before any pod rolls), `post-install` → PostSync, `before-hook-creation` →
+  `BeforeHookCreation`. The charts didn't change.
+- **The AppProject is a fence.** The `default` project allows any repo, namespace and kind.
+  [`project.yaml`](../../deploy/argocd/project.yaml): this repo only, namespaces
+  `masternova` + `argocd`, cluster-scoped kinds limited to `ClusterTriggerAuthentication`, and
+  **`Secret` blacklisted**: a chart that started templating one fails to sync.
+- **The database is protected from GitOps itself.** The CNPG `Cluster` carries
+  `argocd.argoproj.io/sync-options: Prune=false,Delete=false` (and `helm.sh/resource-policy:
+  keep`), and the infra Application has **no** `resources-finalizer`. Neither a deleted line nor
+  a deleted Application removes data.
+- `automated: { prune: true, selfHeal: true }` and a 60 s git poll (no GitHub webhook can
+  reach a laptop).
+
+### 7.3 Deploying = committing a tag (your decision: no bot commits)
+
+[`values-local.yaml`](../../deploy/helm/masternova/values-local.yaml)'s `image.tag` **is** the
+deployment. `make k8s-bump TAG=sha-abc1234` runs [`bump.sh`](../../deploy/argocd/bump.sh):
+
+1. checks that **all three** images exist on GHCR, with an anonymous pull token (exactly what
+   the cluster will do). Refused for real: `sha-8c04b2d` (the Phase 9 merge) → `404: did CI publish
+   this commit?`, the §5.6 bug;
+2. rewrites the tag and makes the commit, **as you**. No bot has write access, and the history
+   stays yours;
+3. you push and open a PR. The merge is the deployment.
+
+CI's job ends at a scanned, signed image; it never touches the cluster or the repo.
+
+### 7.4 Proving it before the merge: a git server on the cluster's network
+
+The Applications point at GitHub `main`, which won't have the charts until this phase merges. To
+test the real thing first: a bare mirror of the branch served by `git daemon` (an Alpine
+container on the `k3d-masternova` Docker network, a fixed IP), and a throwaway `gitops-test`
+branch whose only extra commit swaps the repo URL to `git://172.19.0.8/…` and the registry to
+the local one. Everything else is the committed code.
+
+| Check | Result |
+|---|---|
+| Hand-over: delete Helm's release records only (`kubectl delete secret -l owner=helm`), apply project + root | all 3 Applications `Synced/Healthy` in 30 s; the running objects **adopted**, no pod restarted (ages 34–50 min) |
+| A tag-bump commit pushed to the mirror, under 10 VUs of k6 | detected at **+88 s** (60 s poll + jitter), PreSync `db-migrate`, rollout: **all 3 Deployments live at +127 s**; k6 **0 failed / 9,710** |
+| `kubectl scale deploy web --replicas=5` + a ConfigMap edit turning `LOG_VERIFICATION_LINKS` on | **both reverted within 5 s** (self-heal watches live state, not the git poll). The ConfigMap edit would have logged live tokens |
+| **Rebuild from nothing:** `k3d cluster delete` → `k8s-up` + `k8s-platform` + images + secrets (3.4 min) → apply the root | infra `Healthy` at +106 s; the `masternova` Application **didn't exist until then** (the waves work); all Healthy at **+138 s**, 0 restarts; `make k8s-e2e` **13 passed** |
+
+From an empty laptop to a running system, out of git: **≈ 5.6 minutes**. That's the disaster
+recovery story, and it's the reason Secrets are the only thing created by hand (`make
+k8s-secrets`). The next step is Sealed Secrets or External Secrets (§8).
+
+---
+
 ## 8. Common mistakes ⭐⭐⭐
 
 | Mistake | Instead |
@@ -645,6 +724,11 @@ stop needing the old access.
 | HPA target read as a % of the limit | it's a % of the **request** |
 | Installing an operator with its default RBAC | check `kubectl auth can-i … --as=system:serviceaccount:…`; KEDA read every Secret |
 | An autoscaler with the app's owner DB credentials | a read-only role, in a Secret the scaler alone can read |
+| App-of-apps sync waves without the Application health check | add it (argocd-cm), or wave 1 doesn't wait for wave 0 |
+| Argo CD Applications in the `default` project | an AppProject: repos, namespaces, kinds (and no Secrets) |
+| `resources-finalizer` / prune on the database | `Prune=false,Delete=false` on the Cluster; no finalizer on the infra Application |
+| CI with cluster credentials pushing deploys | pull: the cluster syncs from git; CI only publishes images |
+| A tag in git that CI never published | check the registry before committing the bump (`bump.sh`) |
 
 ---
 
@@ -696,6 +780,16 @@ target)` replicas, a floor of 1 if it also does scheduled work, slow scale-down 
 flight is expensive to restart. Consumers must be safe in parallel (`SKIP LOCKED` claims). Give
 the scaler a read-only credential, and check what the operator's RBAC lets it read.
 
+**Q: What is GitOps, and why pull instead of push?**
+Git holds the desired state; a controller in the cluster (Argo CD) continuously makes the
+cluster match it. Nothing outside the cluster needs credentials to it, drift is reverted
+(`selfHeal`), "what's running" is a commit, a rollback is a revert, and a lost cluster is rebuilt
+from git. I rebuilt this one from nothing in under 6 minutes, everything except the Secrets.
+
+**Q: How do you order dependent applications in Argo CD?**
+App-of-apps with sync waves, plus the Application health check that Argo removed in 2.x, or a
+later wave won't wait. Inside an app, hooks: PreSync for migrations.
+
 ---
 
 ## 10. 30-second recall
@@ -709,3 +803,4 @@ the scaler a read-only credential, and check what the operator's RBAC lets it re
 - Operators run stateful systems (CNPG: `-rw` follows the primary); migrations = one Job before the rollout.
 - Two charts (infra, apps); `values.yaml` safe, `values-<env>.yaml` small; config checksum rolls pods; lint + kubeconform in CI.
 - HPA on CPU (% of request) for the api; KEDA on queue lag/depth for the worker; audit the operator's RBAC.
+- GitOps = pull: root app-of-apps, waves + health check, PreSync migration, selfHeal; deploy = a commit of the tag; rebuild from git ≈ 6 min.

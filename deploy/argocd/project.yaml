@@ -1,0 +1,19 @@
+# What Argo CD may do on Masternova's behalf. The `default` project allows any repo, any
+# namespace, any kind — including cluster-wide ones. This one is a fence:
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: masternova
+  namespace: argocd
+spec:
+  description: Masternova on the local k3d cluster (devops/06 §7)
+  sourceRepos: [https://github.com/b-nimai/Masternova-Spring.git] # this repo, nothing else
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: masternova } # the workloads
+    - { server: https://kubernetes.default.svc, namespace: argocd } # the root's child Applications
+  # cluster-scoped kinds: only the one the charts need (KEDA's auth for the worker's scaler)
+  clusterResourceWhitelist:
+    - { group: keda.sh, kind: ClusterTriggerAuthentication }
+  # ⭐ Secrets never come from git: a chart that started templating one would fail to sync
+  namespaceResourceBlacklist:
+    - { group: "", kind: Secret }

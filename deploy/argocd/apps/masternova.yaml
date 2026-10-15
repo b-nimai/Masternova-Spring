@@ -1,0 +1,28 @@
+# The apps. Wave 1, after the infra is Healthy. Their Helm hooks become Argo CD hooks:
+# db-migrate (pre-install/pre-upgrade) → PreSync, so a failed migration stops the sync before any
+# pod rolls; media-init's post hooks → PostSync.
+#
+# ⭐ GitOps: deploying = changing image.tag in deploy/helm/masternova/values-local.yaml on main
+#    (`make k8s-bump TAG=sha-…`, a commit, a PR). Argo CD polls git (60 s) and syncs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: masternova
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: masternova
+  source:
+    repoURL: https://github.com/b-nimai/Masternova-Spring.git
+    targetRevision: main
+    path: deploy/helm/masternova
+    helm:
+      releaseName: masternova
+      valueFiles: [values-local.yaml]
+  destination: { server: https://kubernetes.default.svc, namespace: masternova }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    retry: # a sync that lost a race (e.g. a CRD not yet served) is retried, not left failed
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }

@@ -90,7 +90,7 @@ k8s-down: ## Delete the local k3d cluster and its registry (all cluster data is 
 	k3d cluster delete masternova
 
 # Cluster add-ons, each in its own namespace, versions pinned (helm upgrade --install is idempotent)
-k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ the local CA), CloudNativePG, KEDA
+k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ local CA), CloudNativePG, KEDA, Argo CD
 	kubectl apply -f deploy/k3d/traefik-config.yaml
 	helm repo add kedacore https://kedacore.github.io/charts --force-update >/dev/null
 	helm upgrade --install keda kedacore/keda --version 2.21.0 -n keda --create-namespace \
@@ -102,6 +102,9 @@ k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ th
 	  -n cert-manager --create-namespace --set crds.enabled=true --wait
 	kubectl apply -f deploy/k3d/local-ca.yaml
 	kubectl -n cert-manager wait certificate/masternova-local-ca --for=condition=Ready --timeout=60s
+	helm repo add argo https://argoproj.github.io/argo-helm --force-update >/dev/null
+	helm upgrade --install argocd argo/argo-cd --version 10.10.5 -n argocd --create-namespace \
+	  -f deploy/k3d/argocd-values.yaml --wait
 	@mkdir -p secrets && kubectl -n cert-manager get secret masternova-local-ca -o jsonpath='{.data.ca\.crt}' \
 	  | base64 -d > secrets/masternova-local-ca.crt && echo "CA certificate → secrets/masternova-local-ca.crt (curl --cacert)"
 
@@ -143,15 +146,24 @@ k8s-deploy: k8s-secrets ## Deploy both Helm charts to the cluster, apps on the l
 	  -f deploy/helm/masternova/values-local.yaml \
 	  --set image.registry=registry.localhost:5050 --set image.tag=$(TAG) --wait --timeout 10m
 
+k8s-gitops: ## Hand the cluster to Argo CD: the project + the root Application (app-of-apps) from main
+	kubectl apply -f deploy/argocd/project.yaml -f deploy/argocd/root.yaml
+	@echo "Argo CD UI: https://argocd.masternova.localhost:8443  (admin / \
+	$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d))"
+
+k8s-bump: ## GitOps deploy: commit image tag TAG (must exist on GHCR) into the local values: make k8s-bump TAG=sha-abc1234
+	deploy/argocd/bump.sh $(TAG)
+
 HELM_SCHEMAS := -schema-location default \
   -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
-helm-check: ## Lint both charts and validate what they render against the Kubernetes + CRD schemas (also in CI)
+helm-check: ## Lint both charts; validate what they render + the Argo CD manifests against the Kubernetes + CRD schemas (also in CI)
 	helm lint --strict deploy/helm/masternova -f deploy/helm/masternova/values-local.yaml
 	helm lint --strict deploy/helm/masternova-infra -f deploy/helm/masternova-infra/values-local.yaml
 	helm template masternova deploy/helm/masternova -n masternova -f deploy/helm/masternova/values-local.yaml \
 	  | kubeconform -strict -summary $(HELM_SCHEMAS)
 	helm template masternova-infra deploy/helm/masternova-infra -n masternova -f deploy/helm/masternova-infra/values-local.yaml \
 	  | kubeconform -strict -summary $(HELM_SCHEMAS)
+	kubeconform -strict -summary $(HELM_SCHEMAS) deploy/argocd/*.yaml deploy/argocd/apps/*.yaml deploy/k3d/namespace.yaml deploy/k3d/local-ca.yaml
 
 # the CURRENT primary (after a failover it's no longer instance 1), as the superuser over the local socket
 K8S_PSQL = kubectl -n masternova exec -i $$(kubectl -n masternova get pod -l cnpg.io/cluster=masternova-db,cnpg.io/instanceRole=primary -o name) -c postgres -- sh -c 'psql -q -d masternova
@@ -172,4 +184,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy helm-check k8s-seed k8s-e2e release
+.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-bump helm-check k8s-seed k8s-e2e release

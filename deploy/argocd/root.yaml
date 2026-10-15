@@ -1,0 +1,16 @@
+# The ONE object applied by hand (`make k8s-gitops`): app-of-apps. It syncs deploy/argocd/apps,
+# which holds the real Applications. From here on, the cluster's state is a git commit.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: masternova-root
+  namespace: argocd
+spec:
+  project: masternova
+  source:
+    repoURL: https://github.com/b-nimai/Masternova-Spring.git
+    targetRevision: main
+    path: deploy/argocd/apps
+  destination: { server: https://kubernetes.default.svc, namespace: argocd }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

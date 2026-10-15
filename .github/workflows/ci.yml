@@ -66,6 +66,8 @@ jobs:
               - '.github/workflows/ci.yml'
             helm:
               - 'deploy/helm/**'
+              - 'deploy/argocd/**'
+              - 'deploy/k3d/**'
               - 'Makefile'
               - '.github/workflows/ci.yml'
             e2e:
@@ -131,8 +133,9 @@ jobs:
       - uses: actions/checkout@v7
       - run: make obs-check
 
-  # Both Helm charts: `helm lint --strict`, then everything they render validated against the
-  # Kubernetes API schemas and the CRDs' (CNPG Cluster, Traefik Middleware) by kubeconform (D4.5).
+  # Both Helm charts: `helm lint --strict`, then everything they render — and the Argo CD and
+  # cluster manifests — validated against the Kubernetes API schemas and the CRDs' (CNPG Cluster,
+  # Traefik Middleware, KEDA, Argo CD Application/AppProject, cert-manager) by kubeconform (D4.5).
   # A chart error otherwise surfaces when Argo CD syncs it — after the merge.
   helm:
     needs: changes

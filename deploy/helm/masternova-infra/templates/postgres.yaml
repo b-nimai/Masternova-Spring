@@ -6,6 +6,11 @@ kind: Cluster
 metadata:
   name: masternova-db
   labels: {{- include "infra.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+  annotations:
+    # ⭐ Argo CD never deletes the database: not when it disappears from the chart (Prune=false),
+    #    not when the Application is deleted (Delete=false). Removing data is a human's decision.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    helm.sh/resource-policy: keep # the same promise to `helm uninstall`
 spec:
   instances: {{ $p.instances }}
   imageName: {{ $p.image }}
