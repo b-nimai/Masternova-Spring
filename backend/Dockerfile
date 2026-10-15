@@ -53,8 +53,13 @@ COPY --from=build /src/extracted/application/ ./
 # The payment provider fails closed without its secrets (commerce LLD §6): placeholders, as -D
 # flags of this one RUN (never ENV, so the image carries none), let the real Razorpay adapter be
 # trained. The worker ignores them.
+# ⭐ Classes only, no machine code: by default the cache also stores the JVM's call adapters,
+#    compiled on the BUILD machine, and they were run unchecked on another CPU. CI's arm64 image
+#    crashed on an Apple M2 with SIGILL in ~AdapterBlob (devops/02 §5): every start in the
+#    cluster, never with the cache trained on the M2 itself. It's also what the occasional worker
+#    SIGILL in CI's e2e was (built on one runner, run on another).
 RUN for v in $(env | sed -n 's/^\(OTEL_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done; \
-    java -XX:AOTCacheOutput=app.aot \
+    java -XX:AOTCacheOutput=app.aot -XX:+UnlockDiagnosticVMOptions -XX:-AOTAdapterCaching \
       -Dspring.context.exit=onRefresh \
       -Dspring.flyway.enabled=false \
       -Dspring.jpa.hibernate.ddl-auto=none \
@@ -75,5 +80,7 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=12 CMD ["he
 ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError" \
     LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs \
     HEALTH_PORT=${PORT}
-# If the cache can't be used (e.g. a different JVM), the JVM silently starts without it.
-ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-jar", "app.jar"]
+# If the cache can't be used (e.g. a different JVM), the JVM silently starts without it. The
+# adapter flag again at run time: an image built before the fix, or a JVM that turns it back on,
+# still never runs foreign machine code (the cache's 18k classes are used either way).
+ENTRYPOINT ["java", "-XX:+UnlockDiagnosticVMOptions", "-XX:-AOTAdapterCaching", "-XX:AOTCache=app.aot", "-jar", "app.jar"]

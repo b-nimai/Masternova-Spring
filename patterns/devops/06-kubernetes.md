@@ -747,6 +747,13 @@ flowchart LR
 - `release.yml`'s rare "CI never built this commit" path builds both platforms too (QEMU there:
   it is a fallback).
 
+**Then the arm64 image crashed.** With `sha-1d8b2c1` (the first multi-arch tag) the api, web and
+`db-migrate` ran, but the new worker pod died at every start: `SIGILL` in `~AdapterBlob`. The
+image's AOT cache stored call adapters compiled on GitHub's arm64 runner, and the JVM ran them on
+the M2 unchecked ([devops/02](02-jvm-in-containers.md) §5, detail 4). The rollout stopped there:
+the old worker kept running (the default `maxUnavailable: 25%` of one replica rounds down to 0), and Argo CD showed `Progressing`, not
+`Healthy`. The fix: build the cache with classes only (`-XX:-AOTAdapterCaching`).
+
 ---
 
 ## 8. Zero downtime, measured ⭐⭐⭐
@@ -901,6 +908,7 @@ together with Flyway's `executeInTransaction=false` for those files. Chaos drill
 | `resources-finalizer` / prune on the database | `Prune=false,Delete=false` on the Cluster; no finalizer on the infra Application |
 | CI with cluster credentials pushing deploys | pull: the cluster syncs from git; CI only publishes images |
 | A tag in git that CI never published | check the registry before committing the bump (`bump.sh`) |
+| An AOT cache (or any build-time machine code) trained on CI's CPU, run on another | classes only: `-XX:-AOTAdapterCaching`; test the CI-built image on the real nodes |
 | Images built only for CI's architecture | one index per tag with every platform your nodes run (an Apple-silicon laptop is arm64); check the platforms, not just the tag |
 | Renaming / dropping / retyping a column in one release | expand → switch → contract, three releases; `MigrationSafetyTest` enforces it |
 | "We can always roll back the image" | not past a migration: an image rollback doesn't roll back the schema |
