@@ -8,9 +8,10 @@ Not an alert runbook: the routine operations, written so they're boring.
 ## Deploy a new version
 
 1. CI built, scanned, signed and pushed the commit's images (`main` only). Check that the run
-   on the merge commit is green, including the `images` job.
+   on the merge commit is green, including the `images` and `publish` jobs.
 2. `make k8s-bump TAG=sha-<7 chars>`. It refuses a tag that isn't on GHCR for **all three**
-   images, then commits the change to `deploy/helm/masternova/values-local.yaml` as you.
+   images and **both** platforms (amd64, arm64), then commits the change to
+   `deploy/helm/masternova/values-local.yaml` as you.
 3. Push + PR + merge. Argo CD polls `main` every 60 s: the `db-migrate` PreSync Job runs first,
    then the Deployments roll.
 4. Watch it:
@@ -51,6 +52,11 @@ drops (the switch release is fully rolled out).
 The sync stops **before** any pod rolls, so the old version keeps serving. `kubectl -n masternova
 logs job/db-migrate` has Flyway's error. Fix the migration in a new commit (never edit an
 applied one), bump, merge.
+
+If the Job never started (`ImagePullBackOff` on `db-migrate`), `kubectl -n masternova describe
+pod -l job-name=db-migrate` says why. `no match for platform in manifest` means the tag lacks
+the nodes' architecture (devops/06 §7.5). Bump to a tag `bump.sh` accepts; Argo CD's retry picks
+it up.
 
 ## Drain a node (maintenance)
 

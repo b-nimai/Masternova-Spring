@@ -5,7 +5,7 @@
 > Every rule below exists so that what runs in production is provably the thing that passed the
 > checks.
 
-**Roadmap:** D2.1–D2.6 · **Last updated:** 2026-10-02
+**Roadmap:** D2.1–D2.6 · **Last updated:** 2026-10-15 (multi-arch images, devops/06 §7.5)
 **Real files:** [`e2e/`](../../e2e/) (Playwright), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/workflows/release.yml`](../../.github/workflows/release.yml), [`.github/workflows/codeql.yml`](../../.github/workflows/codeql.yml), [`backend/pom.xml`](../../backend/pom.xml) (JaCoCo gate), [`Makefile`](../../Makefile) (`make release`)
 **Decisions for this repo** (2026-10-02):
 - **Releases are tag-driven:** a `vX.Y.Z` tag pushed by the owner, never a bot commit.
@@ -39,17 +39,18 @@ flowchart LR
   F --> L["patterns-lab: mvn test"]
   F --> W["frontend: format, lint, test, build"]
   F --> A["workflows: actionlint"]
-  B & W --> I["images: build → Trivy scan<br/>(HIGH/CRITICAL fixable = fail)"]
+  B & W --> I["images: build → Trivy scan, per platform<br/>(amd64 + arm64 native runners;<br/>HIGH/CRITICAL fixable = fail)"]
   I --> E["e2e: compose stack + Playwright"]
   B & L & W & A & I & E --> OK{{"ci-ok<br/>(the required check)"}}
   I -- "PR: stop here" --> X(("✔"))
-  I -- "main: push + SBOM/provenance + cosign sign" --> G[("ghcr.io<br/>:sha-abc1234<br/>:main")]
+  I -- "main: push by digest + SBOM/provenance" --> P["publish: one index<br/>for both platforms<br/>+ cosign sign"]
+  P --> G[("ghcr.io<br/>:sha-abc1234<br/>:main")]
 ```
 
 | Trigger | What runs | What it produces |
 |---|---|---|
 | pull request | only the jobs whose files changed, then images built + scanned | a green/red check, nothing published |
-| merge to `main` | the same jobs | images pushed to GHCR as `:sha-<commit>` and `:main` |
+| merge to `main` | the same jobs, then `publish` | images for amd64 + arm64 under one tag on GHCR: `:sha-<commit>` and `:main` |
 | `vX.Y.Z` tag | `release.yml`: guard → promote (or build + scan) → GitHub Release | `:X.Y.Z` + `:X.Y` image tags, a Release with notes |
 
 **Path filters** (`dorny/paths-filter`): a docs-only PR runs nothing heavy, and a frontend PR
