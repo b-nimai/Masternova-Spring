@@ -32,17 +32,24 @@ config:
 
 api:
   replicas: 2 # ignored when autoscaling is on: the HPA owns the count
-  autoscaling:
-    enabled: false
+  autoscaling: # HPA on CPU (templates/api-hpa.yaml)
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70 # of the request
   secureCookies: true
   resources:
     requests: { cpu: 250m, memory: 768Mi }
     limits: { cpu: "2", memory: 1Gi }
 
 worker:
-  replicas: 1
-  autoscaling:
+  replicas: 1 # ignored when autoscaling is on
+  autoscaling: # KEDA on queue depth (templates/worker-scaledobject.yaml); needs KEDA installed
     enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    outboxLagSecondsPerWorker: 30
+    queuedJobsPerWorker: 2 # = masternova.pipeline.slots
   workDirSize: 5Gi # emptyDir for a rung's segments while ffmpeg runs
   resources:
     requests: { cpu: 250m, memory: 768Mi }
@@ -53,6 +60,17 @@ web:
   resources:
     requests: { cpu: 20m, memory: 32Mi }
     limits: { cpu: 500m, memory: 128Mi }
+
+# Where KEDA's queries go (worker autoscaling): a READ-ONLY role (the infra chart's readerRole),
+# never the app's owner credentials. Its password Secret lives in KEDA's namespace, which is the
+# only namespace KEDA may read Secrets from (deploy/k3d/keda-values.yaml).
+autoscaling:
+  postgres:
+    host: masternova-db-r.masternova.svc # any instance (a standby is fine for a count); full name: KEDA runs in its own namespace
+    database: masternova
+    user: keda_reader
+    passwordSecret: masternova-db-reader # in KEDA's namespace
+    sslmode: require # CNPG serves TLS with its own CA
 
 ingress:
   enabled: true

@@ -16,7 +16,7 @@ nuke: ## Stop everything AND delete volumes (fresh database)
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
-	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret db_password redis_password; do \
+	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret db_password db_reader_password redis_password; do \
 	  [ -s secrets/$$f ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/$$f; \
 	    chmod 644 secrets/$$f; echo "created secrets/$$f"; }; \
 	done
@@ -90,8 +90,11 @@ k8s-down: ## Delete the local k3d cluster and its registry (all cluster data is 
 	k3d cluster delete masternova
 
 # Cluster add-ons, each in its own namespace, versions pinned (helm upgrade --install is idempotent)
-k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ the local CA), CloudNativePG
+k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ the local CA), CloudNativePG, KEDA
 	kubectl apply -f deploy/k3d/traefik-config.yaml
+	helm repo add kedacore https://kedacore.github.io/charts --force-update >/dev/null
+	helm upgrade --install keda kedacore/keda --version 2.21.0 -n keda --create-namespace \
+	  -f deploy/k3d/keda-values.yaml --wait
 	helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update >/dev/null
 	helm upgrade --install cnpg cnpg/cloudnative-pg --version 0.29.1 -n cnpg-system --create-namespace --wait
 	helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
@@ -121,6 +124,14 @@ k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files
 	  --dry-run=client -o yaml | kubectl apply -f -
 	kubectl -n masternova create secret generic masternova-redis --from-file=password=secrets/redis_password \
 	  --dry-run=client -o yaml | kubectl apply -f -
+	@# the read-only role KEDA queries with: CNPG creates it from the copy in masternova, KEDA
+	@# reads the copy in its own namespace (it may read no other namespace's Secrets)
+	for ns in masternova keda; do \
+	  kubectl create namespace $$ns --dry-run=client -o yaml | kubectl apply -f - >/dev/null; \
+	  kubectl -n $$ns create secret generic masternova-db-reader --type=kubernetes.io/basic-auth \
+	    --from-literal=username=keda_reader --from-file=password=secrets/db_reader_password \
+	    --dry-run=client -o yaml | kubectl apply -f -; \
+	done
 
 # The inner loop: both charts, the apps on locally built images. Argo CD deploys the same charts
 # from git with GHCR images (D4.7). The infra release first: the apps' migration hook needs the DB.

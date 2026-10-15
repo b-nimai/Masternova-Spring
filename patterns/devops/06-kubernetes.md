@@ -18,6 +18,7 @@
 | 3 | [Ingress and TLS](#3-ingress-and-tls-) | ⭐⭐⭐ | D4.3 |
 | 4 | [Stateful workloads: an operator, a chart, a Job](#4-stateful-workloads-an-operator-a-chart-a-job-) | ⭐⭐⭐ | D4.4 |
 | 5 | [Helm: two charts, values per environment](#5-helm-two-charts-values-per-environment-) | ⭐⭐⭐ | D4.5 |
+| 6 | [Autoscaling: HPA on CPU, KEDA on queues](#6-autoscaling-hpa-on-cpu-keda-on-queues-) | ⭐⭐⭐ | D4.6 |
 | 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ | — |
 | 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ | — |
 | 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ | — |
@@ -514,6 +515,110 @@ own run.
 
 ---
 
+## 6. Autoscaling: HPA on CPU, KEDA on queues ⭐⭐⭐
+
+### 6.1 Which signal for which workload
+
+| Workload | Busy means | Scaled on | Why not the other |
+|---|---|---|---|
+| **api** | requests arriving | **CPU** (HPA, metrics-server) | it's stateless and CPU-bound under load (JSON, bcrypt, JWT); DB waits are virtual threads parked on I/O, which cost no CPU |
+| **worker** | work *waiting* | **queue depth** (KEDA → an HPA) | an idle relay polling an empty outbox and a worker blocked on SMTP both look cold on CPU; a backlog doesn't lie |
+
+### 6.2 The api's HPA
+
+[`templates/api-hpa.yaml`](../../deploy/helm/masternova/templates/api-hpa.yaml): 2–4 replicas,
+70 % CPU, where the percentage is **of the request** (250m → 175m per pod on average), not of the
+limit.
+
+```yaml
+behavior:
+  scaleUp:   { policies: [{ type: Pods, value: 1, periodSeconds: 60 }] }   # one pod a minute
+  scaleDown: { stabilizationWindowSeconds: 300 }                           # highest of the last 5 min
+```
+
+A JVM's first minute is JIT and class loading: CPU-hot while it serves little. Adding one pod a
+minute (and the HPA ignoring unready pods' CPU) avoids a cascade where new pods "prove" more
+load. The ceiling isn't arbitrary either: 4 api × Hikari's 10 + 3 workers × 10 + the migrate Job
+fits Postgres's `max_connections: 100`. Connections are the first wall horizontal scaling hits.
+
+**Measured** (`k6 run -e VUS=40 -e HOLD=4m load/catalog-browse.js`, the [new `load/` folder](../../load/)):
+
+| t | CPU (of request) | replicas |
+|---|---|---|
+| 0:00 | 24 % | 2 |
+| 0:40 | 177 % | 2 → **3** |
+| 1:40 | 170 % | 3 → **4** (a minute later: the policy) |
+| 3:00 – 4:30 | 78–99 % | 4 (`maxReplicas`: still above target, capped) |
+| +5 min idle | — | 4 → **2** (stabilization window) |
+
+**59,900 requests, 0 failed, list p95 23 ms at 210 req/s.** The per-minute step is visible in
+the events (`New size: 3` at 5m21s, `New size: 4` at 4m21s).
+
+### 6.3 KEDA on the worker
+
+KEDA turns any query into an **external metric** and drives an HPA it creates (`keda-hpa-worker`).
+[`templates/worker-scaledobject.yaml`](../../deploy/helm/masternova/templates/worker-scaledobject.yaml)
+has two `postgresql` triggers, and the HPA takes the **larger** answer:
+
+| Trigger | Query (the app's own D3 gauges) | Target per worker |
+|---|---|---|
+| `outbox-lag` | seconds since the most overdue **due** message became due (`outbox_overdue_seconds`: backoff isn't lag) | 30 s → `ceil(lag / 30)` workers |
+| `transcode-queue` | `count(*)` of `PENDING` jobs already due (`pipeline_jobs_queued`) | 2 (= `pipeline.slots`) |
+
+`minReplicaCount: 1`, never 0: the worker also runs the scheduled upload sweeper, which has no
+queue to wake it. Scale-down is one pod a minute, because a worker leaving mid-transcode releases
+its job and another starts it over. N workers are safe because every claim is
+`FOR UPDATE SKIP LOCKED` and the sweeper is ShedLocked (checked before writing a single manifest).
+
+**The drill.** Real lag, held in place: insert 5 messages due in 8 s, then hold `SELECT … FOR
+UPDATE` on them in another session. The relay's `SKIP LOCKED` passes over them; KEDA's plain
+`SELECT` still sees them, overdue and growing:
+
+```text
+13:02:46  21899m/30  replicas 1/1     ← lag ≈ 22 s
+13:03:01  36908m/30  replicas 1/2     ← > 30 s: scale to 2
+13:03:31  33449m/30  replicas 2/3     ← shown PER REPLICA: 33 s × 2 = 67 s → 3
+13:04:17  0/30       replicas 3/3     ← lock released, relay drained them
+          … then 3 → 2 → 1, one a minute
+```
+
+(The first attempt didn't scale at all: my lock session had failed with `FOR UPDATE is not
+allowed with aggregate functions`, so the relay simply delivered the rows. Output captured,
+`SELECT id … FOR UPDATE`, rerun.)
+
+### 6.4 Found: KEDA could read every Secret in the cluster ⭐⭐⭐
+
+```text
+kubectl auth can-i list secrets -A --as=system:serviceaccount:keda:keda-operator   → yes
+```
+
+By default the KEDA chart lets its operator `list/watch` every Secret, and gives it a `get *` on
+every resource (so it can scale any custom kind). The operator could read the local CA's
+private key and every app credential. Fixed in
+[`deploy/k3d/keda-values.yaml`](../../deploy/k3d/keda-values.yaml) and the charts:
+
+1. `permissions.operator.restrict.secret: true` (+ `namesAllowList`): Secrets in its own
+   namespace only. **Not enough on its own:** `get secrets/masternova-app -n masternova` was
+   still `yes` through the `*/*` rule;
+2. `rbac.enabledCustomScaledRefKinds: false`: we scale a Deployment, which KEDA supports
+   without that rule;
+3. a **read-only Postgres role** `keda_reader` (a CNPG *managed role*, `inRoles:
+   [pg_read_all_data]`, connection limit 4) instead of the app owner's credentials. Verified:
+   `SELECT` works, `DELETE` → `permission denied`;
+4. a `ClusterTriggerAuthentication`, whose Secret is read from KEDA's namespace: the reader
+   password is created in both namespaces by `make k8s-secrets`.
+
+After: `list secrets -A` → no, the app's Secret → no, the CA key → no, `masternova-db-reader` in
+`keda` → yes. The drill above ran on this setup.
+
+**Side effect, worth knowing:** between steps 1 and 4 the scaler couldn't log in for 3.5 min
+(`FailedGetExternalMetric … password authentication failed`). The HPA **kept its current size**:
+when metrics fail, it doesn't scale to the minimum. A scaler outage freezes scaling; it doesn't
+collapse capacity. The ordering lesson for GitOps: tighten the platform only after the apps
+stop needing the old access.
+
+---
+
 ## 8. Common mistakes ⭐⭐⭐
 
 | Mistake | Instead |
@@ -536,6 +641,10 @@ own run.
 | Setting `replicas` in a chart whose Deployment has an HPA | leave it out when autoscaling is on |
 | Secrets in Helm values | reference existing Secrets; a secrets operator in production |
 | `cancel-in-progress: true` for every branch | never cancel `main`: each run publishes a deployable artifact |
+| Scaling queue consumers on CPU | scale on the queue (KEDA): depth or the oldest item's age |
+| HPA target read as a % of the limit | it's a % of the **request** |
+| Installing an operator with its default RBAC | check `kubectl auth can-i … --as=system:serviceaccount:…`; KEDA read every Secret |
+| An autoscaler with the app's owner DB credentials | a read-only role, in a Secret the scaler alone can read |
 
 ---
 
@@ -581,6 +690,12 @@ the two have different lifecycles (the app on every merge, the database rarely; 
 becomes a managed service). Safe defaults in `values.yaml`, one small overrides file per
 environment, the image tag required, Secrets referenced and never templated.
 
+**Q: How would you autoscale a queue consumer?**
+On the queue, not CPU: KEDA with the backlog's depth or its oldest item's age, `ceil(metric /
+target)` replicas, a floor of 1 if it also does scheduled work, slow scale-down if work in
+flight is expensive to restart. Consumers must be safe in parallel (`SKIP LOCKED` claims). Give
+the scaler a read-only credential, and check what the operator's RBAC lets it read.
+
 ---
 
 ## 10. 30-second recall
@@ -593,3 +708,4 @@ environment, the image tag required, Secrets referenced and never templated.
 - Ingress = rules, controller = Traefik; cert-manager issues from one local CA; `Local` keeps the client IP.
 - Operators run stateful systems (CNPG: `-rw` follows the primary); migrations = one Job before the rollout.
 - Two charts (infra, apps); `values.yaml` safe, `values-<env>.yaml` small; config checksum rolls pods; lint + kubeconform in CI.
+- HPA on CPU (% of request) for the api; KEDA on queue lag/depth for the worker; audit the operator's RBAC.

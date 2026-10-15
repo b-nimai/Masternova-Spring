@@ -1,0 +1,18 @@
+# KEDA (`make k8s-platform`). ⭐ By default its operator may list + watch EVERY Secret in the
+# cluster (checked: `kubectl auth can-i list secrets -A --as=system:serviceaccount:keda:keda-operator`
+# → yes): the local CA's private key, every app's credentials. Restricted to its own namespace,
+# where the one Secret it needs lives (masternova-db-reader, read through a
+# ClusterTriggerAuthentication: devops/06 §6).
+permissions:
+  operator:
+    restrict:
+      secret: true
+      namesAllowList: [masternova-db-reader]
+  metricServer:
+    restrict:
+      secret: true
+# ⭐ …and that alone wasn't enough: the chart also grants `get` on EVERY resource (`*/*`, so
+#    Secrets too) to scale arbitrary custom kinds. We scale a Deployment only, which KEDA supports
+#    without it. With both: `can-i get secrets/masternova-app -n masternova` → no.
+rbac:
+  enabledCustomScaledRefKinds: false

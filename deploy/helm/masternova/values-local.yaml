@@ -13,6 +13,10 @@ config:
   PIPELINE_LADDER: fast # 240/360p ultrafast: a laptop, not a render farm
   TRACING_SAMPLING_PROBABILITY: "1.0"
 
+worker:
+  autoscaling:
+    enabled: true # KEDA is a platform add-on here (`make k8s-platform`)
+
 ingress:
   host: masternova.localhost
   clusterIssuer: masternova-ca # deploy/k3d/local-ca.yaml

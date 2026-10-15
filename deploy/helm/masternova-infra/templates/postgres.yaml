@@ -25,6 +25,20 @@ spec:
   resources: {{- toYaml $p.resources | nindent 4 }}
   postgresql:
     parameters: {{- toYaml $p.parameters | nindent 6 }}
+  {{- with $p.readerRole }}
+  {{- if .name }}
+  managed:
+    roles:
+      # ⭐ pg_read_all_data (PG 14+): SELECT on every table, no INSERT/UPDATE/DELETE, no DDL.
+      #    Narrower would be a GRANT per table, which couples the schema's migrations to this role.
+      - name: {{ .name }}
+        ensure: present
+        login: true
+        connectionLimit: 4
+        inRoles: [pg_read_all_data]
+        passwordSecret: { name: {{ .secret }} }
+  {{- end }}
+  {{- end }}
   affinity: # never two instances on one node: a drain or a node failure keeps one
     enablePodAntiAffinity: true
     podAntiAffinityType: required

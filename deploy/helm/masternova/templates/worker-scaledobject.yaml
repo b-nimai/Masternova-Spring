@@ -1,0 +1,72 @@
+{{- if .Values.worker.autoscaling.enabled }}
+{{- $a := .Values.worker.autoscaling -}}
+# More workers when their QUEUES grow, not their CPU (KEDA). An idle relay polling an empty
+# outbox and a worker blocked on SMTP both look cold to a CPU metric; a backlog doesn't lie.
+# KEDA turns each query into an external metric and drives an HPA it creates (keda-hpa-worker);
+# the HPA takes the LARGEST of the triggers' answers.
+#
+# Both queries are the ones the app's own gauges run (D3): outbox_overdue_seconds and
+# pipeline_jobs_queued, so a dashboard and the scaler agree on what "behind" means.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker
+  labels: {{- include "masternova.labels" (dict "root" . "component" "worker") | nindent 4 }}
+spec:
+  scaleTargetRef: { name: worker }
+  # never 0: the worker also runs the scheduled upload sweeper and would need a trigger to wake
+  minReplicaCount: {{ $a.minReplicas }}
+  maxReplicaCount: {{ $a.maxReplicas }}
+  pollingInterval: 15 # seconds between queries
+  cooldownPeriod: 120
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 120
+          # ⭐ one pod at a time: a worker leaving mid-transcode releases its job (uncounted) and
+          #    another starts it over, so shrinking fast wastes encodes
+          policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
+  triggers:
+    # Outbox lag: seconds since the most overdue DUE message became due (backoff isn't lag).
+    # desired = ceil(lag / target): 30 s → 1, 60 s (the freshness SLO's edge) → 2.
+    - type: postgresql
+      name: outbox-lag
+      metadata:
+        host: {{ .Values.autoscaling.postgres.host }}
+        port: "5432"
+        dbName: {{ .Values.autoscaling.postgres.database }}
+        userName: {{ .Values.autoscaling.postgres.user }}
+        sslmode: {{ .Values.autoscaling.postgres.sslmode }}
+        query: >-
+          SELECT COALESCE(EXTRACT(EPOCH FROM now() - min(next_attempt_at)), 0)
+            FROM outbox_message
+           WHERE status IN ('PENDING', 'PROCESSING') AND next_attempt_at <= now()
+        targetQueryValue: {{ $a.outboxLagSecondsPerWorker | quote }}
+      authenticationRef: { name: masternova-postgres-reader, kind: ClusterTriggerAuthentication }
+    # Transcode queue: jobs due that no worker has picked up, per worker's slots.
+    - type: postgresql
+      name: transcode-queue
+      metadata:
+        host: {{ .Values.autoscaling.postgres.host }}
+        port: "5432"
+        dbName: {{ .Values.autoscaling.postgres.database }}
+        userName: {{ .Values.autoscaling.postgres.user }}
+        sslmode: {{ .Values.autoscaling.postgres.sslmode }}
+        query: >-
+          SELECT count(*) FROM pipeline_job WHERE status = 'PENDING' AND next_attempt_at <= now()
+        targetQueryValue: {{ $a.queuedJobsPerWorker | quote }}
+      authenticationRef: { name: masternova-postgres-reader, kind: ClusterTriggerAuthentication }
+---
+# The password by reference, never inline. CLUSTER-scoped: its Secret is read from KEDA's own
+# namespace, the only one KEDA may read Secrets in — a namespaced TriggerAuthentication would
+# need KEDA to read Secrets in `masternova`, i.e. the app's too.
+apiVersion: keda.sh/v1alpha1
+kind: ClusterTriggerAuthentication
+metadata:
+  name: masternova-postgres-reader
+  labels: {{- include "masternova.labels" (dict "root" . "component" "worker") | nindent 4 }}
+spec:
+  secretTargetRef:
+    - { parameter: password, name: {{ .Values.autoscaling.postgres.passwordSecret }}, key: password }
+{{- end }}

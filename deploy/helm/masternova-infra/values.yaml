@@ -15,6 +15,11 @@ postgres:
   parameters:
     shared_buffers: 128MB
     max_connections: "100"
+  # Roles the operator keeps in sync (created, password from the Secret, kept present). The
+  # autoscaler reads queue depths with this one: no writes, no DDL (devops/06 §6). "" = none.
+  readerRole:
+    name: keda_reader
+    secret: masternova-db-reader # kubernetes.io/basic-auth, username = the role name
 
 # CloudPirates Redis chart (official image). A cache + pub/sub only (ADR-0016): no persistence.
 redis:

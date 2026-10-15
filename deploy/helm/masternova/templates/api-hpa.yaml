@@ -1,0 +1,29 @@
+{{- if .Values.api.autoscaling.enabled }}
+{{- $a := .Values.api.autoscaling -}}
+# More api pods when CPU climbs. The api is stateless and CPU-bound under load (JSON, bcrypt, JWT);
+# its database work waits on I/O with virtual threads, which costs no CPU. Needs metrics-server
+# (k3s ships it).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  labels: {{- include "masternova.labels" (dict "root" . "component" "api") | nindent 4 }}
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: api }
+  minReplicas: {{ $a.minReplicas }}
+  maxReplicas: {{ $a.maxReplicas }} # × Hikari's 10 connections must fit max_connections (infra chart)
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        # ⭐ a percentage of the REQUEST (250m), not of the limit: 70 % = 175m per pod on average
+        target: { type: Utilization, averageUtilization: {{ $a.targetCPUUtilizationPercentage }} }
+  behavior:
+    scaleUp:
+      # A JVM's first minute is JIT + class loading: CPU-hot while it isn't serving much yet. The
+      # HPA ignores a pod's CPU until it's ready, and adds at most 1 pod a minute: no cascade of
+      # new pods "proving" more load.
+      policies: [{ type: Pods, value: 1, periodSeconds: 60 }]
+    scaleDown:
+      stabilizationWindowSeconds: 300 # the highest recommendation of the last 5 min: no flapping
+{{- end }}
