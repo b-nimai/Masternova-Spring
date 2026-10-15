@@ -6,7 +6,7 @@
 > for everything that isn't heap, and know which GC you actually got. For startup, Java 25's
 > **AOT cache** halves our boot time with one training run at image build.
 
-**Roadmap:** D1.3 · **Last updated:** 2026-10-02
+**Roadmap:** D1.3 · **Last updated:** 2026-10-15 (§5: the cache must hold no machine code)
 **Real files:** [`backend/Dockerfile`](../../backend/Dockerfile) (`JAVA_TOOL_OPTIONS`, the AOT training run, `ENTRYPOINT`)
 **Measured on:** the api image (Alpine Temurin 25 JRE, Spring Boot 4.1), Docker 29.7 on an 8-CPU / 7.6 GiB host.
 
@@ -174,16 +174,18 @@ it on every later start.
 ```dockerfile
 # backend/Dockerfile (runtime stage, after the app layers are copied)
 RUN java -XX:AOTCacheOutput=app.aot \
+      -XX:+UnlockDiagnosticVMOptions -XX:-AOTAdapterCaching \  # ⭐ classes only, no machine code (4.)
       -Dspring.context.exit=onRefresh \                 # ⭐ Spring: build the context, then exit
       -Dspring.flyway.enabled=false \                   # ⭐ the build has no database …
       -Dspring.jpa.hibernate.ddl-auto=none \
       -Dspring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false \
       -Dspring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect \
       -jar app.jar
-ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UnlockDiagnosticVMOptions", "-XX:-AOTAdapterCaching",
+            "-XX:AOTCache=app.aot", "-jar", "app.jar"]
 ```
 
-**Three details that make or break it:**
+**Four details that make or break it:**
 
 1. **The classpath must be plain JARs, loaded by the JDK's own class loaders.** Boot's
    `JarLauncher` uses its own class loader, so those classes can't be cached. That's why the
@@ -197,6 +199,15 @@ ENTRYPOINT ["java", "-XX:AOTCache=app.aot", "-jar", "app.jar"]
 3. **The cache must match the runtime exactly:** the same JVM build and the same JARs. Building it
    in the same image stage guarantees that. If it doesn't match, the JVM **silently starts
    without it** (`AOTMode=auto`). Check with `-Xlog:aot=info` (`Opened AOT cache app.aot.`).
+4. ⭐ **The cache must not carry machine code to a different CPU.** By default (Temurin 25.0.4)
+   it also stores the JVM's call **adapters**, compiled on the *build* machine, and runs them on
+   the runtime machine without checking the CPU. Found in D4 (devops/06 §7.5): CI's arm64 worker
+   image, trained on a GitHub runner, died with `SIGILL` in `~AdapterBlob` on every start in the
+   k3d cluster on an Apple M2. Reproduced with `docker run --memory 2g` (3/3), and **0/3** with
+   the same flags on an image trained on the M2 itself, or with `-XX:-AOTAdapterCaching`. The
+   occasional worker `SIGILL` in CI's e2e (built on one runner, run on another) was the same bug.
+   The flag keeps everything else: **18,119 classes** still come from the cache, and the worker's
+   context is ready in **2.7 s vs 5.6 s** without the cache.
 
 **Measured** (api, `--cpus=2 --memory=1g`, real Postgres + Redis, 3 runs each):
 
@@ -250,6 +261,7 @@ victim.
 | `-XX:MaxRAMPercentage=75` | `JAVA_TOOL_OPTIONS` (image) | use the container's memory; the default 25 % wastes most of it. Needs a ≥ ~1 GiB limit (§2). |
 | `-XX:+ExitOnOutOfMemoryError` | `JAVA_TOOL_OPTIONS` (image) | crash cleanly on a heap OOM and let the orchestrator restart |
 | `-XX:AOTCache=app.aot` | `ENTRYPOINT` | ~45 % faster start, ~60 MB less memory (§5) |
+| `-XX:-AOTAdapterCaching` (+ `UnlockDiagnosticVMOptions`) | training run + `ENTRYPOINT` | the image is built on one CPU and runs on another: no machine code from the cache (§5, detail 4). Not in `JAVA_TOOL_OPTIONS`: a deployment that sets its own (the worker's chart does) would drop it |
 | *(no GC flag)* | — | ergonomics are right for the default; set G1 per deployment when the CPU limit is < 2 (§3) |
 | `JAVA_TOOL_OPTIONS` rather than `ENTRYPOINT` args | — | the JVM reads it automatically. Deployments add flags (e.g. `-XX:+UseG1GC`) without touching the image. It also applies to `docker exec … java`, which is why `Picked up JAVA_TOOL_OPTIONS` appears in logs. |
 
