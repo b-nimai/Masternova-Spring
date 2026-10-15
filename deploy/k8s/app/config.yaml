@@ -11,10 +11,10 @@ data:
   REDIS_HOST: redis
   REDIS_PORT: '6379'
   STORAGE_ENDPOINT: http://seaweedfs:8333 # how pods reach storage …
-  STORAGE_PUBLIC_ENDPOINT: http://localhost:9010 # … and browsers (a port-forward until D4.3's ingress)
+  STORAGE_PUBLIC_ENDPOINT: https://s3.masternova.localhost:8443 # … and browsers (ingress.yaml)
   LOG_VERIFICATION_LINKS: 'false'
   PAYMENT_PROVIDER: fake # no Razorpay keys locally (the api's default fails closed)
-  WEB_URL: http://localhost:8082
+  WEB_URL: https://masternova.localhost:8443 # links in emails
   SMTP_HOST: mailpit
   SMTP_PORT: '1025'
   PIPELINE_LADDER: fast # 240/360p ultrafast: a laptop cluster, not a render farm

@@ -66,7 +66,7 @@ spec:
             - { name: AWS_SECRET_ACCESS_KEY, value: masternova-dev-secret }
             - { name: AWS_DEFAULT_REGION, value: us-east-1 }
             - name: CORS_ORIGINS # the SPA's origins: the browser PUTs presigned parts straight to storage
-              value: '"https://masternova.localhost:8443","http://localhost:8082"'
+              value: '"https://masternova.localhost:8443"'
           command: [/bin/sh, -c]
           args:
             - |

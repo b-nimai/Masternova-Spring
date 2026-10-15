@@ -6,8 +6,8 @@
 > the cluster pulls it.
 
 **Roadmap:** D4.1–D4.8 · **Last updated:** 2026-10-15
-**Real files:** [`deploy/k3d/cluster.yaml`](../../deploy/k3d/cluster.yaml), [`deploy/k8s/`](../../deploy/k8s/) (raw manifests), `Makefile` (`k8s-*` targets)
-**Try it:** `make k8s-up && make k8s-images && make k8s-apply`, then the commands in §1.3.
+**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, Traefik config, local CA), [`deploy/k8s/`](../../deploy/k8s/) (raw manifests), `Makefile` (`k8s-*` targets)
+**Try it:** `make k8s-up k8s-platform k8s-images k8s-apply`, then https://masternova.localhost:8443 (§3.3) or `make k8s-e2e`.
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
 
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 1 | [Cluster anatomy, and a cluster on a laptop](#1-cluster-anatomy-and-a-cluster-on-a-laptop-) | ⭐⭐⭐ | D4.1 |
 | 2 | [The core objects, written by hand](#2-the-core-objects-written-by-hand-) | ⭐⭐⭐ | D4.2 |
+| 3 | [Ingress and TLS](#3-ingress-and-tls-) | ⭐⭐⭐ | D4.3 |
 | 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ | — |
 | 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ | — |
 | 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ | — |
@@ -234,6 +235,93 @@ binary in the image.
 
 ---
 
+## 3. Ingress and TLS ⭐⭐⭐
+
+### 3.1 One way in
+
+```mermaid
+flowchart LR
+  B[browser] -->|":8443"| LB[k3d load balancer<br/>nginx container]
+  LB --> T0[Traefik on node 0]
+  LB --> T1[Traefik on node 1]
+  LB --> T2[Traefik on node 2]
+  T0 & T1 & T2 -->|"masternova.localhost/api"| API[Service api]
+  T0 & T1 & T2 -->|"masternova.localhost/"| WEB[Service web]
+  T0 & T1 & T2 -->|"s3.masternova.localhost"| S3[Service seaweedfs]
+  T0 & T1 & T2 -->|"mail.masternova.localhost"| MAIL[Service mailpit]
+```
+
+An **Ingress** is a routing rule (host + path → Service); an **ingress controller** (Traefik,
+bundled with k3s) watches Ingresses and configures itself. [`app/ingress.yaml`](../../deploy/k8s/app/ingress.yaml):
+
+- `/api` goes **straight to the api** Service. In compose the browser's `/api` calls went
+  through the web container's nginx; here that hop is gone (nginx's `/api` block is simply
+  unused). The longest prefix wins, whatever the order of the paths.
+- `s3.masternova.localhost` exposes SeaweedFS for the **presigned** upload and segment URLs
+  (`STORAGE_PUBLIC_ENDPOINT`). The host is part of the S3 signature, and Traefik forwards it
+  unchanged.
+- `*.localhost` resolves to 127.0.0.1 with no `/etc/hosts` edits (RFC 6761).
+- **http → https:** Traefik's usual entry-point redirect would send browsers to `:443`, but the
+  host publishes TLS on `:8443`. So a `redirectScheme` **Middleware** (a Traefik CRD) names the
+  port, on a second, http-only Ingress. Measured: `http://…:8082/courses` → `301
+  https://…:8443/courses`.
+- `SECURE_COOKIES=true`: the refresh cookie now travels over https only.
+
+### 3.2 cert-manager: certificates as objects
+
+```mermaid
+flowchart LR
+  SS[ClusterIssuer selfsigned] -->|signs| CA[Certificate masternova-local-ca<br/>isCA, 10 y]
+  CA -->|secret| CAI[ClusterIssuer masternova-ca]
+  ING[Ingress annotation<br/>cert-manager.io/cluster-issuer] -->|ingress-shim creates| C[Certificate masternova-tls<br/>3 SANs]
+  CAI -->|signs| C
+  C -->|Secret masternova-tls| T[Traefik terminates TLS]
+```
+
+- cert-manager (`make k8s-platform`, Helm chart v1.21.2 with its CRDs) adds `Issuer`,
+  `ClusterIssuer` and `Certificate` kinds, plus a controller that issues and renews them.
+- **One local CA, not a self-signed certificate per host:** trusting
+  `secrets/masternova-local-ca.crt` once (`curl --cacert`, the OS keychain) makes every local host
+  valid. It's also the shape of production: swap the `masternova-ca` ClusterIssuer for an ACME
+  one (Let's Encrypt) and nothing else changes.
+- The Ingress only carries an **annotation**; cert-manager's *ingress-shim* creates the
+  `Certificate` from the Ingress's `tls` hosts. Verified: issuer `CN=Masternova local CA`, SANs
+  `masternova.localhost, s3.…, mail.…`.
+
+### 3.3 Found: the client IP changed with the node ⭐⭐⭐
+
+Learner playback tokens are bound to the client IP (ADR-0017). A throwaway `traefik/whoami`
+behind the same ingress, 12 requests, each with a forged `X-Forwarded-For: 6.6.6.6`:
+
+| Traefik as | Service `externalTrafficPolicy` | `X-Forwarded-For` seen by the app |
+|---|---|---|
+| Deployment, 1 pod (k3s default) | `Cluster` (default) | `10.42.0.0` ×4, `10.42.1.0` ×4, `10.42.2.1` ×4 |
+| **DaemonSet**, 1 per node | **`Local`** | `172.19.0.6` ×15 (the k3d load balancer) |
+
+- The forged header never got through: Traefik replaces `X-Forwarded-For` from untrusted
+  sources. Good.
+- With `Cluster`, a connection may enter on any node and is **SNATed** to that node's address
+  on its way to the one Traefik pod. The "client IP" was whichever node it entered on, so 2
+  requests in 3 would have failed the token's IP binding, and the player gives up after one
+  re-ticket.
+- `Local` delivers only to a Traefik pod on the entry node, with no SNAT. A DaemonSet guarantees
+  every node has one. [`deploy/k3d/traefik-config.yaml`](../../deploy/k3d/traefik-config.yaml)
+  is a k3s `HelmChartConfig`, which overrides the values of the Traefik chart k3s installs itself.
+- Locally every browser still shows up as the k3d load balancer: one stable IP, so the binding
+  is consistent, if not meaningful. Behind a cloud load balancer, `Local` (or PROXY protocol)
+  is what delivers the real client address.
+
+### 3.4 Verified: the e2e suite against the cluster
+
+`make k8s-e2e` runs the same 13 Playwright tests as CI against
+`https://masternova.localhost:8443`, with `MAILPIT_URL` on the mail host and `E2E_LOCAL_CA=1`
+(Playwright's `ignoreHTTPSErrors`, opt-in). The tests cover sign up / cookie restore / log out,
+authoring with autosave and the 409 dialog, the catalog, **checkout** and **upload to S3 →
+transcode on the worker → HLS preview plays**. **13 passed (40 s).** One test had
+`localhost:8081` hard-coded; it now compares with `baseURL`.
+
+---
+
 ## 8. Common mistakes ⭐⭐⭐
 
 | Mistake | Instead |
@@ -245,6 +333,9 @@ binary in the image.
 | Secrets as env vars (`secretKeyRef`) | a Secret volume; Spring's `configtree` reads files |
 | `:latest` tags | an immutable tag per build: a new tag is what makes a rollout |
 | Expecting start-up order | crash + restart is the model; a Job where order matters |
+| Changing a ConfigMap and expecting pods to see it | env is read at start: roll the pods (Helm: a checksum annotation, §5) |
+| `externalTrafficPolicy: Cluster` in front of anything that cares about the client IP | `Local` + an ingress pod on every node (or PROXY protocol) |
+| A self-signed certificate per host | one CA issuer; trust it once; swap it for ACME in production |
 
 ---
 
@@ -266,6 +357,13 @@ Requests are for scheduling, limits are enforced by cgroups. The JVM sizes its h
 memory limit (`MaxRAMPercentage`) and its thread pools from the CPU limit, so without limits it
 sizes itself for the whole node.
 
+**Q: How do you get the client's IP through a Kubernetes ingress?**
+`externalTrafficPolicy: Local` on the ingress controller's Service, so traffic isn't SNATed
+between nodes, with a controller pod on every node that receives traffic (a DaemonSet). Then
+trust `X-Forwarded-For` only from the controller: Traefik drops a client's own header, and
+Tomcat's `RemoteIpValve` trusts only internal addresses. I measured both halves with a whoami pod
+before trusting it with IP-bound playback tokens.
+
 ---
 
 ## 10. 30-second recall
@@ -275,3 +373,4 @@ sizes itself for the whole node.
 - startup / liveness (restart) / readiness (traffic); liveness never checks dependencies.
 - requests schedule, limits enforce; the JVM sizes itself from the limits.
 - `restricted` security context on the apps; Secrets as files; `enableServiceLinks: false`.
+- Ingress = rules, controller = Traefik; cert-manager issues from one local CA; `Local` keeps the client IP.

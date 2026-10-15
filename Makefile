@@ -89,6 +89,16 @@ k8s-up: ## Create the local k3d cluster (3 nodes, registry on :5050, ingress on 
 k8s-down: ## Delete the local k3d cluster and its registry (all cluster data is lost)
 	k3d cluster delete masternova
 
+# Cluster add-ons, each in its own namespace, versions pinned (helm upgrade --install is idempotent)
+k8s-platform: ## Install the cluster add-ons: cert-manager (+ the local CA)
+	helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
+	helm upgrade --install cert-manager jetstack/cert-manager --version v1.21.2 \
+	  -n cert-manager --create-namespace --set crds.enabled=true --wait
+	kubectl apply -f deploy/k3d/local-ca.yaml
+	kubectl -n cert-manager wait certificate/masternova-local-ca --for=condition=Ready --timeout=60s
+	@mkdir -p secrets && kubectl -n cert-manager get secret masternova-local-ca -o jsonpath='{.data.ca\.crt}' \
+	  | base64 -d > secrets/masternova-local-ca.crt && echo "CA certificate → secrets/masternova-local-ca.crt (curl --cacert)"
+
 k8s-images: images ## Build the three images and push them to the cluster's registry as :$(TAG)
 	for img in api worker web; do \
 	  docker tag masternova-spring/$$img:local $(REGISTRY)/masternova-spring/$$img:$(TAG) && \
@@ -111,6 +121,16 @@ k8s-apply: k8s-secrets ## Apply the raw manifests in deploy/k8s with the images 
 	kubectl apply -f deploy/k8s/infra
 	for f in deploy/k8s/app/*.yaml; do sed 's|:TAG$$|:$(TAG)|' $$f; echo ---; done | kubectl apply -f -
 
+K8S_PSQL := kubectl -n masternova exec -i postgres-0 -- sh -c 'psql -q -U "$$POSTGRES_USER" -d masternova
+k8s-seed: ## Seed dev catalog data into the cluster's postgres: make k8s-seed COURSES=60
+	$(K8S_PSQL) -v courses=$(or $(COURSES),200)' < docs/db/seed-catalog.sql
+
+k8s-e2e: ## Browser e2e tests against the cluster (https://masternova.localhost:8443)
+	$(MAKE) k8s-seed COURSES=60
+	cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && \
+	  BASE_URL=https://masternova.localhost:8443 MAILPIT_URL=https://mail.masternova.localhost:8443 \
+	  E2E_LOCAL_CA=1 pnpm test
+
 release: ## Tag and push a release from an up-to-date, clean main: make release VERSION=1.2.3
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "usage: make release VERSION=X.Y.Z"; exit 1; }
 	@[ "$$(git rev-parse --abbrev-ref HEAD)" = main ] && git diff --quiet && git diff --cached --quiet \
@@ -119,4 +139,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-secrets k8s-apply release
+.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-apply k8s-seed k8s-e2e release

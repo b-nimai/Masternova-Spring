@@ -14,6 +14,9 @@ export default defineConfig({
   reporter: process.env['CI'] ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: process.env['BASE_URL'] ?? 'http://localhost:8081',
+    // The Kubernetes stack (`make k8s-e2e`) serves https with the cluster's own local CA, which
+    // Chromium doesn't trust. Opt-in only: the compose stack is plain http.
+    ignoreHTTPSErrors: process.env['E2E_LOCAL_CA'] === '1',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },

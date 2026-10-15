@@ -42,7 +42,7 @@ spec:
           ports: [{ name: http, containerPort: 8080 }]
           envFrom: [{ configMapRef: { name: masternova-config } }]
           env:
-            - { name: SECURE_COOKIES, value: 'false' } # http via port-forward; D4.3's TLS ingress flips it
+            - { name: SECURE_COOKIES, value: 'true' } # the refresh cookie only travels over https (ingress.yaml)
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
