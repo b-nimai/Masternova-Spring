@@ -14,7 +14,7 @@ re-derived rather than copied.
 | [0001](0001-spring-modulith-modular-monolith.md) | Spring Modulith modular monolith + separate worker | accepted |
 | [0002](0002-maven-multi-module.md) | Maven multi-module build over Gradle | accepted |
 | [0003](0003-vertical-slices.md) | Build in vertical slices (backend + Angular per module) | accepted |
-| [0004](0004-kubernetes-first-deploy.md) | Local Kubernetes + GitOps first, AWS last and optional | accepted |
+| [0004](0004-kubernetes-first-deploy.md) | Local Kubernetes + GitOps first, AWS last and optional | accepted (§2 amended by 0020) |
 | [0005](0005-hand-rolled-outbox-over-modulith-registry.md) | Hand-rolled transactional outbox over Spring Modulith's event publication registry | accepted |
 | [0006](0006-rotating-refresh-tokens-over-stateless-jwt.md) | Short-lived JWT + rotating refresh tokens with reuse detection | accepted |
 | [0007](0007-alpine-jre-runtime-image.md) | Alpine Temurin JRE as the runtime base for the Spring Boot images | accepted |
@@ -30,3 +30,4 @@ re-derived rather than copied.
 | [0017](0017-short-ip-bound-playback-token.md) | Learner playback: a 5-minute token bound to user, lecture and IP (signed, not carried); the player re-tickets on a 403 | accepted |
 | [0018](0018-claim-webhook-events-before-processing.md) | Webhook dedupe: claim the provider's event id (primary key) in the same transaction as the effects; a failed processing rolls the claim back so the redelivery runs | accepted |
 | [0019](0019-grant-access-in-the-order-transaction.md) | Grant course access in the transaction that marks the order paid (and revoke in the refund's); only receipts and enrollment stay eventual | accepted |
+| [0020](0020-gitops-human-committed-tag-app-of-apps.md) | GitOps by a human-committed image tag (checked on GHCR first); two charts (infra, apps) under an Argo CD app-of-apps with health-gated sync waves | accepted |

@@ -1,0 +1,26 @@
+# The local k3d cluster, as Argo CD deploys it from git (D4.7).
+#
+# ⭐ GitOps: the tag below IS the deployment. It names an image CI built, scanned, signed and
+#    pushed to GHCR from a commit on main; `make k8s-bump TAG=sha-…` changes it, as your commit.
+#    (The inner loop, `make k8s-deploy`, overrides registry + tag with locally built images.)
+image:
+  tag: sha-5d7e9da # the newest commit with all three images on GHCR (CI fix in D4.5, ci.yml)
+
+config:
+  STORAGE_ENDPOINT: http://seaweedfs:8333 # the infra chart's SeaweedFS
+  SMTP_HOST: mailpit # the infra chart's Mailpit
+  SMTP_PORT: "1025"
+  STORAGE_PUBLIC_ENDPOINT: https://s3.masternova.localhost:8443
+  WEB_URL: https://masternova.localhost:8443
+  PAYMENT_PROVIDER: fake # no Razorpay keys locally
+  PIPELINE_LADDER: fast # 240/360p ultrafast: a laptop, not a render farm
+  TRACING_SAMPLING_PROBABILITY: "1.0"
+
+worker:
+  autoscaling:
+    enabled: true # KEDA is a platform add-on here (`make k8s-platform`)
+
+ingress:
+  host: masternova.localhost
+  clusterIssuer: masternova-ca # deploy/k3d/local-ca.yaml
+  httpsRedirectPort: "8443"

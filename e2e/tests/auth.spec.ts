@@ -51,10 +51,10 @@ test('a learner is kept out of the admin page', async ({ page }) => {
   await expect(page).toHaveURL(/\/$/); // … and roleGuard redirects a typed URL too
 });
 
-test('the login returnUrl cannot send users to another site', async ({ page }) => {
+test('the login returnUrl cannot send users to another site', async ({ page, baseURL }) => {
   const email = uniqueEmail();
   await signUp(page, email);
   await page.goto('/login?returnUrl=//evil.example');
   await logIn(page, email);
-  await expect(page).toHaveURL(/localhost:8081\/account$/);
+  await expect(page).toHaveURL(`${baseURL}/account`); // our own origin, whichever stack is under test
 });

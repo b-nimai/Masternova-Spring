@@ -1,0 +1,21 @@
+# k3s installs Traefik from its own Helm chart; a HelmChartConfig overrides that chart's values.
+#
+# ⭐ Keep the client's IP. With the default Service (externalTrafficPolicy: Cluster) a request may
+#    enter on any node and be SNATed to that node's address before it reaches Traefik: measured
+#    with traefik/whoami, the "client" was 10.42.0.0, 10.42.1.0 or 10.42.2.1 depending on the
+#    node. Learner playback tokens are bound to the client IP (ADR-0017), so 2 requests in 3 would
+#    have failed the binding. `Local` delivers only to a Traefik pod on the node the request
+#    entered — no SNAT, the source IP survives — and a DaemonSet puts one on every node, so every
+#    node can take traffic. On a cloud load balancer this is what preserves the real client IP.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    deployment:
+      kind: DaemonSet
+    service:
+      spec:
+        externalTrafficPolicy: Local

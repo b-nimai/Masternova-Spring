@@ -1,0 +1,6 @@
+Masternova {{ .Values.image.tag }} → namespace {{ .Release.Namespace }}
+{{- if .Values.ingress.enabled }}
+  https://{{ .Values.ingress.host }}{{ with .Values.ingress.httpsRedirectPort }}:{{ . }}{{ end }}
+{{- end }}
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/part-of=masternova
+  kubectl -n {{ .Release.Namespace }} logs job/db-migrate   # this release's migration

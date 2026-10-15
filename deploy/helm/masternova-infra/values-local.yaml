@@ -1,0 +1,7 @@
+# The local k3d cluster (Argo CD's masternova-infra Application, D4.7)
+seaweedfs:
+  corsOrigins: [https://masternova.localhost:8443]
+ingress:
+  clusterIssuer: masternova-ca
+  s3Host: s3.masternova.localhost
+  mailHost: mail.masternova.localhost

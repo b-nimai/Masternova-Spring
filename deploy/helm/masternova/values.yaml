@@ -1,0 +1,82 @@
+# Defaults = a real environment: GHCR images, Razorpay (fails closed without its secrets),
+# https. A local cluster overrides what differs in values-local.yaml.
+#
+# Not in this chart: the data layer (charts/masternova-infra, or managed services in D6) and the
+# Secrets, which are created out of band (`make k8s-secrets`), never from git.
+
+image:
+  registry: ghcr.io/b-nimai # → <registry>/masternova-spring-<api|worker|web>:<tag>
+  tag: "" # ⭐ required: an immutable sha-<commit> or X.Y.Z. A new tag here IS a deployment.
+  pullPolicy: IfNotPresent
+
+# Existing Secrets the pods mount as files under /run/secrets (Spring's configtree)
+secrets:
+  app: masternova-app # JWT_ACCESS_SECRET, NOTIFICATION_TOKEN_SECRET, PLAYBACK_TOKEN_SECRET, ENTITLEMENT_PLAYBACK_SECRET
+  db: masternova-db # kubernetes.io/basic-auth: username, password (also CNPG's owner secret)
+  redis: masternova-redis # password
+
+# Non-secret settings → ConfigMap `masternova-config` → env of api, worker and the migrate Job.
+# A free-form map: these are the apps' own env names (application.yaml), not a second vocabulary.
+# ⭐ No dev-only service names here (mailpit, seaweedfs): each environment says where its mail and
+#    storage are (values-local.yaml), e.g. MAIL_PROVIDER=resend, or STORAGE_ENDPOINT="" for AWS S3.
+config:
+  DATABASE_URL: jdbc:postgresql://masternova-db-rw:5432/masternova # also db-grants' and KEDA's database
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  STORAGE_PUBLIC_ENDPOINT: ""
+  WEB_URL: ""
+  LOG_VERIFICATION_LINKS: "false"
+  PAYMENT_PROVIDER: razorpay # fails closed: no keys, no start (commerce LLD §6)
+  TRACING_SAMPLING_PROBABILITY: "0.1"
+  SECURE_COOKIES: "true" # the refresh cookie over https only
+
+api:
+  replicas: 2 # ignored when autoscaling is on: the HPA owns the count
+  autoscaling: # HPA on CPU (templates/api-hpa.yaml)
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70 # of the request
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+worker:
+  replicas: 1 # ignored when autoscaling is on
+  autoscaling: # KEDA on queue depth (templates/worker-scaledobject.yaml); needs KEDA installed
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 3
+    outboxLagSecondsPerWorker: 30
+    queuedJobsPerWorker: 2 # = masternova.pipeline.slots
+    # Where KEDA's queries go: a READ-ONLY role (the infra chart's readerRole), never the app's
+    # owner credentials. Its password Secret lives in KEDA's namespace, the only namespace KEDA may
+    # read Secrets from (deploy/k3d/keda-values.yaml). The database: config.DATABASE_URL's.
+    postgres:
+      host: masternova-db-r.masternova.svc # any instance (a standby is fine for a count); full name: KEDA runs in its own namespace
+      user: keda_reader
+      passwordSecret: masternova-db-reader # in KEDA's namespace
+      sslmode: require # CNPG serves TLS with its own CA
+  workDirSize: 5Gi # emptyDir for a rung's segments while ffmpeg runs
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { cpu: 500m, memory: 128Mi }
+
+ingress:
+  enabled: true
+  className: traefik
+  host: masternova.example.com
+  clusterIssuer: "" # cert-manager ClusterIssuer that signs the host's certificate
+  # Traefik only: an http Ingress that redirects to https on this port ("" = no redirect Ingress)
+  httpsRedirectPort: ""
+
+migrate: # the pre-install/pre-upgrade hook (Argo CD runs it as PreSync); always on: the api doesn't migrate
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 768Mi }

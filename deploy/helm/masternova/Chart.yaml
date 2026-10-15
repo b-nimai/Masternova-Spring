@@ -1,0 +1,8 @@
+apiVersion: v2
+name: masternova
+description: Masternova's applications — api, worker, web — their ingress and the pre-upgrade migration Job
+type: application
+# The CHART's version (its templates). The images' version is a value (image.tag): a new image is
+# a values change, not a chart release — which is what GitOps commits (D4.7).
+version: 0.1.0
+appVersion: "0.0.1"

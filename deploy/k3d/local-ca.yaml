@@ -1,0 +1,36 @@
+# The local cluster's certificate authority (cert-manager, `make k8s-platform`).
+#
+#   selfsigned ClusterIssuer ──signs──▶ masternova-local-ca (a CA certificate, 10 years)
+#   masternova-ca ClusterIssuer ──signs with that CA──▶ every Ingress certificate
+#
+# Why not self-sign each Ingress directly: then every host has its own unrelated certificate and
+# each must be trusted separately. With one CA, trusting secrets/masternova-local-ca.crt once
+# (curl --cacert, or the OS keychain) makes every local host valid — the same shape as a real
+# ACME issuer (Let's Encrypt), which D6 would swap in by changing only the ClusterIssuer.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: masternova-local-ca
+  namespace: cert-manager # a ClusterIssuer reads its CA secret from cert-manager's own namespace
+spec:
+  isCA: true
+  commonName: Masternova local CA
+  secretName: masternova-local-ca
+  duration: 87600h # 10 y: it lives as long as the cluster
+  privateKey: { algorithm: ECDSA, size: 256 }
+  issuerRef: { name: selfsigned, kind: ClusterIssuer }
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: masternova-ca
+spec:
+  ca:
+    secretName: masternova-local-ca

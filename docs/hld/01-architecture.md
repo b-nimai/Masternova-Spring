@@ -1,6 +1,6 @@
 # Architecture
 
-**Last updated:** 2026-10-13 (cross-cutting: observability) · **Status:** Phase 0. Containers are real; module boxes are planned.
+**Last updated:** 2026-10-15 (deployment: Kubernetes + GitOps) · **Status:** Phase 0. Containers are real; module boxes are planned.
 
 ## 1. Context (C4 level 1)
 
@@ -92,5 +92,21 @@ The real diagram is generated on every build at `backend/api/target/spring-modul
 - **Dev:** `make up` (infra) + `make api` / `make web` from source.
 - **Containers:** `make stack`, all services via compose, web on :8081.
 - **Observability (D3):** `make obs` adds Prometheus, Alertmanager, Grafana, Tempo, Loki and Alloy (compose profile `observability`) to either view above.
-- **Kubernetes (Phase D4):** k3d + Helm, Argo CD syncing from `deploy/helm`.
+- **Kubernetes (Phase D4):** k3d (3 nodes) with two Helm charts, deployed by Argo CD from git.
+  A deployment is a commit of the image tag ([runbook](../runbooks/deploy-and-rollback.md),
+  [DevOps note 06](../../patterns/devops/06-kubernetes.md)).
+
+```mermaid
+flowchart LR
+  dev[merge to main] --> ci[CI: build, scan, sign → GHCR :sha-…]
+  dev2["make k8s-bump → PR → merge"] --> git[(git: values-local.yaml)]
+  ci -.->|the tag bump.sh checks| dev2
+  subgraph cluster["k3d cluster"]
+    argo[Argo CD] -->|wave 0| infra["masternova-infra:<br/>CNPG primary + standby, Redis,<br/>SeaweedFS, Mailpit"]
+    argo -->|"wave 1 · PreSync db-migrate"| apps["masternova:<br/>api 2–4 (HPA, CPU) · worker 1–3 (KEDA, queues) · web 2"]
+    tr[Traefik DaemonSet<br/>TLS: cert-manager local CA] --> apps
+  end
+  git -->|pull, 60 s| argo
+  browser[browser] -->|https :8443| tr
+```
 - **AWS (Phase D6, optional):** ECS Fargate + RDS + ElastiCache + S3/CloudFront, via Terraform.

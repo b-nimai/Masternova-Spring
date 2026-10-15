@@ -1,0 +1,48 @@
+{{- $p := .Values.postgres -}}
+# One object; the CloudNativePG operator makes the pods, PVCs, Services (-rw / -ro / -r),
+# replication and failover from it (devops/06 §4.1).
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: masternova-db
+  labels: {{- include "infra.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+  annotations:
+    # ⭐ Argo CD never deletes the database: not when it disappears from the chart (Prune=false),
+    #    not when the Application is deleted (Delete=false). Removing data is a human's decision.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+    helm.sh/resource-policy: keep # the same promise to `helm uninstall`
+spec:
+  instances: {{ $p.instances }}
+  imageName: {{ $p.image }}
+  primaryUpdateStrategy: unsupervised # a minor upgrade: standbys first, then a switchover
+  bootstrap:
+    initdb:
+      database: {{ $p.database }}
+      owner: {{ $p.owner }}
+      secret: { name: {{ $p.ownerSecret }} } # OUR Secret: the apps mount the same one
+      # As the superuser, once: pgvector isn't a trusted extension, so the owner can't create it
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS citext
+        - CREATE EXTENSION IF NOT EXISTS vector
+        - CREATE EXTENSION IF NOT EXISTS pg_trgm
+  storage:
+    size: {{ $p.storage }}
+  resources: {{- toYaml $p.resources | nindent 4 }}
+  postgresql:
+    parameters: {{- toYaml $p.parameters | nindent 6 }}
+  {{- with $p.readerRole }}
+  {{- if .name }}
+  managed:
+    roles:
+      # ⭐ A login and nothing else. What it may read is granted column by column by the apps'
+      #    db-grants hook (the tables are the apps'): status + next_attempt_at of the two queues.
+      - name: {{ .name }}
+        ensure: present
+        login: true
+        connectionLimit: 4
+        passwordSecret: { name: {{ .secret }} }
+  {{- end }}
+  {{- end }}
+  affinity: # never two instances on one node: a drain or a node failure keeps one
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required

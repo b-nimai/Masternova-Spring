@@ -1,0 +1,13 @@
+# Everything Masternova runs in one namespace: one `kubectl delete ns masternova` removes it all.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: masternova
+  labels:
+    # ⭐ Pod Security Admission (built into the API server, no add-on). The apps meet `restricted`
+    #    (non-root, no capabilities, read-only root, seccomp). The infra images (postgres, nginx's
+    #    root master) don't, so `baseline` is ENFORCED and `restricted` only WARNS and audits:
+    #    `kubectl apply` prints a warning for each pod that falls short.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted
