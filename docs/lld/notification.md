@@ -226,7 +226,7 @@ base64url(userId "." category "." expiresEpochSec) "." base64url(HMAC-SHA256(sec
 
 | Pattern | Class (`@DesignPattern` role) | The force that justified it |
 |---|---|---|
-| **Observer** (durable) | `SendVerificationEmail`, `SendWelcomeEmail` as `OutboxHandler`s | one cause, independently failing effects; identity doesn't know notification exists |
+| **Observer** (durable) | `SendVerificationEmail`, `SendWelcomeEmail` as `OutboxHandler`s; Phase 9: `SendPurchaseReceipt` (`commerce.order-paid.v1`) and `SendRefundNotice` (`commerce.order-refunded.v1`), both `PURCHASE` (mandatory, no unsubscribe link) | one cause, independently failing effects; identity and commerce don't know notification exists |
 | **Registry** (Factory Method family) | `OutboxRelay`'s `Map<eventType, OutboxHandler>`, built from the injected `List` | choose an implementation by a discriminator, without a `switch` that must be edited for every new consumer |
 | **Template Method** | `EmailTemplate.render` (final): subject → model → HTML → plaintext → footer by category | the skeleton is fixed; only the content varies. Each template can't "forget" the plaintext part or the unsubscribe footer. |
 | **Adapter** | `SmtpMailProvider` (`JavaMailSender`), `ResendMailProvider` (`RestClient` → Resend HTTP API) behind `MailProvider` | a third-party API is not our domain interface. Mailpit in dev, Resend in prod, chosen by `masternova.mail.provider`. |

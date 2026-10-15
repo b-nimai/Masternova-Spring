@@ -1,0 +1,4 @@
+# Loaded ON TOP of the main application.yaml (classpath:/config/ wins over classpath:/).
+masternova:
+  commerce:
+    provider: fake # the ITs use the network-free Razorpay double; production's default fails closed

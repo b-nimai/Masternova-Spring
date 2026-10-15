@@ -62,8 +62,16 @@ class AssetProgressIT {
 
   @BeforeEach
   void setUp() throws InterruptedException {
-    for (int i = 0; i < 100 && !listener.isRunning(); i++) {
-      Thread.sleep(50); // subscribed in the background after startup
+    // ⭐ This context may come from Spring's test-context CACHE, created by another class
+    //    (ExactlyOnceIT has the same configuration) and PAUSED while other contexts ran: Spring
+    //    Framework 7 stops a paused context's lifecycle beans, and this container (autoStartup =
+    //    false: the app starts it from a background thread once, on ApplicationReadyEvent) isn't
+    //    restarted on resume. Found in Phase 9: the full suite failed here, the IT alone passed.
+    if (!listener.isRunning()) {
+      listener.start();
+    }
+    for (int i = 0; i < 200 && !listener.isListening(); i++) {
+      Thread.sleep(50); // the pattern subscription is established asynchronously
     }
     db = JdbcClient.create(dataSource);
     clean();

@@ -3,9 +3,10 @@
 > **One-liner:** let an object's **current state decide what it may do next**. Each state is its
 > own type that answers only the events legal from it; everything else is refused in one place.
 
-**Type:** Behavioral · **Status:** built (Phases 6.2, 7.3) · **Last updated:** 2026-10-13
+**Type:** Behavioral · **Status:** built (Phases 6.2, 7.3, 9.3) · **Last updated:** 2026-10-14
 **Real code:** `com.masternova.api.catalog.domain.CourseState` (sealed: `Draft`, `InReview`, `Published`, `Archived`) · used by `Course.transition(action, now)`
 **Second use (7.3):** `com.masternova.api.media.domain.UploadState` (sealed: `Open`, `Completed`, `Aborted`, `Expired`), the Context is `UploadSession` (§5b)
+**Third use (9.3):** `com.masternova.api.commerce.domain.OrderState` (sealed: `Pending`, `Failed`, `Paid`, `Refunded`) + an `EnumSet` table on `OrderStatus`, the Context is `Order` (§5c)
 **Lab:** [`lab/.../patterns/state/`](../lab/src/main/java/com/masternova/patterns/state/): the same machine written three ways (switch table, enum with bodies, sealed interface + default methods), and a test that the three agree on every pair.
 
 **Trigger phrase:** "status", "lifecycle", "workflow", "can only … when …", "once X it can never …",
@@ -158,6 +159,40 @@ Three details worth stealing:
 
 Lab: `UploadLifecycle` counts side effects to show that a replay has none.
 
+## 5c. Third use: the order, where nothing is refused (Phase 9.3)
+
+`com.masternova.api.commerce.domain.OrderState` (sealed: `Pending`, `Failed`, `Paid`, `Refunded`),
+Context `Order`. The upload session refused some events (409) and replayed others. An order is
+driven by **payment messages**: the browser's signed callback, webhooks Razorpay retries for a day,
+our own refund call. Those are *history*, not requests, so no event is ever refused. Each answer
+is a `Move(from, to, effect)` or an `Ignore(why)`:
+
+| state ＼ event | `Captured` | `PaymentFailed` | `Refunded` |
+|---|---|---|---|
+| `Pending` | → `PAID`, GRANT | → `FAILED` | → `REFUNDED` |
+| `Failed` | → `PAID`, GRANT | ignore | → `REFUNDED` |
+| `Paid` | ignore | ignore | → `REFUNDED`, **REVOKE** |
+| `Refunded` | ignore | ignore | ignore |
+
+Two structures, each doing what it's good at:
+
+- **An `EnumSet` transition table** on `OrderStatus` (`PENDING → {FAILED, PAID, REFUNDED}`, …):
+  *where* an order may go. Every move goes up a rank, so **no sequence of messages can take an
+  order back**: a refund that overtakes the capture lands in `REFUNDED`, and the late capture is
+  ignored, so nothing is ever granted for money that was returned.
+- **The sealed states:** *what* an event does there, including the **effect**. The effect depends
+  on the source state: a refund revokes access from `PAID` and from nowhere else. A table of
+  target states can't hold that, which is why this isn't only a table (§7's alternative).
+
+`Order.apply` asserts each `Move` against the table, so a state class that drifts from the diagram
+fails loudly. `OrderStateTest` checks the twelve cells, then the properties both ways: every move
+is in the table and goes forward, every table edge is taken by some event, and **every permutation
+of {captured, failed, refunded} plus duplicates ends `REFUNDED` with at most one grant and exactly
+as many revokes**. Concurrency is the upload session's answer again: `SELECT … FOR UPDATE` on the
+order, and the loser reads the winner's state and is ignored.
+
+Lab: `OrderLifecycle` (the table + the states + the effect counters).
+
 ## 6. Where Spring itself uses it
 
 - **Spring State Machine** (`spring-statemachine`): a full framework (states, events, guards,
@@ -170,7 +205,7 @@ Lab: `UploadLifecycle` counts side effects to show that a replay has none.
 | Alternative | Why not here |
 |---|---|
 | status checks in the service | the rules scatter across callers; nothing stops a `DRAFT → PUBLISHED` |
-| an `EnumSet`-based transition table (`Map<Status, Set<Status>>`) | good for "is this edge legal?", but events also carry rules (gated or not), which a table of target states doesn't hold. Commerce's order machine (Phase 9) is closer to a pure table. |
+| an `EnumSet`-based transition table (`Map<Status, Set<Status>>`) | good for "is this edge legal?", but events also carry rules (gated or not), which a table of target states doesn't hold. Commerce's order machine (Phase 9) uses **both**: the table guards, the states carry the effects (§5c). |
 | Spring State Machine | a framework for five edges |
 | a `WHERE status = ?` conditional update per transition | `@Version` already rejects the second of two concurrent transitions (ADR-0010) |
 
@@ -204,7 +239,8 @@ Lab: `UploadLifecycle` counts side effects to show that a replay has none.
 - **Roles:** context (`Course`) · state interface (`CourseState`) · concrete states (records).
 - **In Masternova:** sealed interface, **default methods throw**, 5 overrides = the diagram; gated
   edges re-run the publish gate; `publishedAt` stamped once; a transition bumps `@Version`; ADMIN-only
-  publish is authorisation, not state.
+  publish is authorisation, not state. Orders (9.3): nothing refused, late messages ignored, an
+  `EnumSet` table guards forward-only moves, the states carry the effect.
 - **Pitfalls:** status `if`s in services · state objects deciding *who* · forgetting concurrency
   (two legal transitions racing).
 

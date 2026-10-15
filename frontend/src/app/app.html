@@ -6,6 +6,16 @@
   }
   <a routerLink="/" class="brand">Masternova</a>
   <span class="spacer"></span>
+  <a
+    mat-icon-button
+    routerLink="/cart"
+    aria-label="Cart"
+    data-testid="cart-link"
+    [matBadge]="cart.count()"
+    [matBadgeHidden]="cart.count() === 0"
+  >
+    <mat-icon>shopping_cart</mat-icon>
+  </a>
   @if (auth.user(); as user) {
     <button mat-button type="button" [matMenuTriggerFor]="userMenu" data-testid="user-menu">
       <mat-icon aria-hidden="true">account_circle</mat-icon>
@@ -13,6 +23,7 @@
     </button>
     <mat-menu #userMenu="matMenu">
       <a mat-menu-item routerLink="/account">My account</a>
+      <a mat-menu-item routerLink="/account/orders">My orders</a>
       <button mat-menu-item type="button" (click)="logout()">Log out</button>
     </mat-menu>
   } @else {

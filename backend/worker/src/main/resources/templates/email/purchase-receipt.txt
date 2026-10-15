@@ -1,0 +1,9 @@
+Thanks, [(${displayName})], your payment went through.
+
+[# th:each="line : ${lines}"]- [(${line.title})]: [(${line.price})]
+[/]
+Total paid: [(${total})]
+
+Your orders: [(${ordersUrl})]
+
+Keep this email as your receipt.

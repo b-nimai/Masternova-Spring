@@ -42,7 +42,7 @@ obs-check: ## Validate observability config and unit-test the alert rules (promt
 	  rc=$$?; rm -rf $$tmp; exit $$rc
 
 api: ## Run the api from source (:8080)
-	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && ./mvnw -pl api spring-boot:run
+	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && PAYMENT_PROVIDER=$${PAYMENT_PROVIDER:-fake} ./mvnw -pl api spring-boot:run
 
 worker: ## Run the worker from source (:8090)
 	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && ./mvnw -pl worker spring-boot:run

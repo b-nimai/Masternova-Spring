@@ -123,6 +123,11 @@ classDiagram
 yet. Entitlement (Phase 8) will need "does this lecture exist, is it a free preview, which course
 is it in?"; that's when `CatalogApi` appears, shaped by its first real caller.
 
+*Update 2026-10-14:* `CatalogApi` arrived in Phase 8 (`courseFacts`, `courseFactsOfLecture`,
+`courseExists`, see [`entitlement-engine.md`](entitlement-engine.md) §4). Phase 9 added
+`offers(courseIds)` → `CourseOffer` (title, slug, instructor, availability, price) for commerce's
+cart: one `findAllById` statement, no curriculum.
+
 **List fetch plan.** A list page joins the category with a small "fetch plan" Specification
 (`fetchingCategory()`), not Spring Data's `project("category")`: in Spring Data JPA 4.1,
 `project()` applies its fetch graph to `all()` / `page()` / `stream()` but **not** to `scroll()`

@@ -3,8 +3,8 @@
 > **One-liner:** define a family of algorithms behind one interface, so the caller chooses one at
 > runtime and new ones are added without editing the caller.
 
-**Type:** Behavioral · **Status:** ✅ in real code (Phases 7.5, 8.2); payment gateways follow in Phase 9 · **Last updated:** 2026-10-14
-**Real code:** `com.masternova.worker.pipeline.ffmpeg.LadderProfile` (Strategy) → `StandardLadder`, `FastLadder` (ConcreteStrategy), chosen by `masternova.pipeline.ladder` · planned: `com.masternova.api.commerce.payment.PaymentGateway` · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/) (payments) and [`strategy/ladder/`](../lab/src/main/java/com/masternova/patterns/strategy/ladder/Ladder.java) (the transcode ladder)
+**Type:** Behavioral · **Status:** ✅ in real code (Phases 7.5, 8.2, 9.2, 9.4) · **Last updated:** 2026-10-14
+**Real code:** `com.masternova.worker.pipeline.ffmpeg.LadderProfile` (Strategy) → `StandardLadder`, `FastLadder` (ConcreteStrategy), chosen by `masternova.pipeline.ladder` · `com.masternova.api.commerce.domain.Discount` (sealed: `PercentOff`, `AmountOff`) · `com.masternova.api.commerce.domain.PaymentGateway` → `RazorpayGateway`, `FakePaymentGateway`, chosen by `masternova.commerce.provider` · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/) (payments) and [`strategy/ladder/`](../lab/src/main/java/com/masternova/patterns/strategy/ladder/Ladder.java) (the transcode ladder)
 
 **Trigger phrase:** "*support several providers/methods/algorithms, and more later*", or
 "*the behaviour depends on a type/config value*".
@@ -151,6 +151,40 @@ That's the usual pairing: Strategy is the shape of each rule, the chain is how t
 The force is the same as for the ladder: the rules vary independently and new ones are added
 without opening the old ones (a coupon policy next quarter is a new `@Component @Order`).
 
+## 7d. Third use: coupon kinds as sealed records (Phase 9.2)
+
+`com.masternova.api.commerce.domain.Discount` is a `sealed interface` with two records,
+`PercentOff(percent, cap?)` and `AmountOff(amount)`. Each one computes `discountOn(base)`
+differently: a percentage rounds half-up to the paisa and then caps, a fixed amount clamps to the
+base. The pricer calls `coupon.discount().discountOn(base)` and never looks at the kind.
+
+What's different from the ladder and the policies: **these strategies are data, not beans**. A
+coupon *row* picks its strategy, so there's no Spring selection. The one place a row becomes a
+strategy, `Coupon.discount()`, is an exhaustive `switch` over the kind. A third kind is a new
+record plus one `case`, and the compiler finds the switch.
+
+The contract every strategy must keep (`0 ≤ discount ≤ base`, same currency) is what lets the
+pricer write `subtotal.minus(discount)` without a check. `DiscountTest.theContractHoldsForEveryKind`
+runs every strategy over the edge bases (0, 1, 99, …). Lab: [`strategy/coupon/`](../lab/src/main/java/com/masternova/patterns/strategy/coupon/CouponDiscount.java).
+
+## 7e. Fourth use: the payment provider (Phase 9.4)
+
+The lab's `PaymentGateway` (written in Phase 1, before any provider existed) picks a gateway **per
+request** from a registry. The real one is simpler, and the difference is worth saying: Masternova
+takes payments through **one** provider per deployment, so the strategy is picked **once, by
+configuration**, in `CommerceConfig`: two `@Bean` methods guarded by
+`@ConditionalOnProperty(masternova.commerce.provider)`, `razorpay` (test or live keys) or `fake`,
+so exactly one gateway exists and everything else injects `PaymentGateway`.
+
+The second implementation is real, not speculative: local runs, e2e and CI have no Razorpay keys,
+so `FakePaymentGateway` simulates the two outbound calls (create an order, refund) and shares the
+rest with Razorpay's adapter (signatures, webhook parsing). Checkout, confirm, webhooks and refunds
+never contain `if (fake)`. A per-request registry would come back only if learners could choose a
+provider (Razorpay for INR, Stripe for USD), which the single-currency catalog doesn't need yet.
+
+Guard rails: the fake logs a WARN at startup, and choosing `RAZORPAY` without its three secrets
+fails startup (`FakePaymentGatewayTest.razorpayWithoutKeysRefusesToStart`).
+
 ## 8. Interview Q&A
 
 - **Q: Strategy vs State?**
@@ -171,7 +205,7 @@ without opening the old ones (a coupon policy next quarter is a new `@Component 
 
 - **Intent:** a family of interchangeable algorithms behind one interface, chosen at runtime.
 - **Roles:** Strategy (interface) · ConcreteStrategy · Context (holds and uses one).
-- **In Masternova:** the transcode ladder (`StandardLadder` / `FastLadder`, by property; a shared never-upscale default method) · payment gateways next (Phase 9).
+- **In Masternova:** the transcode ladder (`StandardLadder` / `FastLadder`, by property; a shared never-upscale default method) · entitlement policies · coupon kinds (sealed records, picked by the row) · payment gateways (9.4).
 - **Pitfall:** one implementation is not a seam. And select via a registry, not a `switch` that
   just moved somewhere else.
 

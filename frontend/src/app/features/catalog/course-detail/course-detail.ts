@@ -9,6 +9,7 @@ import { RouterLink } from '@angular/router';
 import { CatalogApi } from '../../../core/api/catalog-api';
 import { AccessResponse, EntitlementApi } from '../../../core/api/entitlement-api';
 import { AuthStore } from '../../../core/auth/auth-store';
+import { CartItem } from '../../../core/commerce/cart-store';
 import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
 import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
@@ -80,6 +81,23 @@ export class CourseDetail {
     return (
       lectures.find((l) => l.kind === 'VIDEO' && open?.get(l.id)?.kind === 'ALLOWED')?.id ?? null
     );
+  });
+
+  /**
+   * What "Buy now" puts in the cart (Phase 9); null when the server wouldn't sell it — the same
+   * rule as its COURSE_NOT_FOR_SALE / COURSE_IS_FREE: published, priced, and not free.
+   */
+  protected readonly offer = computed<CartItem | null>(() => {
+    const c = this.course.value();
+    return c && c.status === 'PUBLISHED' && c.priceSet && c.priceMinor > 0
+      ? {
+          courseId: c.id,
+          slug: c.slug,
+          title: c.title,
+          priceMinor: c.priceMinor,
+          currency: c.currency,
+        }
+      : null;
   });
 
   /** The banner for `?locked=` — only for a reason we know (it's a url anyone can edit). */

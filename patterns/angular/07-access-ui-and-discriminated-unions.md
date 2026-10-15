@@ -155,7 +155,8 @@ layout (Material 3 tokens, `course-detail.scss`) and these choices:
 - **The purchase card is an inline call to action** under the price, not the Figma's floating
   side card with "Buy Now" and "Add to Cart". Cart and checkout arrive in Phase 9; restyle the
   CTA into the card then.
-- **"Buy now" is disabled** with "Checkout is coming soon" until Phase 9.
+- **"Buy now" is disabled** with "Checkout is coming soon" until Phase 9. *(Phase 9.9: it puts
+  the course in the cart and goes there; see [note 08](08-cart-checkout-and-third-party-scripts.md).)*
 - **Lock icons** replace the Figma's plain lecture rows, and an open video's title is a link to
   the player.
 - **The player page is minimal** (back link + video): the Figma's lecture sidebar and progress

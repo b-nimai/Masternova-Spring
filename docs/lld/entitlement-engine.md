@@ -101,6 +101,7 @@ classDiagram
   class EntitlementApi {
     <<interface, module API>>
     decide(viewer, lectureId) AccessDecision
+    heldCourses(userId, courseIds) Set~UUID~
     grant(userId, courseId, source, expiresAt) boolean
     revoke(userId, courseId, reason) boolean
   }
@@ -145,7 +146,8 @@ classDiagram
 ```
 
 **Module API** (`com.masternova.api.entitlement`): `EntitlementApi`, `AccessDecision`,
-`AccessGrant`, `DenialReason`, `EntitlementSource`. Phase 9 calls `grant`/`revoke`; any module
+`AccessGrant`, `DenialReason`, `EntitlementSource`. Phase 9 calls `grant`/`revoke`, and
+`heldCourses` (added in 9.2: which of a cart's courses the buyer holds ACTIVE, one cached lookup each); any module
 can guard a method with `@PreAuthorize("@entitlements.canWatch(authentication, #lectureId)")`.
 
 **What the module needs from others** (each a public API, never a table):

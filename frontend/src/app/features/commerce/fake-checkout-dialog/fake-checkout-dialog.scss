@@ -1,0 +1,11 @@
+.note {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 13px;
+}
+
+.amount {
+  font: var(--mat-sys-title-large);
+}

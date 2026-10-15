@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-13 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-14 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -21,7 +21,7 @@ logs, trivially routable by nginx or an ingress, and cacheable. A breaking chang
 | 9 | Long-running work streams over SSE | ✅ Phase 7.7 |
 | 10 | Authorization denials carry a reason code | Phase 8 |
 | 11 | Media is played with a ticket, not the session | ✅ ticket 7.9 · entitlement check Phase 8 |
-| 12 | Payment webhooks answer 200 for almost everything | Phase 9 |
+| 12 | Payment webhooks answer 200 for almost everything | ✅ Phase 9.6 |
 | 13 | Authentication: deny by default, Bearer access token, refresh by cookie | ✅ Phase 3 |
 
 ## 1. Error envelope: RFC 9457 Problem Details
@@ -246,6 +246,20 @@ lecture without a video is 409 `LECTURE_HAS_NO_VIDEO`; one still processing, 409
 signature verifies, it answers 200 for `processed`, `duplicate`, `ignored` and `deferred`
 alike; all of them mean "stop retrying". A bad signature is 400: terminal for the provider,
 and it would fail on retry anyway.
+
+**Implemented in Phase 9.6** (`WebhookController` → `WebhookService`, ADR-0018):
+
+| Delivery | Response |
+|---|---|
+| signature verifies, the event moved an order | 200 `{"outcome": "PROCESSED"}` |
+| an event id already processed (Razorpay's `X-Razorpay-Event-Id`) | 200 `DUPLICATE`, nothing done |
+| a type commerce doesn't act on, or a message the order's state ignores (late, duplicate, wrong amount) | 200 `IGNORED` |
+| about an order that isn't ours | 200 `UNKNOWN_ORDER` |
+| signature missing or wrong | 400 `WEBHOOK_SIGNATURE_INVALID`, nothing claimed |
+| processing failed | 500; the claim rolled back with the effects, so the redelivery runs |
+
+The controller takes `@RequestBody byte[]`: the HMAC is over the bytes as they arrived, never a
+re-serialised DTO. There is no `deferred` yet: nothing is processed later than the request.
 
 ## 13. Authentication
 

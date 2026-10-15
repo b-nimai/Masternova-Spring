@@ -4,8 +4,8 @@
 > `not`), so a search with seven optional facets is "the AND of whichever leaves are present", and
 > a rule like "who may see a draft" is written **once** and applied everywhere.
 
-**Type:** Enterprise (Evans / Fowler, DDD) · **Status:** built (Phase 5.4) · **Last updated:** 2026-10-02
-**Real code:** `com.masternova.api.catalog.domain.CourseSpecifications` (leaves) · `com.masternova.api.catalog.domain.PublishGate` (explainable: coded requirements, Phase 6) · `com.masternova.api.catalog.application.CourseSearch` (composes them) · `com.masternova.api.catalog.domain.Viewer` (the visibility rule's in-memory twin)
+**Type:** Enterprise (Evans / Fowler, DDD) · **Status:** built (Phases 5.4, 6.3, 9.2) · **Last updated:** 2026-10-14
+**Real code:** `com.masternova.api.catalog.domain.CourseSpecifications` (leaves) · `com.masternova.api.catalog.domain.PublishGate` (explainable: coded requirements, Phase 6) · `com.masternova.api.catalog.application.CourseSearch` (composes them) · `com.masternova.api.catalog.domain.Viewer` (the visibility rule's in-memory twin) · `com.masternova.api.commerce.domain.CouponEligibility` (explainable coupon rules, Phase 9)
 **Lab:** [`lab/.../patterns/specification/`](../lab/src/main/java/com/masternova/patterns/specification/): the full Evans form, both representations (`isSatisfiedBy` + `toWhere`), Spring-free.
 
 **Trigger phrase:** "filter by any combination of…", "only if all of these hold", "the same rule
@@ -175,6 +175,24 @@ keeps the failures. Same pattern, different composite.
 
 ⭐ `PublishGateTest.everyRequirementHasAFailingExample` checks that a map of failing examples covers
 every code in `REQUIREMENTS`, so **a rule added without a test fails the build**.
+
+### 3c. Coupon eligibility (Phase 9.2)
+
+`com.masternova.api.commerce.domain.CouponEligibility` has the same shape as the publish gate:
+six `Rule(code, message, predicate)` entries over a `Context(coupon, courseIds in the cart,
+subtotal, now)`, in the order they're reported (`COUPON_INACTIVE`, `COUPON_NOT_STARTED`,
+`COUPON_EXPIRED`, `COUPON_EXHAUSTED`, `COUPON_NOT_APPLICABLE`, `COUPON_MIN_SUBTOTAL`).
+`failures(context)` collects every failing rule; `require(context)` throws the **first** as a 422
+with its code, which the cart page shows under the coupon field.
+
+Two details worth saying out loud:
+
+- **The context is built once and the rules never query.** "Is the course in the cart" is a set
+  the pricer already has; "how many redemptions" is a column on the loaded coupon.
+- **The window is start-inclusive, end-exclusive** (`now ≥ startsAt`, `now < endsAt`), so two
+  back-to-back coupons never both apply at the boundary. `CouponEligibilityTest` pins both edges.
+
+Lab: [`specification/coupon/`](../lab/src/main/java/com/masternova/patterns/specification/coupon/CouponRules.java).
 
 ## 4. Java features that make it nicer
 

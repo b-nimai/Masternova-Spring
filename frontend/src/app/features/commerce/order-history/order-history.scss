@@ -1,0 +1,31 @@
+.order-history {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+table {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.status {
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: var(--mat-sys-surface-container-high);
+
+  &[data-status='PAID'] {
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+  }
+
+  &[data-status='FAILED'] {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+}
+
+.form-error {
+  color: var(--mat-sys-error);
+}

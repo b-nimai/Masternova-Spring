@@ -2,7 +2,9 @@ package com.masternova.api.entitlement;
 
 import com.masternova.api.identity.CurrentUser;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -18,6 +20,12 @@ public interface EntitlementApi {
    * unknown lecture.
    */
   AccessDecision decide(Optional<CurrentUser> viewer, UUID lectureId);
+
+  /**
+   * Which of these courses the user holds an ACTIVE entitlement for right now — what a cart must
+   * not sell them again (Phase 9). Expired and revoked rows don't count: those may be bought.
+   */
+  Set<UUID> heldCourses(UUID userId, Collection<UUID> courseIds);
 
   /**
    * Gives a user a course. ⭐ Idempotent against a held grant — a duplicate while the access is

@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { AccessResponse } from '../../../core/api/entitlement-api';
 import { AuthStore } from '../../../core/auth/auth-store';
+import { CART_MAX_ITEMS, CartStore } from '../../../core/commerce/cart-store';
+import { JAVA } from '../../../../testing/commerce-fixtures';
 import { AccessCta } from './access-cta';
 
 describe('AccessCta', () => {
@@ -10,6 +12,7 @@ describe('AccessCta', () => {
 
   beforeEach(async () => {
     signedIn = false;
+    localStorage.clear();
     await TestBed.configureTestingModule({
       imports: [AccessCta],
       providers: [
@@ -20,6 +23,7 @@ describe('AccessCta', () => {
     fixture = TestBed.createComponent(AccessCta);
     fixture.componentRef.setInput('slug', 'k8s');
     fixture.componentRef.setInput('firstLectureId', 'l1');
+    fixture.componentRef.setInput('offer', JAVA);
   });
 
   function show(access: AccessResponse): HTMLElement {
@@ -59,5 +63,46 @@ describe('AccessCta', () => {
     fixture.componentInstance.retry.subscribe(() => retried++);
     show({ kind: 'DENIED', reason: 'ACCESS_CHECK_FAILED' }).querySelector('button')!.click();
     expect(retried).toBe(1);
+  });
+
+  it('puts the course in the cart: Buy now goes there, Add to cart stays', () => {
+    signedIn = true;
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const cart = TestBed.inject(CartStore);
+
+    const el = show({ kind: 'DENIED', reason: 'NO_ENTITLEMENT' });
+    el.querySelector<HTMLButtonElement>('[data-testid="add-to-cart"]')!.click();
+    expect(cart.courseIds()).toEqual(['c-java']);
+    expect(navigate).not.toHaveBeenCalled();
+
+    fixture.detectChanges();
+    expect(el.querySelector('[data-testid="go-to-cart"]')!.getAttribute('href')).toBe('/cart');
+
+    cart.remove('c-java');
+    fixture.detectChanges();
+    el.querySelector<HTMLButtonElement>('[data-testid="buy-now"]')!.click();
+    expect(cart.has('c-java')).toBe(true);
+    expect(navigate).toHaveBeenCalledWith(['/cart']);
+  });
+
+  it('says the cart is full instead of silently not adding', () => {
+    // review fix: "Buy now" stayed enabled, added nothing, and went to a cart without the course
+    signedIn = true;
+    const cart = TestBed.inject(CartStore);
+    for (let i = 0; i < CART_MAX_ITEMS; i++) {
+      cart.add({ ...JAVA, courseId: `other-${i}` });
+    }
+    const el = show({ kind: 'DENIED', reason: 'NO_ENTITLEMENT' });
+    expect(el.querySelector<HTMLButtonElement>('[data-testid="buy-now"]')!.disabled).toBe(true);
+    expect(el.querySelector('[data-testid="cart-full"]')).not.toBeNull();
+  });
+
+  it('renews expired access through the cart', () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    show({ kind: 'DENIED', reason: 'ENTITLEMENT_EXPIRED' })
+      .querySelector<HTMLButtonElement>('[data-testid="renew"]')!
+      .click();
+    expect(TestBed.inject(CartStore).has('c-java')).toBe(true);
+    expect(navigate).toHaveBeenCalledWith(['/cart']);
   });
 });

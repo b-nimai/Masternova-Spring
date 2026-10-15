@@ -28,3 +28,5 @@ re-derived rather than copied.
 | [0015](0015-tracing-with-micrometer-observation-and-otlp.md) | Tracing through Micrometer Observation + the OTel SDK (not the Java agent); the outbox row carries the W3C trace context in `headers` | accepted |
 | [0016](0016-cache-the-entitlement-row-not-the-decision.md) | Cache the entitlement row, not the decision: a Decorator over the repository, evicted after commit, negatives cached, failing open to Postgres | accepted |
 | [0017](0017-short-ip-bound-playback-token.md) | Learner playback: a 5-minute token bound to user, lecture and IP (signed, not carried); the player re-tickets on a 403 | accepted |
+| [0018](0018-claim-webhook-events-before-processing.md) | Webhook dedupe: claim the provider's event id (primary key) in the same transaction as the effects; a failed processing rolls the claim back so the redelivery runs | accepted |
+| [0019](0019-grant-access-in-the-order-transaction.md) | Grant course access in the transaction that marks the order paid (and revoke in the refund's); only receipts and enrollment stay eventual | accepted |
