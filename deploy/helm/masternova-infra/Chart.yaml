@@ -1,0 +1,13 @@
+apiVersion: v2
+name: masternova-infra
+description: Masternova's data layer on a cluster — Postgres (CloudNativePG Cluster), Redis, S3 (SeaweedFS), SMTP (Mailpit)
+type: application
+# A separate release from the apps: the apps' pre-upgrade migration hook needs a database that
+# already exists, and on AWS (D6) this whole chart is replaced by RDS, ElastiCache and S3.
+version: 0.1.0
+dependencies:
+  - name: redis
+    version: 0.37.2
+    repository: oci://registry-1.docker.io/cloudpirates
+    # vendored in charts/ (`helm dependency build`): rendering needs no network, and what Argo CD
+    # renders is exactly what's in git

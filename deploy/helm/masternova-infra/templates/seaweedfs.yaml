@@ -1,0 +1,87 @@
+{{- if .Values.seaweedfs.enabled }}
+{{- $s := .Values.seaweedfs -}}
+{{- $c := dict "root" . "component" "seaweedfs" -}}
+# S3 for media (ADR-0012) in one pod, data on a PVC. Dev-only credentials, as in compose.
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs
+  labels: {{- include "infra.labels" $c | nindent 4 }}
+spec:
+  selector: {{- include "infra.selectorLabels" $c | nindent 4 }}
+  ports: [{ name: s3, port: 8333 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: seaweedfs
+  labels: {{- include "infra.labels" $c | nindent 4 }}
+spec:
+  serviceName: seaweedfs
+  replicas: 1
+  selector:
+    matchLabels: {{- include "infra.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "infra.labels" $c | nindent 8 }}
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: seaweedfs
+          image: {{ $s.image }}
+          args: [server, -s3, -dir=/data, -volume.max=0]
+          env:
+            - { name: AWS_ACCESS_KEY_ID, value: masternova }
+            - { name: AWS_SECRET_ACCESS_KEY, value: masternova-dev-secret }
+          ports: [{ name: s3, containerPort: 8333 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: s3 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts: [{ name: data, mountPath: /data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: {{ $s.storage }} } }
+---
+# The bucket + its CORS rule, after every install/upgrade (idempotent). A hook, so it re-runs
+# when the CORS origins change instead of being an immutable Job nobody can re-apply.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: media-init
+  labels: {{- include "infra.labels" (dict "root" . "component" "media-init") | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 10 # seaweedfs may still be starting: retries with a growing delay
+  template:
+    spec:
+      restartPolicy: OnFailure
+      enableServiceLinks: false
+      containers:
+        - name: aws
+          image: amazon/aws-cli:2.31.0
+          env:
+            - { name: AWS_ACCESS_KEY_ID, value: masternova }
+            - { name: AWS_SECRET_ACCESS_KEY, value: masternova-dev-secret }
+            - { name: AWS_DEFAULT_REGION, value: us-east-1 }
+            - { name: BUCKET, value: {{ $s.bucket }} }
+            - name: CORS
+              value: {{ dict "CORSRules" (list (dict "AllowedOrigins" $s.corsOrigins "AllowedMethods" (list "PUT" "GET" "HEAD") "AllowedHeaders" (list "*") "ExposeHeaders" (list "ETag") "MaxAgeSeconds" 3000)) | toJson | quote }}
+          command: [/bin/sh, -c]
+          args:
+            - |
+              set -e
+              s3="aws --endpoint-url http://seaweedfs:8333"
+              $s3 s3api head-bucket --bucket "$BUCKET" 2>/dev/null || $s3 s3api create-bucket --bucket "$BUCKET"
+              $s3 s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "$CORS"
+              echo "media-init: $BUCKET + cors ready"
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+{{- end }}

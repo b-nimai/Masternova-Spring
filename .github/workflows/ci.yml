@@ -7,7 +7,9 @@
 #   images       → build all three Docker images, scan with Trivy (fails on fixable HIGH/CRITICAL);
 #                  on main, push the scanned images to GHCR as :sha-<commit> and :main, with SBOM +
 #                  provenance attestations, and sign them keylessly with cosign
-# Versioned releases (vX.Y.Z tags) live in release.yml; deploying comes in Phase D4.
+#   helm         → lint both charts, validate what they render (kubeconform, CRD schemas included)
+# Versioned releases (vX.Y.Z tags) live in release.yml. Deploying is GitOps (D4.7): a commit that
+# changes the image tag in deploy/helm/masternova/values-local.yaml, synced by Argo CD.
 name: CI
 
 on:
@@ -15,9 +17,14 @@ on:
     branches: [main]
   pull_request:
 
-concurrency: # a new push cancels the still-running CI of the previous one
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+# A new push to a PR cancels that PR's still-running CI. NEVER on main: each main commit's run
+# publishes that commit's images (:sha-…), which is what deployments pin. Found in D4.5: merging
+# a docs PR right after a phase PR cancelled the phase's run, and the docs commit builds no
+# images (path filters), so Phases 8 and 9 never got an api/worker image. A group per commit on
+# main (not just "don't cancel": a group keeps one PENDING run, and a third push replaces it).
+concurrency:
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -34,6 +41,7 @@ jobs:
       workflows: ${{ steps.filter.outputs.workflows }}
       e2e: ${{ steps.filter.outputs.e2e }}
       observability: ${{ steps.filter.outputs.observability }}
+      helm: ${{ steps.filter.outputs.helm }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
@@ -54,6 +62,10 @@ jobs:
               - '.github/**'
             observability:
               - 'deploy/observability/**'
+              - 'Makefile'
+              - '.github/workflows/ci.yml'
+            helm:
+              - 'deploy/helm/**'
               - 'Makefile'
               - '.github/workflows/ci.yml'
             e2e:
@@ -118,6 +130,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: make obs-check
+
+  # Both Helm charts: `helm lint --strict`, then everything they render validated against the
+  # Kubernetes API schemas and the CRDs' (CNPG Cluster, Traefik Middleware) by kubeconform (D4.5).
+  # A chart error otherwise surfaces when Argo CD syncs it — after the merge.
+  helm:
+    needs: changes
+    if: needs.changes.outputs.helm == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.1 # = local (`helm version`)
+      - name: Install kubeconform
+        run: |
+          curl -sSfL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kubeconform
+      - run: make helm-check
 
   patterns-lab:
     needs: changes
@@ -340,7 +370,7 @@ jobs:
   #    single stable status, so the protection rule never needs editing.
   ci-ok:
     if: always()
-    needs: [changes, backend, patterns-lab, frontend, workflows, observability, images, e2e]
+    needs: [changes, backend, patterns-lab, frontend, workflows, observability, helm, images, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Every job succeeded or was skipped

@@ -1,0 +1,10 @@
+# Non-secret settings for api, worker (envFrom) and the migrate Job (env, see db-migrate-job.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: masternova-config
+  labels: {{- include "masternova.labels" (dict "root" . "component" "config") | nindent 4 }}
+data:
+  {{- range $k, $v := .Values.config }}
+  {{ $k }}: {{ $v | toString | quote }}
+  {{- end }}

@@ -1,0 +1,46 @@
+{{- if .Values.migrate.enabled }}
+{{- $c := dict "root" . "component" "db-migrate" -}}
+# Flyway BEFORE the rollout, once, by one pod (devops/06 §4.3). A Helm hook: `helm upgrade` runs it
+# first and stops if it fails; Argo CD runs the same hook as PreSync. The api image (the migrations
+# are in its jar), exiting right after the context refresh (-Dspring.context.exit=onRefresh).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+  labels: {{- include "masternova.labels" $c | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    # replace the previous run's Job (its pod template is immutable); keep this one for `kubectl logs`
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 2 # Flyway is transactional per migration on Postgres: a retry resumes cleanly
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels: {{- include "masternova.labels" $c | nindent 8 }}
+    spec:
+      restartPolicy: Never # a failed pod stays for `kubectl logs`
+      {{- include "masternova.jvmPodSpec" . | nindent 6 }}
+      containers:
+        - name: migrate
+          image: {{ include "masternova.image" (dict "root" . "app" "api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # ⭐ env inline, not `envFrom: masternova-config`: a pre-install hook runs BEFORE the
+          #    chart's ordinary objects exist, so on a first install the ConfigMap isn't there yet.
+          env:
+            {{- range $k, $v := .Values.config }}
+            - { name: {{ $k }}, value: {{ $v | toString | quote }} }
+            {{- end }}
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError -Dspring.context.exit=onRefresh
+            - { name: SPRING_FLYWAY_ENABLED, value: "true" }
+          {{- include "masternova.restrictedContainer" . | nindent 10 }}
+          resources: {{- toYaml .Values.migrate.resources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: secrets, mountPath: /run/secrets, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+        {{- include "masternova.secretsVolume" (dict "root" . "redis" false "appKeys" (list "JWT_ACCESS_SECRET")) | nindent 8 }}
+{{- end }}

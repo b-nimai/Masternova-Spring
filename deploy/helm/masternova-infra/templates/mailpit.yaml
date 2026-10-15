@@ -1,11 +1,12 @@
-# Local SMTP inbox: every email the worker sends lands here (`kubectl port-forward svc/mailpit 8026:8025`).
+{{- if .Values.mailpit.enabled }}
+{{- $c := dict "root" . "component" "mailpit" -}}
 apiVersion: v1
 kind: Service
 metadata:
   name: mailpit
-  namespace: masternova
+  labels: {{- include "infra.labels" $c | nindent 4 }}
 spec:
-  selector: { app.kubernetes.io/name: mailpit }
+  selector: {{- include "infra.selectorLabels" $c | nindent 4 }}
   ports:
     - { name: smtp, port: 1025 }
     - { name: http, port: 8025 }
@@ -14,22 +15,23 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mailpit
-  namespace: masternova
+  labels: {{- include "infra.labels" $c | nindent 4 }}
 spec:
   replicas: 1
   selector:
-    matchLabels: { app.kubernetes.io/name: mailpit }
+    matchLabels: {{- include "infra.selectorLabels" $c | nindent 6 }}
   template:
     metadata:
-      labels: { app.kubernetes.io/name: mailpit, app.kubernetes.io/part-of: masternova }
+      labels: {{- include "infra.labels" $c | nindent 8 }}
     spec:
       enableServiceLinks: false
       containers:
         - name: mailpit
-          image: axllent/mailpit:v1.31.5
+          image: {{ .Values.mailpit.image }}
           ports:
             - { name: smtp, containerPort: 1025 }
             - { name: http, containerPort: 8025 }
           resources:
             requests: { cpu: 20m, memory: 32Mi }
             limits: { memory: 128Mi }
+{{- end }}

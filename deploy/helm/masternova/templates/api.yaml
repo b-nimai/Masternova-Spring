@@ -1,0 +1,64 @@
+{{- $c := dict "root" . "component" "api" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: api # ⭐ nginx's `proxy_pass http://api:8080` (frontend/nginx.conf) resolves this name
+  labels: {{- include "masternova.labels" $c | nindent 4 }}
+spec:
+  selector: {{- include "masternova.selectorLabels" $c | nindent 4 }}
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels: {{- include "masternova.labels" $c | nindent 4 }}
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicas }} # with an HPA, the HPA owns this field
+  {{- end }}
+  selector:
+    matchLabels: {{- include "masternova.selectorLabels" $c | nindent 6 }}
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 } # a rollout never drops below the replica count
+  template:
+    metadata:
+      labels: {{- include "masternova.labels" $c | nindent 8 }}
+      annotations: {{- include "masternova.configChecksum" . | nindent 8 }}
+    spec:
+      {{- include "masternova.jvmPodSpec" . | nindent 6 }}
+      terminationGracePeriodSeconds: 45 # preStop 5 s + Spring's 30 s drain + margin
+      containers:
+        - name: api
+          image: {{ include "masternova.image" (dict "root" . "app" "api") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: masternova-config } }]
+          env:
+            - { name: SECURE_COOKIES, value: {{ .Values.api.secureCookies | quote }} }
+            - { name: SPRING_FLYWAY_ENABLED, value: "false" } # the db-migrate hook owns the schema
+          {{- include "masternova.restrictedContainer" . | nindent 10 }}
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          # startup: booted yet? · liveness: wedged → restart · readiness: send traffic?
+          # Liveness never checks a dependency: a DB outage must not restart every pod.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            preStop: { sleep: { seconds: 5 } } # endpoint removal races SIGTERM
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: secrets, mountPath: /run/secrets, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+        {{- include "masternova.secretsVolume" (dict "root" . "redis" true "appKeys" (list "JWT_ACCESS_SECRET" "NOTIFICATION_TOKEN_SECRET" "PLAYBACK_TOKEN_SECRET" "ENTITLEMENT_PLAYBACK_SECRET")) | nindent 8 }}

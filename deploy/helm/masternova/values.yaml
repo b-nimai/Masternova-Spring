@@ -1,0 +1,69 @@
+# Defaults = a real environment: GHCR images, Razorpay (fails closed without its secrets),
+# https. A local cluster overrides what differs in values-local.yaml.
+#
+# Not in this chart: the data layer (charts/masternova-infra, or managed services in D6) and the
+# Secrets, which are created out of band (`make k8s-secrets`), never from git.
+
+image:
+  registry: ghcr.io/b-nimai # → <registry>/masternova-spring-<api|worker|web>:<tag>
+  tag: "" # ⭐ required: an immutable sha-<commit> or X.Y.Z. A new tag here IS a deployment.
+  pullPolicy: IfNotPresent
+
+# Existing Secrets the pods mount as files under /run/secrets (Spring's configtree)
+secrets:
+  app: masternova-app # JWT_ACCESS_SECRET, NOTIFICATION_TOKEN_SECRET, PLAYBACK_TOKEN_SECRET, ENTITLEMENT_PLAYBACK_SECRET
+  db: masternova-db # kubernetes.io/basic-auth: username, password (also CNPG's owner secret)
+  redis: masternova-redis # password
+
+# Non-secret settings → ConfigMap `masternova-config` → env of api, worker and the migrate Job.
+# A free-form map: these are the apps' own env names (application.yaml), not a second vocabulary.
+config:
+  DATABASE_URL: jdbc:postgresql://masternova-db-rw:5432/masternova
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  STORAGE_ENDPOINT: http://seaweedfs:8333
+  STORAGE_PUBLIC_ENDPOINT: ""
+  WEB_URL: ""
+  LOG_VERIFICATION_LINKS: "false"
+  PAYMENT_PROVIDER: razorpay # fails closed: no keys, no start (commerce LLD §6)
+  SMTP_HOST: mailpit
+  SMTP_PORT: "1025"
+  TRACING_SAMPLING_PROBABILITY: "0.1"
+
+api:
+  replicas: 2 # ignored when autoscaling is on: the HPA owns the count
+  autoscaling:
+    enabled: false
+  secureCookies: true
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { cpu: "2", memory: 1Gi }
+
+worker:
+  replicas: 1
+  autoscaling:
+    enabled: false
+  workDirSize: 5Gi # emptyDir for a rung's segments while ffmpeg runs
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits: { cpu: "2", memory: 2Gi }
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { cpu: 500m, memory: 128Mi }
+
+ingress:
+  enabled: true
+  className: traefik
+  host: masternova.example.com
+  clusterIssuer: "" # cert-manager ClusterIssuer that signs the host's certificate
+  # Traefik only: an http Ingress that redirects to https on this port ("" = no redirect Ingress)
+  httpsRedirectPort: ""
+
+migrate:
+  enabled: true # a pre-install/pre-upgrade hook (Argo CD runs it as PreSync)
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "2", memory: 768Mi }

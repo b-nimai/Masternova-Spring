@@ -6,8 +6,8 @@
 > the cluster pulls it.
 
 **Roadmap:** D4.1–D4.8 · **Last updated:** 2026-10-15
-**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, Traefik config, local CA), [`deploy/k8s/`](../../deploy/k8s/) (raw manifests, CNPG `Cluster`, Redis values, the migrate Job), `Makefile` (`k8s-*` targets)
-**Try it:** `make k8s-up k8s-platform k8s-images k8s-apply`, then https://masternova.localhost:8443 (§3.3) or `make k8s-e2e`.
+**Real files:** [`deploy/k3d/`](../../deploy/k3d/) (cluster, namespace, Traefik config, local CA), [`deploy/helm/masternova/`](../../deploy/helm/masternova/) (the apps' chart), [`deploy/helm/masternova-infra/`](../../deploy/helm/masternova-infra/) (CNPG `Cluster`, Redis, SeaweedFS, Mailpit), `Makefile` (`k8s-*`, `helm-check`)
+**Try it:** `make k8s-up k8s-platform k8s-images k8s-deploy`, then https://masternova.localhost:8443 (§3) or `make k8s-e2e`.
 
 **Priority marks:** ⭐⭐⭐ must know (interviews, incidents) · ⭐⭐ use daily · ⭐ good to know.
 
@@ -17,6 +17,7 @@
 | 2 | [The core objects, written by hand](#2-the-core-objects-written-by-hand-) | ⭐⭐⭐ | D4.2 |
 | 3 | [Ingress and TLS](#3-ingress-and-tls-) | ⭐⭐⭐ | D4.3 |
 | 4 | [Stateful workloads: an operator, a chart, a Job](#4-stateful-workloads-an-operator-a-chart-a-job-) | ⭐⭐⭐ | D4.4 |
+| 5 | [Helm: two charts, values per environment](#5-helm-two-charts-values-per-environment-) | ⭐⭐⭐ | D4.5 |
 | 8 | [Common mistakes](#8-common-mistakes-) | ⭐⭐⭐ | — |
 | 9 | [Interview Q&A](#9-interview-qa-) | ⭐⭐⭐ | — |
 | 10 | [30-second recall](#10-30-second-recall) | ⭐⭐⭐ | — |
@@ -106,18 +107,20 @@ the platform add-ons get their own namespaces (`kube-system`, later `cert-manage
 
 ## 2. The core objects, written by hand ⭐⭐⭐
 
-Raw YAML in [`deploy/k8s/`](../../deploy/k8s/), before any templating, to learn what each field
-does. `make k8s-apply` applies it (`TAG` substituted with `sed`: no templating yet, on purpose).
+Raw YAML in `deploy/k8s/`, before any templating, to learn what each field does (`TAG` swapped
+in with `sed`: no templating yet, on purpose). D4.5 turned it into the Helm charts (§5) and
+deleted it. The hand-written version stays in git: `git show f3d903f:deploy/k8s/app/api.yaml`.
+The fields below are the same in the chart templates.
 
 | Object | File | What it is |
 |---|---|---|
 | Namespace | `namespace.yaml` | the folder, with Pod Security labels (§2.4) |
-| ConfigMap | `app/config.yaml` | compose's `x-app-env`: non-secret settings, read via `envFrom` |
+| ConfigMap | `app/config.yaml` → `templates/configmap.yaml` | compose's `x-app-env`: non-secret settings, read via `envFrom` |
 | Secret ×2 | `make k8s-secrets` (never in git) | `masternova-app` (4 signing keys), `masternova-db` (`kubernetes.io/basic-auth`) |
-| Deployment + Service | `app/api.yaml`, `app/web.yaml` | stateless replicas behind a stable virtual IP + DNS name |
-| Deployment | `app/worker.yaml` | no Service: nothing calls the worker |
-| StatefulSet + PVC template | `infra/postgres.yaml`, `infra/seaweedfs.yaml` | stable pod name (`postgres-0`) and its own volume |
-| Job | `infra/seaweedfs.yaml` (`media-init`) | run to completion: bucket + CORS |
+| Deployment + Service | `app/api.yaml`, `app/web.yaml` → `templates/api.yaml`, `web.yaml` | stateless replicas behind a stable virtual IP + DNS name |
+| Deployment | `app/worker.yaml` → `templates/worker.yaml` | no Service: nothing calls the worker |
+| StatefulSet + PVC template | `infra/postgres.yaml` (until D4.4), `infra/seaweedfs.yaml` → infra chart | stable pod name (`postgres-0`) and its own volume |
+| Job | `media-init` → an infra chart hook | run to completion: bucket + CORS |
 
 ### 2.1 Deployment → ReplicaSet → Pod, and a Service in front
 
@@ -253,7 +256,7 @@ flowchart LR
 ```
 
 An **Ingress** is a routing rule (host + path → Service); an **ingress controller** (Traefik,
-bundled with k3s) watches Ingresses and configures itself. [`app/ingress.yaml`](../../deploy/k8s/app/ingress.yaml):
+bundled with k3s) watches Ingresses and configures itself. [`templates/ingress.yaml`](../../deploy/helm/masternova/templates/ingress.yaml) (the `s3.` and `mail.` hosts are in the infra chart's):
 
 - `/api` goes **straight to the api** Service. In compose the browser's `/api` calls went
   through the web container's nginx; here that hop is gone (nginx's `/api` block is simply
@@ -329,7 +332,7 @@ transcode on the worker → HLS preview plays**. **13 passed (40 s).** One test 
 
 D4.2's StatefulSet ran Postgres, but nothing *operated* it: no replica, no failover, no backups,
 no safe minor upgrade. An **operator** is a controller plus CRDs that encodes that runbook.
-You declare a `Cluster`, and it does the rest. [`infra/postgres.yaml`](../../deploy/k8s/infra/postgres.yaml):
+You declare a `Cluster`, and it does the rest. [`masternova-infra/templates/postgres.yaml`](../../deploy/helm/masternova-infra/templates/postgres.yaml):
 
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
@@ -364,7 +367,7 @@ spec:
 
 ### 4.2 Redis from a chart
 
-The [CloudPirates chart](../../deploy/k8s/charts/redis-values.yaml) (official `redis` image,
+The [CloudPirates chart](../../deploy/helm/masternova-infra/values.yaml) (`redis:` values; official `redis` image,
 Apache-2.0; Bitnami's free images ended in 2025): standalone, **no persistence**, a password from
 `masternova-redis`, and `allkeys-lru` within 96 MB. LRU eviction is safe only because of what's
 in Redis. Checked: the entitlement cache (ADR-0016, re-read from Postgres on a miss) and the
@@ -380,7 +383,7 @@ Secret's key to `/run/secrets/spring.data.redis.password`, and `configtree` bind
 
 ```mermaid
 sequenceDiagram
-  participant M as make k8s-apply (Helm hook / Argo PreSync later)
+  participant M as helm upgrade (pre-upgrade hook) / Argo CD (PreSync)
   participant J as Job db-migrate (api image)
   participant DB as masternova-db-rw
   participant D as Deployment api
@@ -397,7 +400,7 @@ In compose every api start migrates. With N replicas that means:
 - a long migration blows the startup probe, so the kubelet kills the pod *mid-migration*;
 - a failed migration looks like a half-rolled-out, crash-looping Deployment.
 
-[`migrate/db-migrate.yaml`](../../deploy/k8s/migrate/db-migrate.yaml) moves the schema first,
+[`templates/db-migrate-job.yaml`](../../deploy/helm/masternova/templates/db-migrate-job.yaml) moves the schema first,
 once, and the rollout starts only if it succeeded.
 
 - **Same image as the api:** the migrations live in its jar, so they can never drift from the
@@ -407,12 +410,107 @@ once, and the rollout starts only if it succeeded.
   Measured: **9 s**, `1 succeeded`.
 - `restartPolicy: Never` + `backoffLimit: 2`: a failed pod stays around for `kubectl logs`.
   Flyway on Postgres is transactional per migration, so a retry resumes cleanly.
-- A Job's pod template is immutable, so `make k8s-apply` deletes and recreates it for every
-  apply, then runs `kubectl wait --for=condition=Complete` before applying the Deployments. D4.5
-  turns this into a Helm `pre-upgrade` hook, which Argo CD runs as a `PreSync` hook.
+- A Job's pod template is immutable. In D4.4 `make k8s-apply` deleted, recreated and `kubectl wait`ed
+  for it. Since D4.5 it's a Helm `pre-install,pre-upgrade` **hook** with `hook-delete-policy:
+  before-hook-creation`. `helm upgrade` runs it first and stops if it fails, and Argo CD runs the same
+  hook as `PreSync`. Its env is inline, not `envFrom` the ConfigMap: a pre-install hook runs
+  *before* the chart's ordinary objects exist (§5.3).
 - The startup probe budget dropped from 2 min to 1 min: the api no longer migrates.
 
 Verified after the switch: `make k8s-e2e` **13 passed** on CNPG + Redis with auth.
+
+---
+
+## 5. Helm: two charts, values per environment ⭐⭐⭐
+
+### 5.1 Why two charts
+
+| Chart | Holds | Released as |
+|---|---|---|
+| [`deploy/helm/masternova`](../../deploy/helm/masternova/) | api, worker, web, ConfigMap, Ingress, the `db-migrate` hook | `masternova` |
+| [`deploy/helm/masternova-infra`](../../deploy/helm/masternova-infra/) | CNPG `Cluster`, Redis (a **dependency**), SeaweedFS + `media-init`, Mailpit, the `s3.`/`mail.` Ingress | `masternova-infra` |
+
+- **Ordering:** the apps' `pre-install` migration hook runs before anything else in its release.
+  In one chart, that's before the database `Cluster` exists, a deadlock. Two releases are
+  installed in order: infra, wait for the `Cluster` to be `Ready`, then the apps.
+- **Lifecycle:** images change on every merge, the data layer rarely. On AWS (D6) the infra chart
+  disappears (RDS, ElastiCache, S3) and the app chart only gets other values.
+- Redis is a chart **dependency**, vendored as `charts/redis-0.37.2.tgz` (`helm dependency
+  build`) with `Chart.lock`. Rendering needs no network, and what Argo CD renders is exactly
+  what's in git.
+- **Secrets are not in either chart.** Both reference existing Secrets by name (`secrets.app`,
+  `ownerSecret`…), created out of band (`make k8s-secrets`). Putting them in values would put
+  them in git, or in Helm's release Secret in clear base64. Sealed Secrets / External Secrets are
+  the next step (§8).
+
+### 5.2 Values: defaults for a real environment, overrides per environment
+
+`values.yaml` holds the **safe** defaults: GHCR images, `PAYMENT_PROVIDER: razorpay` (fails
+closed without its keys), sampling 0.1, no ingress issuer. `values-local.yaml` holds only what
+the k3d cluster changes (`fake` payments, `*.localhost` hosts, the local CA, port 8443, the fast
+ladder). The `config:` map is passed through as the ConfigMap's data, keyed by the apps' own
+env names (`application.yaml`), so there's no second vocabulary to translate.
+
+`image.tag` has no default: `{{ required "image.tag is required…" }}` fails the render. The tag
+is the deployment (§6), and an empty one must never quietly mean "whatever".
+
+### 5.3 Template details that are really Kubernetes lessons
+
+| In the chart | Because |
+|---|---|
+| `checksum/config: {{ toJson .Values.config \| sha256sum }}` on the pod template | env is read at start, so a ConfigMap change alone restarts nothing (measured in D4.3: the worker kept the old `WEB_URL`). The hash changes the pod template, which *is* a rollout. It hashes the data only, not the ConfigMap's labels (they carry the image tag, which would make the hash change with every deploy). Checked by rendering: new tag → same hash; changed config → new hash |
+| selector = `name` + `instance` only, never `version` | a Deployment's selector is immutable; a label that changes per release can't be in it |
+| `{{- if not .Values.api.autoscaling.enabled }} replicas: …` | with an HPA (D4.6) the HPA owns `replicas`; a chart that also sets it fights the HPA on every sync |
+| the migrate Job's env inline, not `envFrom: masternova-config` | a `pre-install` hook runs *before* the release's ConfigMap exists: on a first install it would fail |
+| `helm.sh/hook-delete-policy: before-hook-creation` | a Job's pod template is immutable: the next upgrade replaces it; the last run stays for `kubectl logs` |
+| `media-init` as a `post-install,post-upgrade` hook | it re-runs when the CORS origins change; a plain Job is immutable and would never re-run |
+| `_helpers.tpl`: one `secretsVolume` with an `appKeys` list per pod | least privilege stays explicit: the worker lists 1 key, the api 4, the migrate Job 1 |
+
+### 5.4 Moving a live cluster under Helm
+
+Helm refuses objects it didn't create ("invalid ownership metadata"). The move from D4.4's raw
+manifests:
+
+1. stateless objects (Deployments, Services, Ingresses, ConfigMap, Jobs): deleted and recreated
+   by the charts. The selectors changed anyway (the `instance` label), and selectors are immutable;
+2. the CNPG `Cluster`, which holds the data, was **adopted**: `meta.helm.sh/release-name` /
+   `release-namespace` annotations plus `app.kubernetes.io/managed-by=Helm`, and the next
+   install took it over in place (the database pods kept running);
+3. SeaweedFS's StatefulSet was recreated, and its PVC `data-seaweedfs-0` was reattached by name
+   (same claim template + pod name).
+
+Result: 2 releases, **0 restarts** (the hook migrated before any app pod existed; D4.2 had 2
+crash-restarts per pod), `db-migrate` 9 s, `make k8s-e2e` **13 passed**.
+
+### 5.5 CI: catch it before Argo CD does
+
+`make helm-check` (job `helm` in CI, path-filtered on `deploy/helm/**`):
+
+- `helm lint --strict` on both charts, with the local values;
+- `helm template | kubeconform -strict`, against the Kubernetes schemas **and** the CRDs'
+  (datree's CRDs-catalog). Without the catalog, the CNPG `Cluster` and the Traefik `Middleware`
+  are "skipped", which means unchecked. With it: 21 objects, 21 valid.
+
+Under GitOps an invalid chart fails at sync time, *after* the merge. This moves the failure to
+the PR.
+
+### 5.6 Found on the way: CI never published Phase 8 and 9 ⭐⭐⭐
+
+Pointing `values-local.yaml` at GHCR needed a `sha-` tag with all three images. The newest api
+and worker image was `sha-5d7e9da` (Phase D3). The `main` runs for the Phase 8 and Phase 9
+merges were **cancelled**: `concurrency: { group: ci-${{ github.ref }}, cancel-in-progress:
+true }` treated the `docs/post-phase-N` merge a minute later as "a newer push", and the docs
+commit builds no images (path filters). Fix in `ci.yml`:
+
+```yaml
+concurrency:
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}   # a group per commit on main
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+```
+
+"Just don't cancel on main" isn't enough: a concurrency group keeps one *pending* run, and a
+third push replaces it. On main every commit is a potential deployment, so every commit gets its
+own run.
 
 ---
 
@@ -433,6 +531,11 @@ Verified after the switch: `make k8s-e2e` **13 passed** on CNPG + Redis with aut
 | Every replica runs migrations at startup | one Job before the rollout; the app validates, never migrates |
 | A hand-rolled database StatefulSet in production | an operator (CNPG): failover, switchover, backups as declared state |
 | `allkeys-lru` on a Redis that holds real state | only on a pure cache; know what's in it first |
+| A `pre-install` hook that reads the release's own ConfigMap | inline its env: hooks run before the release's objects |
+| A label that changes per release (`version`) in a selector | selectors are immutable: `name` + `instance` only |
+| Setting `replicas` in a chart whose Deployment has an HPA | leave it out when autoscaling is on |
+| Secrets in Helm values | reference existing Secrets; a secrets operator in production |
+| `cancel-in-progress: true` for every branch | never cancel `main`: each run publishes a deployable artifact |
 
 ---
 
@@ -472,6 +575,12 @@ A StatefulSet gives stable names and volumes, nothing more. An operator encodes 
 knowledge: replication, failover that moves the `-rw` Service to the new primary, rolling minor
 upgrades with a switchover, and backups, all as declared state on one `Cluster` object.
 
+**Q: How do you structure Helm charts for an app and its database?**
+Separately. The app chart has a pre-upgrade migration hook that needs the database to exist, and
+the two have different lifecycles (the app on every merge, the database rarely; in the cloud it
+becomes a managed service). Safe defaults in `values.yaml`, one small overrides file per
+environment, the image tag required, Secrets referenced and never templated.
+
 ---
 
 ## 10. 30-second recall
@@ -483,3 +592,4 @@ upgrades with a switchover, and backups, all as declared state on one `Cluster` 
 - `restricted` security context on the apps; Secrets as files; `enableServiceLinks: false`.
 - Ingress = rules, controller = Traefik; cert-manager issues from one local CA; `Local` keeps the client IP.
 - Operators run stateful systems (CNPG: `-rw` follows the primary); migrations = one Job before the rollout.
+- Two charts (infra, apps); `values.yaml` safe, `values-<env>.yaml` small; config checksum rolls pods; lint + kubeconform in CI.

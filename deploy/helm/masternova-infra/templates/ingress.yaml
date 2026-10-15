@@ -1,0 +1,29 @@
+{{- $i := .Values.ingress -}}
+{{- $hosts := list -}}
+{{- if and $i.s3Host .Values.seaweedfs.enabled }}{{ $hosts = append $hosts (dict "host" $i.s3Host "svc" "seaweedfs" "port" "s3") }}{{ end -}}
+{{- if and $i.mailHost .Values.mailpit.enabled }}{{ $hosts = append $hosts (dict "host" $i.mailHost "svc" "mailpit" "port" "http") }}{{ end -}}
+{{- if $hosts }}
+# https only: browsers reach these hosts through urls the apps hand out (presigned S3 urls)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: masternova-infra
+  labels: {{- include "infra.labels" (dict "root" . "component" "ingress") | nindent 4 }}
+  annotations:
+    {{- with $i.clusterIssuer }}
+    cert-manager.io/cluster-issuer: {{ . }}
+    {{- end }}
+    {{- if eq $i.className "traefik" }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    {{- end }}
+spec:
+  ingressClassName: {{ $i.className }}
+  tls:
+    - hosts: [{{ range $n, $h := $hosts }}{{ if $n }}, {{ end }}{{ $h.host }}{{ end }}]
+      secretName: masternova-infra-tls
+  rules:
+    {{- range $hosts }}
+    - host: {{ .host }}
+      http: { paths: [{ path: /, pathType: Prefix, backend: { service: { name: {{ .svc }}, port: { name: {{ .port }} } } } }] }
+    {{- end }}
+{{- end }}

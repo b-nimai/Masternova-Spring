@@ -1,0 +1,53 @@
+{{- $c := dict "root" . "component" "worker" -}}
+# No Service: the worker serves only actuator and nobody calls it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels: {{- include "masternova.labels" $c | nindent 4 }}
+spec:
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicas }}
+  {{- end }}
+  selector:
+    matchLabels: {{- include "masternova.selectorLabels" $c | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "masternova.labels" $c | nindent 8 }}
+      annotations: {{- include "masternova.configChecksum" . | nindent 8 }}
+    spec:
+      {{- include "masternova.jvmPodSpec" . | nindent 6 }}
+      # a transcode is abandoned on SIGTERM and released uncounted; 45 s lets an email or a batch finish
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: worker
+          image: {{ include "masternova.image" (dict "root" . "app" "worker") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ name: http, containerPort: 8090 }]
+          envFrom: [{ configMapRef: { name: masternova-config } }]
+          env:
+            # ffmpeg runs inside this container's limit, beside the JVM: a 40 % heap share
+            - { name: JAVA_TOOL_OPTIONS, value: -XX:MaxRAMPercentage=40 -XX:+ExitOnOutOfMemoryError }
+            - { name: PIPELINE_WORK_DIR, value: /var/lib/pipeline }
+          {{- include "masternova.restrictedContainer" . | nindent 10 }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 2
+            failureThreshold: 30
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+          readinessProbe: # nothing routes here, but readiness still paces a rollout
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 10
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: work, mountPath: /var/lib/pipeline }
+            - { name: secrets, mountPath: /run/secrets, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+        - name: work # a rung's segments until ffmpeg finishes: node disk, per pod
+          emptyDir: { sizeLimit: {{ .Values.worker.workDirSize }} }
+        {{- include "masternova.secretsVolume" (dict "root" . "redis" true "appKeys" (list "NOTIFICATION_TOKEN_SECRET")) | nindent 8 }}

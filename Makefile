@@ -102,14 +102,14 @@ k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ th
 	@mkdir -p secrets && kubectl -n cert-manager get secret masternova-local-ca -o jsonpath='{.data.ca\.crt}' \
 	  | base64 -d > secrets/masternova-local-ca.crt && echo "CA certificate → secrets/masternova-local-ca.crt (curl --cacert)"
 
-k8s-images: images ## Build the three images and push them to the cluster's registry as :$(TAG)
+k8s-images: images ## Build the three images and push them to the cluster's registry as :$(TAG) (GHCR's names)
 	for img in api worker web; do \
-	  docker tag masternova-spring/$$img:local $(REGISTRY)/masternova-spring/$$img:$(TAG) && \
-	  docker push -q $(REGISTRY)/masternova-spring/$$img:$(TAG); \
+	  docker tag masternova-spring/$$img:local $(REGISTRY)/masternova-spring-$$img:$(TAG) && \
+	  docker push -q $(REGISTRY)/masternova-spring-$$img:$(TAG); \
 	done
 
 k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files (never from git)
-	kubectl apply -f deploy/k8s/namespace.yaml
+	kubectl apply -f deploy/k3d/namespace.yaml
 	kubectl -n masternova create secret generic masternova-app \
 	  --from-file=JWT_ACCESS_SECRET=secrets/jwt_access_secret \
 	  --from-file=NOTIFICATION_TOKEN_SECRET=secrets/notification_token_secret \
@@ -122,17 +122,25 @@ k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files
 	kubectl -n masternova create secret generic masternova-redis --from-file=password=secrets/redis_password \
 	  --dry-run=client -o yaml | kubectl apply -f -
 
-k8s-apply: k8s-secrets ## Apply the raw manifests in deploy/k8s with the images of :$(TAG)
-	kubectl apply -f deploy/k8s/infra
-	helm upgrade --install redis oci://registry-1.docker.io/cloudpirates/redis --version 0.37.2 \
-	  -n masternova -f deploy/k8s/charts/redis-values.yaml --wait
+# The inner loop: both charts, the apps on locally built images. Argo CD deploys the same charts
+# from git with GHCR images (D4.7). The infra release first: the apps' migration hook needs the DB.
+k8s-deploy: k8s-secrets ## Deploy both Helm charts to the cluster, apps on the local images :$(TAG)
+	helm upgrade --install masternova-infra deploy/helm/masternova-infra -n masternova \
+	  -f deploy/helm/masternova-infra/values-local.yaml --wait --timeout 5m
 	kubectl -n masternova wait cluster/masternova-db --for=condition=Ready --timeout=300s
-	sed 's|:TAG$$|:$(TAG)|' deploy/k8s/app/config.yaml | kubectl apply -f -
-	@# a Job's pod template is immutable: replace it, then wait — the rollout starts only on success
-	kubectl -n masternova delete job db-migrate --ignore-not-found
-	sed 's|:TAG$$|:$(TAG)|' deploy/k8s/migrate/db-migrate.yaml | kubectl apply -f -
-	kubectl -n masternova wait job/db-migrate --for=condition=Complete --timeout=600s
-	for f in deploy/k8s/app/*.yaml; do sed 's|:TAG$$|:$(TAG)|' $$f; echo ---; done | kubectl apply -f -
+	helm upgrade --install masternova deploy/helm/masternova -n masternova \
+	  -f deploy/helm/masternova/values-local.yaml \
+	  --set image.registry=registry.localhost:5050 --set image.tag=$(TAG) --wait --timeout 10m
+
+HELM_SCHEMAS := -schema-location default \
+  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+helm-check: ## Lint both charts and validate what they render against the Kubernetes + CRD schemas (also in CI)
+	helm lint --strict deploy/helm/masternova -f deploy/helm/masternova/values-local.yaml
+	helm lint --strict deploy/helm/masternova-infra -f deploy/helm/masternova-infra/values-local.yaml
+	helm template masternova deploy/helm/masternova -n masternova -f deploy/helm/masternova/values-local.yaml \
+	  | kubeconform -strict -summary $(HELM_SCHEMAS)
+	helm template masternova-infra deploy/helm/masternova-infra -n masternova -f deploy/helm/masternova-infra/values-local.yaml \
+	  | kubeconform -strict -summary $(HELM_SCHEMAS)
 
 # the CURRENT primary (after a failover it's no longer instance 1), as the superuser over the local socket
 K8S_PSQL = kubectl -n masternova exec -i $$(kubectl -n masternova get pod -l cnpg.io/cluster=masternova-db,cnpg.io/instanceRole=primary -o name) -c postgres -- sh -c 'psql -q -d masternova
@@ -153,4 +161,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-apply k8s-seed k8s-e2e release
+.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy helm-check k8s-seed k8s-e2e release

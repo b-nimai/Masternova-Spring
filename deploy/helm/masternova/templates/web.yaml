@@ -1,27 +1,27 @@
-# The web app: nginx with the Angular build, proxying /api to the `api` Service.
+{{- $c := dict "root" . "component" "web" -}}
 apiVersion: v1
 kind: Service
 metadata:
   name: web
-  namespace: masternova
+  labels: {{- include "masternova.labels" $c | nindent 4 }}
 spec:
-  selector: { app.kubernetes.io/name: web }
+  selector: {{- include "masternova.selectorLabels" $c | nindent 4 }}
   ports: [{ name: http, port: 80, targetPort: http }]
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web
-  namespace: masternova
+  labels: {{- include "masternova.labels" $c | nindent 4 }}
 spec:
-  replicas: 2
+  replicas: {{ .Values.web.replicas }}
   selector:
-    matchLabels: { app.kubernetes.io/name: web }
+    matchLabels: {{- include "masternova.selectorLabels" $c | nindent 6 }}
   strategy:
     rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
   template:
     metadata:
-      labels: { app.kubernetes.io/name: web, app.kubernetes.io/part-of: masternova }
+      labels: {{- include "masternova.labels" $c | nindent 8 }}
     spec:
       enableServiceLinks: false
       automountServiceAccountToken: false
@@ -29,19 +29,18 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: web
-          image: registry.localhost:5050/masternova-spring/web:TAG
+          image: {{ include "masternova.image" (dict "root" . "app" "web") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: [{ name: http, containerPort: 80 }]
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
-            # nginx's master starts as root to bind :80, then drops to `nginx`: exactly compose's set
-            # (allowed by `baseline`; the reason this namespace can't enforce `restricted`)
+            # nginx's master starts as root to bind :80, then drops to `nginx`: compose's exact set.
+            # `baseline` allows it; the reason the namespace can't enforce `restricted`.
             capabilities:
               drop: [ALL]
               add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE]
-          resources:
-            requests: { cpu: 20m, memory: 32Mi }
-            limits: { cpu: 500m, memory: 128Mi }
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}
           livenessProbe:
             httpGet: { path: /healthz, port: http }
           readinessProbe:
@@ -49,7 +48,7 @@ spec:
             periodSeconds: 5
           lifecycle:
             preStop: { sleep: { seconds: 5 } }
-          volumeMounts: # what compose mounts as tmpfs
+          volumeMounts:
             - { name: run, mountPath: /var/run }
             - { name: cache, mountPath: /var/cache/nginx }
             - { name: tmp, mountPath: /tmp }

@@ -1,0 +1,55 @@
+# Needs the CloudNativePG operator (cnpg-system) and the Secrets masternova-db and
+# masternova-redis (`make k8s-secrets`) to exist first.
+
+postgres:
+  instances: 2 # primary + hot standby; CNPG fails over between them
+  # "standard" = PostgreSQL + common extensions (pgvector checked in it); pinned to the major
+  image: ghcr.io/cloudnative-pg/postgresql:17-standard-trixie
+  database: masternova
+  owner: masternova
+  ownerSecret: masternova-db # kubernetes.io/basic-auth, shared with the apps
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+  parameters:
+    shared_buffers: 128MB
+    max_connections: "100"
+
+# CloudPirates Redis chart (official image). A cache + pub/sub only (ADR-0016): no persistence.
+redis:
+  fullnameOverride: redis # Service `redis` = REDIS_HOST
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: masternova-redis
+    existingSecretPasswordKey: password
+  persistence:
+    enabled: false
+  config:
+    content: |
+      bind * -::*
+      save ""
+      appendonly no
+      maxmemory 96mb
+      maxmemory-policy allkeys-lru
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 128Mi }
+
+seaweedfs:
+  enabled: true # S3 for media (ADR-0012); false where real S3 exists
+  image: chrislusf/seaweedfs:4.48
+  bucket: masternova-media
+  storage: 5Gi
+  corsOrigins: [] # the SPA's origins: the browser PUTs presigned parts straight to storage
+
+mailpit:
+  enabled: true # a local inbox; a real environment sends through Resend (MAIL_PROVIDER)
+  image: axllent/mailpit:v1.31.5
+
+ingress:
+  className: traefik
+  clusterIssuer: ""
+  s3Host: "" # presigned urls (the apps' STORAGE_PUBLIC_ENDPOINT); "" = not exposed
+  mailHost: "" # Mailpit's UI; "" = not exposed
