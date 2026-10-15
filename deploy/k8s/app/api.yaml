@@ -1,0 +1,101 @@
+# The api: compose's `api` service, field for field (patterns/devops/03 §9 is the mapping).
+apiVersion: v1
+kind: Service
+metadata:
+  name: api # ⭐ nginx's `proxy_pass http://api:8080` (frontend/nginx.conf) resolves this name
+  namespace: masternova
+spec:
+  selector: { app.kubernetes.io/name: api }
+  ports: [{ name: http, port: 8080, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: masternova
+spec:
+  replicas: 2 # stateless (sessions are refresh-token rows, the cache is Redis): any pod serves any request
+  selector:
+    matchLabels: { app.kubernetes.io/name: api }
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 } # a rollout never drops below 2 ready pods
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: api, app.kubernetes.io/part-of: masternova }
+    spec:
+      # ⭐ Kubernetes injects <SERVICE>_PORT=tcp://10.43.x.y:8080 into every pod for every Service
+      #    (Docker-links compatibility). The Service `api` makes API_PORT, which our
+      #    `server.port: ${API_PORT:8080}` reads → "tcp://…" is not a port → crash. Off, always.
+      enableServiceLinks: false
+      automountServiceAccountToken: false # the app never talks to the Kubernetes API
+      terminationGracePeriodSeconds: 45 # preStop 5 s + Spring's 30 s drain + margin (compose: 40 s)
+      securityContext:
+        # ⭐ The image says `USER app` — a NAME, which the kubelet can't check against
+        #    runAsNonRoot ("image has non-numeric user"). The numeric ids (Dockerfile's adduser) can.
+        runAsNonRoot: true
+        runAsUser: 100
+        runAsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: registry.localhost:5050/masternova-spring/api:TAG
+          ports: [{ name: http, containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: masternova-config } }]
+          env:
+            - { name: SECURE_COOKIES, value: 'false' } # http via port-forward; D4.3's TLS ingress flips it
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          resources:
+            # requests = what the scheduler reserves; the api's working set is ~350 MB (devops/02)
+            requests: { cpu: 250m, memory: 768Mi }
+            # memory limit = the cgroup the JVM sizes its heap from (75 % → 768 MB), exactly as in
+            # compose. A CPU limit too: the JVM sizes GC and pool threads from it (devops/02 §3).
+            limits: { cpu: '2', memory: 1Gi }
+          # ⭐ Three probes, three questions:
+          #    startup:   "has it finished booting?"  — holds the other two off until it has
+          #    liveness:  "is it wedged?"             — fails → the kubelet KILLS and restarts it
+          #    readiness: "should it get traffic?"    — fails → removed from the Service, not killed
+          #    Liveness never checks the database: a DB outage would restart every pod at once
+          #    and fix nothing. Boot's liveness group is the app's own state only.
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 2
+            failureThreshold: 60 # up to 2 min to boot (Flyway on a fresh database included)
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          lifecycle:
+            # ⭐ Endpoint removal and SIGTERM race: kube-proxy/Traefik may still route here for a
+            #    moment after the pod starts terminating. Wait 5 s before Spring stops accepting.
+            #    (The native sleep action: the image needs no `sleep` binary.)
+            preStop: { sleep: { seconds: 5 } }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: secrets, mountPath: /run/secrets, readOnly: true }
+      volumes:
+        - name: tmp # read-only root, writable /tmp (Tomcat's work dir, JVM perf data): compose's tmpfs
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+        # ⭐ One directory from two Secrets, one file per key: Spring's
+        #    `configtree:/run/secrets/` turns each file into a property, as in compose.
+        - name: secrets
+          projected:
+            sources:
+              - secret:
+                  name: masternova-app
+                  items:
+                    - { key: JWT_ACCESS_SECRET, path: JWT_ACCESS_SECRET }
+                    - { key: NOTIFICATION_TOKEN_SECRET, path: NOTIFICATION_TOKEN_SECRET }
+                    - { key: PLAYBACK_TOKEN_SECRET, path: PLAYBACK_TOKEN_SECRET }
+                    - { key: ENTITLEMENT_PLAYBACK_SECRET, path: ENTITLEMENT_PLAYBACK_SECRET }
+              - secret:
+                  name: masternova-db
+                  items:
+                    - { key: username, path: DATABASE_USER }
+                    - { key: password, path: DATABASE_PASSWORD }

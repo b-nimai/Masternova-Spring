@@ -1,0 +1,20 @@
+# Non-secret settings shared by api and worker: compose's `x-app-env`, as a ConfigMap. Pods read
+# it with `envFrom`; a change needs a rollout (`kubectl rollout restart`): env is read at start.
+# Secrets are NOT here: they're files from the Secrets that `make k8s-secrets` creates.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: masternova-config
+  namespace: masternova
+data:
+  DATABASE_URL: jdbc:postgresql://postgres:5432/masternova
+  REDIS_HOST: redis
+  REDIS_PORT: '6379'
+  STORAGE_ENDPOINT: http://seaweedfs:8333 # how pods reach storage …
+  STORAGE_PUBLIC_ENDPOINT: http://localhost:9010 # … and browsers (a port-forward until D4.3's ingress)
+  LOG_VERIFICATION_LINKS: 'false'
+  PAYMENT_PROVIDER: fake # no Razorpay keys locally (the api's default fails closed)
+  WEB_URL: http://localhost:8082
+  SMTP_HOST: mailpit
+  SMTP_PORT: '1025'
+  PIPELINE_LADDER: fast # 240/360p ultrafast: a laptop cluster, not a render farm

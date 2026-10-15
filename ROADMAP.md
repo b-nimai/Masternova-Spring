@@ -125,12 +125,12 @@ Phases are listed **in the order you do them**.
 | 11 | [D3 — Observability](#phase-d3--observability) | 5 | 5 | 12 h | ~12 h | ✅ |
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 7 | 18 h | ~18 h | ✅ |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 9 | 28 h | ~30 h | ✅ |
-| 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 0 | 20 h | — | ☐ |
+| 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 2 | 20 h | ~4 h | 🔨 |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 0 | 14 h | — | ☐ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **106** | **~326 h** | ~225 h | |
+| | **Total** | **137** | **108** | **~326 h** | ~229 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -407,8 +407,8 @@ reorders or races the redirect.
 
 | # | Task | DevOps concept | Est | Status | Date |
 |---|---|---|---|---|---|
-| D4.1 | k3d cluster + local registry; `kubectl` fundamentals (contexts, namespaces, describe/logs/exec) | cluster anatomy | 2 h | ☐ | |
-| D4.2 | Raw manifests first: Deployment, Service, ConfigMap, Secret, probes from actuator liveness/readiness, requests/limits | core objects, probes, QoS | 3 h | ☐ | |
+| D4.1 | k3d cluster + local registry; `kubectl` fundamentals (contexts, namespaces, describe/logs/exec). [`deploy/k3d/cluster.yaml`](deploy/k3d/cluster.yaml): 1 server + 2 agents (a drain needs somewhere to go), k3s pinned, Traefik on host **:8082/:8443** (beside compose), a **registry** on `127.0.0.1:5050` that the host pushes to and nodes pull from as `registry.localhost:5050` (k3d writes the mirror). `make k8s-up/k8s-down/k8s-images` (images tagged `sha-<commit>[-dirty]`, never `latest`). Compose stack stopped while the cluster runs (7.7 GiB VM). [DevOps note 06](patterns/devops/06-kubernetes.md) §1 | cluster anatomy | 2 h | ✅ | 2026-10-15 |
+| D4.2 | Raw manifests first: Deployment, Service, ConfigMap, Secret, probes from actuator liveness/readiness, requests/limits. [`deploy/k8s/`](deploy/k8s/) (`make k8s-apply`): namespace with **Pod Security** `enforce: baseline` + `warn/audit: restricted` (api + worker pass `restricted`: no warnings), api ×2 / web ×2 (surge 1, unavailable 0) / worker, postgres + seaweedfs StatefulSets with PVCs, redis, mailpit, `media-init` Job. startup / liveness / readiness on the Actuator groups (liveness never checks a dependency), requests vs limits (Burstable; CPU limit kept for the JVM's ergonomics), numeric `runAsUser` (the image's `USER app` is a name the kubelet can't verify), read-only root + memory `emptyDir`, no ServiceAccount token, `preStop` native sleep + 45 s grace. Secrets from `make k8s-secrets` (never git) as **files** via one `projected` volume (worker gets 1 of the 4 keys) → `configtree`. **Found:** no `depends_on` (api crash-looped until Postgres answered: the model, D4.4 orders migrations with a Job); service links would inject `API_PORT=tcp://…` into `server.port` → `enableServiceLinks: false`. Verified: signup through `port-forward svc/web` → email in Mailpit; Flyway applied once across 2 replicas. Note 06 §2 | core objects, probes, QoS | 3 h | ✅ | 2026-10-15 |
 | D4.3 | Ingress (Traefik): `/` → web, `/api` → api; TLS via cert-manager (self-signed) | ingress, TLS termination | 2 h | ☐ | |
 | D4.4 | Postgres via **CloudNativePG** operator, Redis via chart; Flyway as a pre-deploy Job | operators, stateful workloads, Jobs | 3 h | ☐ | |
 | D4.5 | Helm chart in `deploy/helm/masternova` (values per env); `helm lint` + `helm template` in CI | templating, release management | 3 h | ☐ | |

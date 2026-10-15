@@ -1,0 +1,74 @@
+# The worker: outbox relay, email, transcode. No Service: it serves nothing but actuator, and
+# nobody calls it (KEDA reads the database, D4.6).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: masternova
+spec:
+  replicas: 1 # N is safe: outbox and jobs are claimed FOR UPDATE SKIP LOCKED, the sweeper is ShedLocked
+  selector:
+    matchLabels: { app.kubernetes.io/name: worker }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: worker, app.kubernetes.io/part-of: masternova }
+    spec:
+      enableServiceLinks: false # see api.yaml
+      automountServiceAccountToken: false
+      # A transcode in progress is abandoned on SIGTERM and released uncounted (JobInterruptedException);
+      # 45 s lets an email send or an outbox batch finish.
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100 # the image's `app` user (see api.yaml)
+        runAsGroup: 101
+        seccompProfile: { type: RuntimeDefault }
+        fsGroup: 101 # volumes below are group-owned by `app`, so the work dir is writable
+      containers:
+        - name: worker
+          image: registry.localhost:5050/masternova-spring/worker:TAG
+          ports: [{ name: http, containerPort: 8090 }]
+          envFrom: [{ configMapRef: { name: masternova-config } }]
+          env:
+            # ⭐ ffmpeg runs inside this container's limit, beside the JVM: a 40 % heap share
+            - { name: JAVA_TOOL_OPTIONS, value: -XX:MaxRAMPercentage=40 -XX:+ExitOnOutOfMemoryError }
+            - { name: PIPELINE_WORK_DIR, value: /var/lib/pipeline }
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 250m, memory: 768Mi }
+            limits: { cpu: '2', memory: 2Gi }
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: http }
+            periodSeconds: 10
+          readinessProbe: # nothing routes to the worker; readiness still gates a rollout's progress
+            httpGet: { path: /actuator/health/readiness, port: http }
+            periodSeconds: 10
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: work, mountPath: /var/lib/pipeline }
+            - { name: secrets, mountPath: /run/secrets, readOnly: true }
+      volumes:
+        - name: tmp
+          emptyDir: { medium: Memory, sizeLimit: 64Mi }
+        # a rung's segments sit here until ffmpeg finishes: node disk, not memory. Per pod, gone
+        # with it (WorkDirCleanup handles a restart within the same pod).
+        - name: work
+          emptyDir: { sizeLimit: 5Gi }
+        - name: secrets
+          projected:
+            sources:
+              - secret: # least privilege: only the key the worker signs unsubscribe links with
+                  name: masternova-app
+                  items: [{ key: NOTIFICATION_TOKEN_SECRET, path: NOTIFICATION_TOKEN_SECRET }]
+              - secret:
+                  name: masternova-db
+                  items:
+                    - { key: username, path: DATABASE_USER }
+                    - { key: password, path: DATABASE_PASSWORD }

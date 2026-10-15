@@ -16,7 +16,7 @@ nuke: ## Stop everything AND delete volumes (fresh database)
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
-	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret; do \
+	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret db_password; do \
 	  [ -s secrets/$$f ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/$$f; \
 	    chmod 644 secrets/$$f; echo "created secrets/$$f"; }; \
 	done
@@ -77,6 +77,40 @@ e2e: ## Browser e2e tests (Playwright) against the running stack: make stack && 
 	$(MAKE) seed COURSES=60
 	cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
 
+# ---- Kubernetes (Phase D4, patterns/devops/06): a local k3d cluster + its registry ----
+# Images are tagged with the commit (immutable, like CI's :sha-…) and a dirty tree gets -dirty.
+TAG ?= sha-$(shell git rev-parse --short=7 HEAD)$(shell git diff --quiet HEAD -- backend frontend || echo -dirty)
+REGISTRY := localhost:5050
+
+k8s-up: ## Create the local k3d cluster (3 nodes, registry on :5050, ingress on :8082/:8443)
+	k3d cluster list masternova >/dev/null 2>&1 || k3d cluster create --config deploy/k3d/cluster.yaml
+	kubectl config use-context k3d-masternova
+
+k8s-down: ## Delete the local k3d cluster and its registry (all cluster data is lost)
+	k3d cluster delete masternova
+
+k8s-images: images ## Build the three images and push them to the cluster's registry as :$(TAG)
+	for img in api worker web; do \
+	  docker tag masternova-spring/$$img:local $(REGISTRY)/masternova-spring/$$img:$(TAG) && \
+	  docker push -q $(REGISTRY)/masternova-spring/$$img:$(TAG); \
+	done
+
+k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files (never from git)
+	kubectl apply -f deploy/k8s/namespace.yaml
+	kubectl -n masternova create secret generic masternova-app \
+	  --from-file=JWT_ACCESS_SECRET=secrets/jwt_access_secret \
+	  --from-file=NOTIFICATION_TOKEN_SECRET=secrets/notification_token_secret \
+	  --from-file=PLAYBACK_TOKEN_SECRET=secrets/playback_token_secret \
+	  --from-file=ENTITLEMENT_PLAYBACK_SECRET=secrets/entitlement_playback_secret \
+	  --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n masternova create secret generic masternova-db --type=kubernetes.io/basic-auth \
+	  --from-literal=username=masternova --from-file=password=secrets/db_password \
+	  --dry-run=client -o yaml | kubectl apply -f -
+
+k8s-apply: k8s-secrets ## Apply the raw manifests in deploy/k8s with the images of :$(TAG)
+	kubectl apply -f deploy/k8s/infra
+	for f in deploy/k8s/app/*.yaml; do sed 's|:TAG$$|:$(TAG)|' $$f; echo ---; done | kubectl apply -f -
+
 release: ## Tag and push a release from an up-to-date, clean main: make release VERSION=1.2.3
 	@echo "$(VERSION)" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "usage: make release VERSION=X.Y.Z"; exit 1; }
 	@[ "$$(git rev-parse --abbrev-ref HEAD)" = main ] && git diff --quiet && git diff --cached --quiet \
@@ -85,4 +119,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e release
+.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-secrets k8s-apply release

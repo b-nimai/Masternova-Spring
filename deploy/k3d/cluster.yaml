@@ -1,0 +1,31 @@
+# Local Kubernetes for Phase D4 (ADR-0004): `make k8s-up` creates it, `make k8s-down` deletes it.
+# k3d runs k3s (a CNCF-conformant Kubernetes in one binary) with each node as a Docker container.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: masternova
+servers: 1 # the control plane (API server, scheduler, etcd-compatible sqlite) — also runs pods
+agents: 2 # worker nodes: a drain (D4.8) needs somewhere else to move pods to
+image: rancher/k3s:v1.36.4-k3s1 # pinned: the cluster is rebuilt from this file, so pin like an image
+ports:
+  # k3d's load balancer (an nginx container) forwards host ports to every node's Traefik.
+  # Offset from compose's 8080/8081 so both stacks can run side by side.
+  - port: 8082:80
+    nodeFilters: [loadbalancer]
+  - port: 8443:443
+    nodeFilters: [loadbalancer]
+registries:
+  # ⭐ A registry container next to the cluster: `docker push localhost:5050/…` from the host, and the
+  #    nodes pull the same image as k3d-registry.localhost:5050/… (k3d writes the mirror config).
+  #    No `k3d image import` tarballs: pushing to a registry is what CI does, so the local loop
+  #    rehearses the real one.
+  create:
+    name: registry.localhost
+    host: '127.0.0.1'
+    hostPort: '5050'
+options:
+  k3d:
+    wait: true
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true # → context k3d-masternova

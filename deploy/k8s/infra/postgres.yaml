@@ -1,0 +1,52 @@
+# Postgres as a plain StatefulSet: the "by hand" version, replaced by the CloudNativePG operator
+# in D4.4. A StatefulSet (not a Deployment) gives the pod a stable name (postgres-0) and its OWN
+# PersistentVolumeClaim, which survives the pod being deleted or rescheduled.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: masternova
+spec:
+  selector: { app.kubernetes.io/name: postgres }
+  ports: [{ name: postgres, port: 5432 }]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: masternova
+spec:
+  serviceName: postgres
+  replicas: 1 # one primary, no failover: that's what the operator adds
+  selector:
+    matchLabels: { app.kubernetes.io/name: postgres }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: masternova }
+    spec:
+      enableServiceLinks: false # see app/api.yaml
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg17
+          env:
+            - { name: POSTGRES_DB, value: masternova }
+            - name: POSTGRES_USER
+              valueFrom: { secretKeyRef: { name: masternova-db, key: username } }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: masternova-db, key: password } }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata } # a subdir: the volume root has lost+found
+          ports: [{ name: postgres, containerPort: 5432 }]
+          readinessProbe:
+            exec: { command: [sh, -c, 'pg_isready -U "$POSTGRES_USER" -d masternova'] }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+  # ⭐ One PVC per replica, created from this template and named data-postgres-0. k3s's
+  #    local-path provisioner backs it with a directory on the node the pod landed on.
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 2Gi } }
