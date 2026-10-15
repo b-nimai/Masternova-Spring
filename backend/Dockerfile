@@ -50,6 +50,9 @@ COPY --from=build /src/extracted/application/ ./
 # BuildKit injects its own OTEL_* variables into RUN steps when its tracing is on (CI's buildx:
 # OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=unix:///dev/otel-grpc.sock), which Boot's OTLP exporter
 # rejects — the training run must not trace anything, so they are dropped for it.
+# The payment provider fails closed without its secrets (commerce LLD §6): placeholders, as -D
+# flags of this one RUN (never ENV, so the image carries none), let the real Razorpay adapter be
+# trained. The worker ignores them.
 RUN for v in $(env | sed -n 's/^\(OTEL_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done; \
     java -XX:AOTCacheOutput=app.aot \
       -Dspring.context.exit=onRefresh \
@@ -57,6 +60,9 @@ RUN for v in $(env | sed -n 's/^\(OTEL_[A-Z_]*\)=.*/\1/p'); do unset "$v"; done;
       -Dspring.jpa.hibernate.ddl-auto=none \
       -Dspring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=false \
       -Dspring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect \
+      -Dmasternova.commerce.razorpay.key-id=aot-training \
+      -Dmasternova.commerce.razorpay.key-secret=aot-training \
+      -Dmasternova.commerce.razorpay.webhook-secret=aot-training \
       -jar app.jar
 # The commit this image was built from, reported at /actuator/info. Declared AFTER the training
 # run: a changed build arg invalidates the cache of every RUN that follows it.
