@@ -33,7 +33,7 @@
 	<properties>
 		<java.version>25</java.version>
 		<spring-modulith.version>2.1.1</spring-modulith.version>
-		<spotless.version>3.10.3</spotless.version>
+		<spotless.version>3.10.4</spotless.version>
 		<!-- 1.36+ adds a commonmark dependency Spotless 3.10 fails to load; bump when Spotless fixes it. -->
 		<google-java-format.version>1.35.0</google-java-format.version>
 		<jacoco.version>0.8.15</jacoco.version>
