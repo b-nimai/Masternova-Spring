@@ -126,11 +126,11 @@ Phases are listed **in the order you do them**.
 | 12 | [8 — Entitlement ⭐](#phase-8--entitlement-) | 7 | 7 | 18 h | ~18 h | ✅ |
 | 13 | [9 — Commerce](#phase-9--commerce) | 9 | 9 | 28 h | ~30 h | ✅ |
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 8 | 20 h | ~22 h | ✅ |
-| 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 0 | 14 h | — | ☐ |
+| 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 6 | 14 h | ~15 h | ✅ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 0 | 20 h | — | ☐ |
 | 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **114** | **~326 h** | ~247 h | |
+| | **Total** | **137** | **120** | **~326 h** | ~262 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -432,7 +432,7 @@ without hammering the database.
 | 10.2 | Enrollment from entitlement's events (every source: purchase, free, admin; ADR-0021 amends "from `OrderPaid`"), durable through Modulith's JDBC registry + a ShedLock'd resubmitter; free enrollment `PUT /me/enrollments/{courseId}`; `enrollment_count` moved only on a real change | `@ApplicationModuleListener`, event publication registry | — | Observer | 2 h | ✅ | 2026-10-16 |
 | 10.3 | Heartbeats → Redis write-back buffer (one Lua merge, no SQL), flushed every 30 s on one replica (`RENAME dirty → flushing`, ShedLock) through the validated write-through; Redis down → write-through; IP-bound beacon token in each heartbeat's answer | Redis hashes + Lua, `@Scheduled`, `TransactionOperations` | — | **Decorator** (write-back) | 3 h | ✅ | 2026-10-16 |
 | 10.4 | Monotonic `maxPositionSeconds` (one `unnest` upsert, the merge in SQL), rollups by recount; `GET /me/learning` (rollups), `/me/courses/{id}/progress` and `/me/progress/{lecture}` (through the buffer); `Resume` (next lecture, restart in the last 10 s) | SQL `GREATEST`, row comparison, `unnest` upserts | — | — | 2 h | ✅ | 2026-10-16 |
-| 10.5 | Angular: My Learning dashboard, resume playback, `sendBeacon` on unload | — | `DestroyRef`, `fromEvent`, `navigator.sendBeacon` | — | 4 h | ☐ | |
+| 10.5 | Angular: My Learning (`/learning`), resume playback, `ProgressTracker` (15 s while playing, pause/seek at once, `sendBeacon` on `pagehide`/hidden), Continue / Enroll for free on the course page, ticks in the curriculum (note 09) | — | `DestroyRef`, `fromEvent`, `navigator.sendBeacon` | — | 4 h | ✅ | 2026-10-16 |
 | 10.6 | Tests: `WriteBackProgressStoreIT` (a flush that died after `RENAME` or before `DEL`; Java = Lua = SQL on 25 random sequences), `ProgressUpdateTest` (700 seeded runs: commutative, associative, idempotent, `max` never down), `ProgressIT`, unit tests for `Completion`, `Resume`, beacon tokens, failing open | — | — | — | 2 h | ✅ | 2026-10-16 |
 
 ---

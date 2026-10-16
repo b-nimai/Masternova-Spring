@@ -44,7 +44,10 @@
           [slug]="c.slug"
           [firstLectureId]="firstLectureId()"
           [offer]="offer()"
+          [progress]="progress.hasValue() ? progress.value() : null"
+          [enrolling]="enrolling()"
           (retry)="access.reload()"
+          (enroll)="enroll(c.id)"
         />
       }
     </header>
@@ -58,7 +61,12 @@
       <h2>Course content</h2>
       <!-- ⭐ deferred: a separate JS chunk, fetched when this block scrolls into view -->
       @defer (on viewport) {
-        <app-curriculum [sections]="c.sections" [slug]="c.slug" [access]="lectureAccess()" />
+        <app-curriculum
+          [sections]="c.sections"
+          [slug]="c.slug"
+          [access]="lectureAccess()"
+          [completed]="completed()"
+        />
       } @placeholder {
         <p data-testid="curriculum-placeholder">
           {{ c.sections.length }} sections · {{ c.lectureCount }} lectures

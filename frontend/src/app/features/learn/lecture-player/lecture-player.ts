@@ -3,11 +3,17 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
-import { Subscription } from 'rxjs';
+import { catchError, map, of, Subscription } from 'rxjs';
 import { DenialReason, EntitlementApi } from '../../../core/api/entitlement-api';
+import { LearningApi } from '../../../core/api/learning-api';
 import { asProblem } from '../../../core/api/problem';
 import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
-import { HlsPlayer, PlaybackFailure } from '../../../shared/hls-player/hls-player';
+import {
+  HlsPlayer,
+  PlaybackFailure,
+  PlaybackProgress,
+} from '../../../shared/hls-player/hls-player';
+import { ProgressTracker } from '../progress-tracker';
 
 /** What the page shows — a discriminated union, switched on in the template. */
 type PlayerState =
@@ -32,15 +38,21 @@ const FAILURES: Record<string, string> = {
  *    which re-runs the entitlement decision on the server — and resumes at the same second. A
  *    failure within {@link RETICKET_GRACE_MS} of a fresh token is shown instead of retried, and a
  *    403 on the re-ticket is a REAL denial (a refund): shown, never looped.
+ * ⭐ Phase 10: it opens where the learner stopped (the server's resume point, read through the
+ *    progress buffer) and reports where they are through a {@link ProgressTracker} scoped to this
+ *    component. The resume point is a nicety: if it fails, the lecture starts at 0.
  */
 @Component({
   imports: [HlsPlayer, MatButtonModule, MatIconModule, MatProgressSpinnerModule, RouterLink],
+  providers: [ProgressTracker],
   selector: 'app-lecture-player',
   styleUrl: './lecture-player.scss',
   templateUrl: './lecture-player.html',
 })
 export class LecturePlayer {
   private readonly api = inject(EntitlementApi);
+  private readonly learning = inject(LearningApi);
+  private readonly tracker = inject(ProgressTracker);
 
   readonly slug = input.required<string>();
   readonly lectureId = input.required<string>();
@@ -52,8 +64,11 @@ export class LecturePlayer {
 
   constructor() {
     effect(() => {
-      this.lectureId(); // a new lecture → a new ticket from the start
-      untracked(() => this.ticket(0));
+      const lectureId = this.lectureId(); // a new lecture → resume point, then a new ticket
+      untracked(() => {
+        this.tracker.track(lectureId);
+        this.resume();
+      });
     });
     inject(DestroyRef).onDestroy(() => this.request?.unsubscribe());
   }
@@ -70,7 +85,24 @@ export class LecturePlayer {
   }
 
   protected retry(): void {
-    this.ticket(0);
+    this.resume();
+  }
+
+  protected onProgress(progress: PlaybackProgress): void {
+    this.tracker.update(progress);
+  }
+
+  /** Where they stopped, then a ticket that starts there. */
+  private resume(): void {
+    this.request?.unsubscribe();
+    this.state.set({ kind: 'loading' });
+    this.request = this.learning
+      .lectureProgress(this.lectureId())
+      .pipe(
+        map((p) => p.positionSeconds),
+        catchError(() => of(0)),
+      )
+      .subscribe((startAt) => this.ticket(startAt));
   }
 
   private ticket(startAt: number): void {

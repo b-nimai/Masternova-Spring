@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { DecimalPipe } from '@angular/common';
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,6 +8,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { CatalogApi } from '../../../core/api/catalog-api';
 import { AccessResponse, EntitlementApi } from '../../../core/api/entitlement-api';
+import { LearningApi } from '../../../core/api/learning-api';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { CartItem } from '../../../core/commerce/cart-store';
 import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
@@ -29,6 +30,9 @@ import { Curriculum } from '../curriculum/curriculum';
  * ⭐ Phase 8: a SECOND resource, chained on the first — once the course (and so its id) is known,
  *    ask the entitlement engine what this viewer may watch. It re-runs when the viewer signs in or
  *    out. `?locked=<reason>` (the player's guard sent them back) becomes a banner.
+ * ⭐ Phase 10: a THIRD resource, chained on the access: a signed-in viewer who may watch gets
+ *    their progress (read through the buffer, so a lecture watched a second ago already counts):
+ *    the call to action continues where they stopped, and the curriculum ticks what's done.
  */
 @Component({
   imports: [
@@ -50,6 +54,7 @@ export class CourseDetail {
   private readonly api = inject(CatalogApi);
   private readonly entitlements = inject(EntitlementApi);
   private readonly auth = inject(AuthStore);
+  private readonly learning = inject(LearningApi);
 
   readonly slug = input.required<string>();
   /** `?locked=<reason>`: the player's guard sent the viewer back here (query params bind too). */
@@ -68,6 +73,38 @@ export class CourseDetail {
     },
     stream: ({ params }) => this.entitlements.courseAccess(params.id),
   });
+
+  /** Only worth asking when signed in and allowed in: everyone else has no progress. */
+  protected readonly progress = rxResource({
+    params: () => {
+      const access = this.access.value();
+      return this.auth.isAuthenticated() && access?.course.kind === 'ALLOWED'
+        ? access.courseId
+        : undefined;
+    },
+    stream: ({ params: courseId }) => this.learning.courseProgress(courseId),
+  });
+
+  protected readonly completed = computed<ReadonlySet<string>>(
+    () => new Set(this.progress.hasValue() ? this.progress.value().completedLectureIds : []),
+  );
+
+  protected readonly enrolling = signal(false);
+
+  /** Free enrollment (idempotent PUT), then the progress again: the button turns to "Start". */
+  protected enroll(courseId: string): void {
+    this.enrolling.set(true);
+    this.learning.enroll(courseId).subscribe({
+      next: () => {
+        this.enrolling.set(false);
+        this.progress.reload();
+      },
+      error: () => {
+        this.enrolling.set(false);
+        this.access.reload(); // refused (revoked, no longer free): the access says why
+      },
+    });
+  }
 
   protected readonly lectureAccess = computed<ReadonlyMap<string, AccessResponse> | null>(() => {
     const access = this.access.value();

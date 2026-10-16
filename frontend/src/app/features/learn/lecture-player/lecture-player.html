@@ -12,6 +12,7 @@
         [src]="s.url"
         [startAt]="s.startAt"
         (failed)="onFailed($event)"
+        (playbackProgress)="onProgress($event)"
       />
     }
     @case ('denied') {
