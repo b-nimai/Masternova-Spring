@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-14 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6) and §13 (Phase 3) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-16 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6), §13 (Phase 3) and §15 (Phase 10) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -312,3 +312,33 @@ Implemented by `identity.infrastructure.security.SecurityConfig`, `ProblemSecuri
 
 Implemented by `notification.web.NotificationPreferencesController` and `UnsubscribeController`.
 Design: [`docs/lld/notification.md`](../lld/notification.md).
+
+## 15. Progress: heartbeats and beacons
+
+| Endpoint | Auth | Body | Answer |
+|---|---|---|---|
+| `PUT /me/enrollments/{courseId}` | user | — | 200 `{courseId, status, enrolledAt}`; 422 `COURSE_NOT_FREE`; 403 `ENTITLEMENT_REVOKED`; 404 for a draft or unknown course |
+| `GET /me/learning` | user | — | 200 `[LearningCourseResponse]`: the learner's active courses, most recently watched first, **not paged** |
+| `GET /me/courses/{courseId}/progress` | user | — | 200 `{enrolled, percentComplete, completedLectureIds, continueLectureId?, continuePositionSeconds}`; not enrolled → `enrolled: false` |
+| `PUT /me/progress/{lectureId}` | user | `{positionSeconds}` (0–86 400) | 200 `{beaconToken, beaconExpiresAt}` |
+| `GET /me/progress/{lectureId}` | user | — | 200 `{positionSeconds, maxPositionSeconds, completed}`; 404 for an unknown lecture |
+| `POST /progress/beacon` | public | `{token, positionSeconds}` | 204; 403 `BEACON_TOKEN_INVALID` |
+
+- **A heartbeat is a PUT:** it sets a position, and repeating it changes nothing. The player
+  sends one every 15 s while playing, and on pause and seek.
+- **No SQL on the heartbeat path.** It lands in a Redis buffer flushed every 30 s
+  ([ADR-0022](../adr/0022-progress-write-back-buffer.md)). Whether the lecture exists and the
+  learner is enrolled is checked at the flush, so a heartbeat for a lecture you don't hold answers
+  200 and is dropped there. Don't read a 200 as "saved".
+- **Two freshnesses:** `GET /me/progress/…` and `GET /me/courses/…/progress` read through the
+  buffer (a heartbeat a second old counts). `GET /me/learning` reads rollups that are at most one
+  flush (30 s) behind.
+- **Enrolling for free is a PUT on the pair:** idempotent by nature, so it needs no
+  `Idempotency-Key`. Paid courses are enrolled by their purchase (ADR-0021).
+- **The beacon's credential is in its body.** `navigator.sendBeacon`, the one request a closing
+  page reliably sends, can't set `Authorization`, and the access token may have expired anyway.
+  Each heartbeat answers a fresh token: signed (HMAC), valid 2 minutes, for **one user, one
+  lecture, one client IP**. Forged, expired, mangled and other-network tokens all get the same 403.
+
+Implemented by `enrollment.web.EnrollmentController`, `ProgressController` and
+`LearningController`. Design: [`docs/lld/progress.md`](../lld/progress.md).

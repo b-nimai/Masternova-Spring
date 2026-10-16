@@ -45,7 +45,7 @@ including one sent a second ago) and "My Learning" (percent complete, last lectu
 - **Negative:**
   - The dashboard lags up to 30 s. The player and the course page don't.
   - Validation (does the lecture exist, is the learner enrolled) moves to the flush: a forged
-    heartbeat sits in Redis for ≤ 30 s and is dropped (`learning.progress.dropped`). A flood of
+    heartbeat sits in Redis for ≤ 30 s and is dropped (`enrollment.progress.dropped`). A flood of
     them costs Redis memory, not SQL.
   - A third copy of the merge rule (Lua) to keep in sync; `WriteBackProgressStoreIT` runs the same
     sequences through Lua, SQL and Java.

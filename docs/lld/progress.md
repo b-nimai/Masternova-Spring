@@ -3,8 +3,8 @@
 > **One-liner:** keep a learner's courses ("My Learning") in step with what they hold, and remember
 > where they stopped in every lecture, to the second, without a database write per heartbeat.
 
-**Module:** `backend/api/src/main/java/com/masternova/api/learning` · **Status:** built (Phase 10: 10.1–10.6)
-**Last updated:** 2026-10-15 · **Angular:** `frontend/src/app/features/learn` (dashboard, player
+**Module:** `backend/api/src/main/java/com/masternova/api/enrollment` · **Status:** built (Phase 10: 10.1–10.6)
+**Last updated:** 2026-10-16 · **Angular:** `frontend/src/app/features/learn` (dashboard, player
 heartbeats + beacon), `features/catalog` (enroll / continue CTA, ticks in the curriculum)
 **Pairs with:** [ADR-0021](../adr/0021-modulith-registry-for-in-process-module-listeners.md)
 (durable in-process listeners) · [ADR-0022](../adr/0022-progress-write-back-buffer.md)
@@ -32,7 +32,7 @@ to do that for thousands of simultaneous viewers without turning Postgres into a
   reversed (ADR-0021). Every write must be **idempotent and order-independent**.
 - **Partial failure:** the api can die mid-flush; Redis can be down; a listener can throw.
 - **Another module's facts:** which lectures exist, their course, kind and duration are catalog's;
-  who holds a course is entitlement's. Learning keeps its own rows and asks for the rest.
+  who holds a course is entitlement's. The module keeps its own rows and asks for the rest.
 - **A client that can't send headers:** `navigator.sendBeacon` (the only request that reliably
   leaves a closing page) can't set `Authorization`, so its credential travels in the body.
 - **Untrusted input:** a heartbeat names any lecture id it likes. Nothing it says may cost a SQL
@@ -70,7 +70,7 @@ classDiagram
   }
   class EnrollmentRepository {
     <<interface, domain>>
-    enroll · revoke · find · active · activePairs · refreshRollups
+    enroll · revoke · find · active · activeAmong · refreshRollups
   }
   class ProgressStore {
     <<interface, domain>>
@@ -89,7 +89,7 @@ classDiagram
   class ProgressFlushJob { <<@Scheduled 30 s, ShedLock>> }
   class LearningQueries { dashboard · course progress · resume }
   class CatalogApi { <<catalog module API>> outlines · lectures · adjustEnrollmentCount }
-  class EntitlementApi { <<entitlement module API>> grant · holding · heldCourses }
+  class EntitlementApi { <<entitlement module API>> grant · isRevoked }
 
   EnrollmentListener --> EnrollmentService
   EnrollmentService --> EnrollmentRepository
@@ -99,16 +99,16 @@ classDiagram
   ProgressStore <|.. WriteBackProgressStore
   WriteBackProgressStore o-- ProgressWriter : wraps
   ProgressWriter --> CatalogApi : lectures(ids), 1 query per batch
-  ProgressWriter --> EnrollmentRepository : activePairs, refreshRollups
+  ProgressWriter --> EnrollmentRepository : activeAmong, refreshRollups
   ProgressFlushJob --> WriteBackProgressStore : flush()
   LearningQueries --> ProgressStore
   LearningQueries --> EnrollmentRepository
   LearningQueries --> CatalogApi
 ```
 
-**Module API:** none. Learning is a leaf: it listens to entitlement's events and calls catalog and
+**Module API:** none. Enrollment is a leaf: it listens to entitlement's events and calls catalog and
 entitlement; nobody calls it. (`CatalogApi` gains `outlines`, `lectures` and one command,
-`adjustEnrollmentCount`; `EntitlementApi` gains `holding`; `EntitlementGranted` gains `grantedAt`.)
+`adjustEnrollmentCount`; `EntitlementApi` gains `isRevoked`; `EntitlementGranted` gains `grantedAt`.)
 
 **Layering:** `ProgressUpdate`, `Completion`, `Resume` are plain Java in `domain/`. The Decorator,
 its Lua script and the JDBC repositories are in `infrastructure/`; `ProgressWriter` (the
@@ -145,7 +145,7 @@ sequenceDiagram
 - **Revoke first, grant later** (reordered or retried): the revoke inserts a `REVOKED` tombstone
   with its time; the grant's `at` is older, so its `WHERE status_at < :at` matches nothing.
 - **Free enrollment** (`PUT /me/enrollments/{courseId}`): the course must be published and free;
-  a learner whose entitlement was **revoked** is refused (`ENROLLMENT_REVOKED`, or re-enrolling
+  a learner whose entitlement was **revoked** is refused (403 `ENTITLEMENT_REVOKED`, or re-enrolling
   would undo an admin's revoke). It grants `FREE_ENROLLMENT` **and** enrolls in the same
   transaction, so the answer is already true; the listener's copy is then a no-op.
 
@@ -171,7 +171,7 @@ sequenceDiagram
   W->>R: HGETALL flushing
   W->>PW: recordAll(batch)
   PW->>DB: CatalogApi.lectures(ids) — 1 query: course, kind, duration
-  PW->>DB: enrollment.activePairs — 1 query: drop the rest
+  PW->>DB: enrollment.activeAmong — 1 query: drop the rest
   PW->>DB: upsert lecture_progress (GREATEST, newest wins, completed_at once) — 1 statement
   PW->>DB: refresh enrollment rollups by recount — 1 statement
   W->>R: DEL flushing
@@ -212,7 +212,7 @@ token framework.
 | Postgres upsert per heartbeat | ADR-0022: 67–670 writes/s of churn for data whose loss is cheap |
 | Enrollment from `OrderPaid` / enrollment in the order transaction | ADR-0021: misses free and admin grants; a dashboard bug would fail payments |
 | `+1` to `completed_lectures` per completion | not idempotent: a replayed flush double-counts. The rollup is a recount of the pair's rows |
-| `enrollment_count` recomputed by catalog | catalog would read learning's table (a cycle). Learning sends `±1` only when its upsert **changed** a row, in the same transaction: exactly once |
+| `enrollment_count` recomputed by catalog | catalog would read enrollment's table (a cycle). Enrollment sends `±1` only when its upsert **changed** a row, in the same transaction: exactly once |
 | Completion from the client ("I finished") | the server knows the duration; the client sends positions only |
 | `fetch(…, {keepalive: true})` with the bearer instead of a beacon | the 15-min access token may have expired by the time the tab closes, and a page that is unloading can't run the refresh. A beacon token is fresh by construction (every heartbeat renews it) |
 | Validating each heartbeat (lecture exists, enrolled) | a SQL statement per heartbeat is what the buffer removes; validation moves to the flush, one query per batch |
@@ -223,8 +223,8 @@ token framework.
 | Failure | How it is detected | Behaviour | Recovery |
 |---|---|---|---|
 | api dies mid-flush | `progress:v1:flushing` exists at the next flush | written again (idempotent merge) | automatic, next tick |
-| Postgres down at a flush | the transaction throws; `learning.progress.flush{outcome=error}` | `flushing` kept, `dirty` grows | automatic when Postgres returns |
-| Redis down | command timeout (500 ms) | heartbeats written through to Postgres (`learning.progress.heartbeats{path=direct}`); reads from rows | none needed |
+| Postgres down at a flush | the transaction throws; `enrollment.progress.flush{outcome=error}` | `flushing` kept, `dirty` grows | automatic when Postgres returns |
+| Redis down | command timeout (500 ms) | heartbeats written through to Postgres (`enrollment.progress.heartbeats{path=direct}`); reads from rows | none needed |
 | Redis loses its data | not detected | ≤ 30 s of positions lost per learner | accepted (ADR-0022) |
 | Buffer evicted under memory pressure | — | can't happen: `volatile-lru`, the buffer has no TTL | — |
 | Listener throws / api dies before it runs | `event_publication` row not completed | `FAILED` after staleness; resubmitted each minute, 10 attempts | fix + automatic resubmission |
@@ -232,11 +232,11 @@ token framework.
 | A lecture is deleted from the curriculum | FK `ON DELETE CASCADE` | its progress rows go; `completed_lectures` stale until the pair's next flush; percent clamped | accepted |
 | Instructor saves the course while enrollments arrive | — | `enrollment_count` is `updatable = false` in JPA: a course save never writes a stale count back | — |
 | Seek to the end without watching | — | counts as complete | accepted: progress is a bookmark, not a certificate |
-| Forged heartbeats | dropped at the flush, `learning.progress.dropped{reason}` | Redis memory only, until the next flush | — |
+| Forged heartbeats | dropped at the flush, `enrollment.progress.dropped{reason}` | Redis memory only, until the next flush | — |
 
 ## 9. Data & indexes
 
-`V22__modulith_event_publication.sql` and `V23__learning.sql`:
+`V22__modulith_event_publication.sql` and `V23__enrollment.sql`:
 
 - `enrollment(user_id, course_id, source, status, enrolled_at, status_at, completed_lectures,
   last_lecture_id?, last_activity_at?)`, **PK `(user_id, course_id)`**: the upserts' conflict
