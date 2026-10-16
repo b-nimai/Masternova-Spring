@@ -11,7 +11,7 @@ image:
 
 # Existing Secrets the pods mount as files under /run/secrets (Spring's configtree)
 secrets:
-  app: masternova-app # JWT_ACCESS_SECRET, NOTIFICATION_TOKEN_SECRET, PLAYBACK_TOKEN_SECRET, ENTITLEMENT_PLAYBACK_SECRET
+  app: masternova-app # JWT_ACCESS_SECRET, NOTIFICATION_TOKEN_SECRET, PLAYBACK_TOKEN_SECRET, ENTITLEMENT_PLAYBACK_SECRET, PROGRESS_BEACON_SECRET
   db: masternova-db # kubernetes.io/basic-auth: username, password (also CNPG's owner secret)
   redis: masternova-redis # password
 

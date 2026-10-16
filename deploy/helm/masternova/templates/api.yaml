@@ -47,4 +47,4 @@ spec:
             - { name: secrets, mountPath: /run/secrets, readOnly: true }
       volumes:
         {{- include "masternova.tmpVolume" . | nindent 8 }}
-        {{- include "masternova.secretsVolume" (dict "root" . "redis" true "appKeys" (list "JWT_ACCESS_SECRET" "NOTIFICATION_TOKEN_SECRET" "PLAYBACK_TOKEN_SECRET" "ENTITLEMENT_PLAYBACK_SECRET")) | nindent 8 }}
+        {{- include "masternova.secretsVolume" (dict "root" . "redis" true "appKeys" (list "JWT_ACCESS_SECRET" "NOTIFICATION_TOKEN_SECRET" "PLAYBACK_TOKEN_SECRET" "ENTITLEMENT_PLAYBACK_SECRET" "PROGRESS_BEACON_SECRET")) | nindent 8 }}
