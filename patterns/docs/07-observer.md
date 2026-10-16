@@ -4,8 +4,8 @@
 > **without the subject knowing who they are**. Adding a reaction means adding an observer, never
 > editing the publisher.
 
-**Type:** Behavioral · **Status:** ✅ in real code (Phases 2, 4, 9.7) · **Last updated:** 2026-10-14
-**Real code (9.7):** worker `SendPurchaseReceipt`, `SendRefundNotice` (Observers of commerce's events); entitlement's `EntitlementGranted` / `EntitlementRevoked` (§3b)
+**Type:** Behavioral · **Status:** ✅ in real code (Phases 2, 4, 9.7, 10.2) · **Last updated:** 2026-10-16
+**Real code (9.7):** worker `SendPurchaseReceipt`, `SendRefundNotice` (Observers of commerce's events); entitlement's `EntitlementGranted` / `EntitlementRevoked` (§3b) · **(10.2)** `enrollment.application.EnrollmentListener`, a durable in-process observer (§3c)
 **Real code:** [`TransactionalEventPublisher`](../../backend/api/src/main/java/com/masternova/api/platform/events/TransactionalEventPublisher.java) (`@DesignPattern(OBSERVER, "Subject")`), behind the module API [`EventPublisher`](../../backend/api/src/main/java/com/masternova/api/platform/EventPublisher.java); events implement [`DomainEvent`](../../backend/kernel/src/main/java/com/masternova/kernel/event/DomainEvent.java)
 **Lab:** [`lab/.../patterns/observer/EventBus`](../lab/src/main/java/com/masternova/patterns/observer/EventBus.java) · **Design:** [`docs/lld/platform-kernel.md`](../../docs/lld/platform-kernel.md)
 
@@ -106,8 +106,8 @@ the enrollment. Commerce must not know about either. Two subjects, three observe
 | Subject (publishes, in its transaction) | Event | Observers |
 |---|---|---|
 | commerce, `PaymentEvents` (a move to `REFUNDED`) | `OrderRefunded` (`accessRevoked`: false when the refund overtook the capture) | worker `SendRefundNotice` → the refund email |
-| commerce, `PaymentEvents` (a move to `PAID`) | `OrderPaid` | worker `SendPurchaseReceipt` → the receipt; Phase 10's enrollment |
-| entitlement, `EntitlementService.revoke` / `grant`, **only when the row changed** | `EntitlementRevoked` / `EntitlementGranted` | Phase 10 (none yet: the relay marks them done) |
+| commerce, `PaymentEvents` (a move to `PAID`) | `OrderPaid` | worker `SendPurchaseReceipt` → the receipt |
+| entitlement, `EntitlementService.revoke` / `grant`, **only when the row changed** | `EntitlementRevoked` / `EntitlementGranted` | `EnrollmentListener` (Phase 10, §3c) |
 
 **What is NOT an observer, on purpose:** revoking the access itself. Commerce calls
 `EntitlementApi.revoke` *inside* the refund's transaction (ADR-0019). Making entitlement observe
@@ -122,6 +122,35 @@ produce one `EntitlementGranted`, because only one upsert changes the row.
 Proof: `RefundIT` (one `OrderRefunded` + one `EntitlementRevoked` per course, a double-clicked
 refund and the provider's later webhook add nothing), `CommerceEmailsTest` (the worker's views read
 the api's JSON field for field, and render).
+
+### 3c. A durable observer inside the api (Phase 10.2)
+
+Enrollment ("My Learning") must follow **every** grant and revoke, whatever caused it: a
+purchase, a free enrollment, an admin. Listening to `OrderPaid` would miss two of the three, so
+enrollment observes entitlement, the module that sees them all.
+
+```java
+@ApplicationModuleListener            // after the publisher's commit, async, in a new transaction
+void on(EntitlementGranted event) {
+  enrollments.granted(userId, courseId, event.source(), event.grantedAt());
+}
+```
+
+A plain `@TransactionalEventListener` dies with the process (§5). This one is **durable**:
+Spring Modulith's event publication registry writes a row in the *publishing* transaction and
+deletes it when the listener returns (ADR-0021). A crash or a thrown exception leaves the row,
+and `FailedPublicationResubmitter` (one replica, ShedLock) delivers it again. So delivery is
+at-least-once and unordered, and the observer must be idempotent and order-independent: each
+event carries its time, and the SQL applies it only if it is newer than the row's `status_at`. A
+revoke that arrives first leaves a `REVOKED` tombstone the older grant can't resurrect.
+
+Why not the outbox (note 17)? The outbox is for work that **leaves the api** (the worker,
+email). This reaction stays in-process and needs no relay, broker or second deployable. One
+event can travel both ways.
+
+Proof: `EnrollmentIT` (one count per real change, revoke-first tombstone, free enrollment),
+`FailedPublicationResubmitterIT` (a failed listener is delivered once its cause is gone; a
+poison event is given up after 10 attempts).
 
 ## 4. Java features that make it nicer
 

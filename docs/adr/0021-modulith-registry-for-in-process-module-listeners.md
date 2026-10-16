@@ -8,7 +8,7 @@ entitlement in-process, not to `OrderPaid` through the outbox)
 
 ## Context
 
-Phase 10 adds the `learning` module. An enrollment (the row behind "My Learning" and progress
+Phase 10 adds the `enrollment` module. An enrollment (the row behind "My Learning" and progress
 rollups) must exist whenever a learner holds a course: after a purchase, a free enrollment or an
 admin grant, and it must end when the access is revoked.
 
@@ -61,15 +61,15 @@ coexist."
 | Used for | email, transcoding, anything leaving the process | reactions of one module to another's fact inside the api |
 
 One event can travel both ways: `EntitlementGranted` goes to the outbox (any worker consumer) *and*
-to the registry for learning's listener. Different tables, different jobs, as ADR-0005 predicted.
+to the registry for the enrollment listener. Different tables, different jobs, as ADR-0005 predicted.
 
 ## Consequences
 
 - **Positive:**
   - A crash, a deploy or a bug in enrollment can't cost a learner their dashboard row: the
     publication is in the same transaction as the grant, and it stays until a listener succeeds.
-  - Commerce and entitlement don't know enrollment exists; learning is a pure Observer.
-  - Learning's listener failing never rolls a payment back.
+  - Commerce and entitlement don't know enrollment exists; enrollment is a pure Observer.
+  - The enrollment listener failing never rolls a payment back.
 - **Negative:**
   - Two event mechanisms to explain. The rule is in the table above: leaves the api → outbox.
   - A second table on the write path of every grant and revoke (one `INSERT`, one `DELETE`).

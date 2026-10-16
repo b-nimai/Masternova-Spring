@@ -28,6 +28,13 @@ public interface EntitlementApi {
   Set<UUID> heldCourses(UUID userId, Collection<UUID> courseIds);
 
   /**
+   * Was this user's access to the course taken away (a refund, an admin)? Free enrollment (Phase
+   * 10) asks first: re-enrolling would otherwise undo the revoke, since a grant after a revoke
+   * restores.
+   */
+  boolean isRevoked(UUID userId, UUID courseId);
+
+  /**
    * Gives a user a course. ⭐ Idempotent against a held grant — a duplicate while the access is
    * active is a no-op — and never shortens access. A grant after a REVOKE restores access: that is
    * a re-purchase. So a caller fed by redelivering webhooks must dedupe the EVENT first (Phase 9:

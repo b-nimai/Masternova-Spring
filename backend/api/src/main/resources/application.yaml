@@ -30,6 +30,19 @@ spring:
       ddl-auto: validate # Flyway owns the schema; Hibernate only checks it matches the entities
   flyway:
     locations: classpath:db/migration
+  modulith: # ADR-0021 — the event publication registry, for @ApplicationModuleListeners only
+    events:
+      # ⭐ only module listeners get a durable publication row; plain @TransactionalEventListeners
+      #    stay best-effort and write nothing
+      registry-trigger-annotation: org.springframework.modulith.events.ApplicationModuleListener
+      completion-mode: delete # a finished publication is deleted: the table holds work in flight
+      republish-outstanding-events-on-restart: false # FailedPublicationResubmitter, on one replica
+      jdbc:
+        schema-initialization:
+          enabled: false # Flyway owns event_publication (V22)
+      staleness: # a publication whose process died is marked FAILED, then resubmitted
+        published: 2m # committed, but the async listener never started
+        processing: 5m # started, never finished
   docker:
     compose:
       # `spring-boot:run` from backend/api starts the shared infra if it isn't running yet.
@@ -73,6 +86,11 @@ masternova: # → MasternovaProperties (typed + validated at startup)
     playback-secret: ${ENTITLEMENT_PLAYBACK_SECRET:dev-only-entitlement-playback-0123456789abcdef}
     token-ttl: 5m
     segment-url-ttl: 30m
+  enrollment: # → EnrollmentProperties (ADR-0022, docs/lld/progress.md)
+    flush-every: 30s # the progress buffer → Postgres; the most a Redis loss costs
+    # signs progress beacons (≥ 32 bytes). Dev-only default; the stack mounts a file secret.
+    beacon-secret: ${PROGRESS_BEACON_SECRET:dev-only-progress-beacon-secret-0123456789abcdef}
+    beacon-ttl: 2m
   commerce: # → CommerceProperties (docs/lld/order-state-machine.md §6)
     # ⭐ Fails CLOSED: the default is razorpay, which refuses to start without its three secrets.
     #    The simulator (FAKE: no network, anyone signed in can "pay") must be asked for by name —

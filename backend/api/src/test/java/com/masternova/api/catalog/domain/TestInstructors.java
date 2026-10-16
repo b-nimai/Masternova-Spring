@@ -37,6 +37,7 @@ public final class TestInstructors {
   /** For tests that commit (@SpringBootTest): courses first, because of the foreign key. */
   public void deleteAll() {
     jdbc.sql("DELETE FROM entitlement").update(); // Phase 8: rows reference courses and users
+    jdbc.sql("DELETE FROM event_publication").update(); // Phase 10: listeners still to run
     jdbc.sql("DELETE FROM purchase_order").update(); // Phase 9: orders (and lines) cite courses
     jdbc.sql("DELETE FROM coupon").update(); // and coupons; a coupon may name a course
     jdbc.sql("DELETE FROM course").update();

@@ -92,6 +92,14 @@ public class EntitlementService implements EntitlementApi {
         .collect(Collectors.toUnmodifiableSet());
   }
 
+  @Override
+  public boolean isRevoked(UUID userId, UUID courseId) {
+    return entitlements
+        .find(userId, courseId)
+        .filter(e -> e.status(clock.instant()) == Entitlement.Status.REVOKED)
+        .isPresent();
+  }
+
   /** The course-wide decision and one per lecture — the row is read once for all of them. */
   public CourseAccess courseAccess(Optional<CurrentUser> viewer, UUID courseId) {
     CourseFacts course =
@@ -123,12 +131,13 @@ public class EntitlementService implements EntitlementApi {
   public boolean grant(
       UUID userId, UUID courseId, EntitlementSource source, Optional<Instant> expiresAt) {
     requireUserAndCourse(userId, courseId);
+    Instant now = clock.instant();
     boolean changed =
-        entitlements.grant(Entitlement.grant(userId, courseId, source, clock.instant(), expiresAt));
+        entitlements.grant(Entitlement.grant(userId, courseId, source, now, expiresAt));
     if (changed) { // ⭐ only a real change is news: 50 copies of one grant → one event
       events.publish(
           new EntitlementGranted(
-              userId.toString(), courseId.toString(), source, expiresAt.orElse(null)));
+              userId.toString(), courseId.toString(), source, expiresAt.orElse(null), now));
     }
     return changed;
   }
