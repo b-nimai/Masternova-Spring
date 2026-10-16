@@ -28,7 +28,7 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular-eslint/builder": "22.5.0",
+    "@angular-eslint/builder": "22.6.0",
     "@angular/build": "^22.2.2",
     "@angular/cli": "^22.2.2",
     "@angular/compiler-cli": "^22.2.2",
@@ -38,7 +38,7 @@
     "jsdom": "^30.1.2",
     "prettier": "^3.9.10",
     "typescript": "~6.0.2",
-    "typescript-eslint": "8.71.1",
-    "vitest": "^5.0.0"
+    "typescript-eslint": "8.71.2",
+    "vitest": "^5.0.4"
   }
 }
