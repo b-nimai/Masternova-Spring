@@ -91,6 +91,9 @@ public class LearningQueries {
             .findFirst()
             .orElseThrow(() -> new NotFoundException("Course", courseId));
     if (enrollments.find(userId, courseId).filter(Enrollment::isActive).isEmpty()) {
+      if (!outline.published()) { // ⭐ drafts are invisible to everyone not enrolled
+        throw new NotFoundException("Course", courseId);
+      }
       return new CourseProgress(courseId, false, 0, Set.of(), Optional.empty(), 0);
     }
     List<LectureOutline> trackable = trackable(outline);
@@ -106,7 +109,11 @@ public class LearningQueries {
             .max(Comparator.comparing(ProgressUpdate::at))
             .map(ProgressUpdate::lectureId);
     Optional<UUID> next =
-        Resume.lecture(ids(trackable), last, last.filter(completed::contains).isPresent());
+        Resume.lecture(
+            ids(trackable),
+            last,
+            last.filter(completed::contains).isPresent(),
+            !trackable.isEmpty() && completed.size() == trackable.size());
     int position =
         next.flatMap(id -> trackable.stream().filter(l -> l.lectureId().equals(id)).findFirst())
             .map(l -> resumeAt(rows.get(l.lectureId()), l))
@@ -150,7 +157,11 @@ public class LearningQueries {
         Completion.percent(completed, trackable.size()),
         e.enrolledAt(),
         e.lastActivityAt(),
-        Resume.lecture(ids(trackable), e.lastLectureId(), lastComplete));
+        Resume.lecture(
+            ids(trackable),
+            e.lastLectureId(),
+            lastComplete,
+            !trackable.isEmpty() && completed >= trackable.size()));
   }
 
   private static List<LectureOutline> trackable(CourseOutline outline) {

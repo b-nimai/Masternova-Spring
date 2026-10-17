@@ -105,12 +105,55 @@ class WriteBackProgressStoreIT {
     store.flush();
     Map<String, Object> before = row(course.paidLecture());
 
-    // the crash: every row committed, the replica died before DEL — the batch is still there
+    // the crash: every row committed, the replica died before the release — the batch is still
+    // there
     redis.opsForHash().putAll(WriteBackProgressStore.FLUSHING, batch);
     store.flush();
 
     assertThat(row(course.paidLecture())).isEqualTo(before);
     assertThat(completedLectures()).isEqualTo(1); // a recount, not +1
+  }
+
+  @Test
+  void aLectureWatchedBeforeItsLengthWasKnownCompletesAtItsNextFlush() {
+    setDuration(course.paidLecture(), 0); // still being probed
+    store.record(beat(course.paidLecture(), 58, T0));
+    store.flush();
+    assertThat(row(course.paidLecture()).get("completed_at")).isNull();
+
+    setDuration(course.paidLecture(), 60);
+    store.record(beat(course.paidLecture(), 10, T0.plusSeconds(60))); // rewatching the start
+    store.flush();
+
+    // ⭐ the MERGED max (58 of 60) decides, not this batch's 10
+    assertThat(row(course.paidLecture()).get("completed_at")).isNotNull();
+    assertThat(completedLectures()).isEqualTo(1);
+  }
+
+  @Test
+  void theReleaseDeletesOnlyWhatTheFlushWroteAndLeavesANewerBatchAlone() {
+    String a = WriteBackProgressStore.field(learner, course.previewLecture());
+    String b = WriteBackProgressStore.field(learner, course.paidLecture());
+    // an overlapping flush moved a new batch in: a's value changed, b is new
+    redis.opsForHash().putAll(WriteBackProgressStore.FLUSHING, Map.of(a, "30|30|2", b, "5|5|2"));
+
+    long released =
+        redis.execute(
+            WriteBackProgressStore.RELEASE,
+            List.of(WriteBackProgressStore.FLUSHING),
+            a,
+            "20|20|1"); // what the slow flush read and wrote
+
+    assertThat(released).isZero();
+    assertThat(redis.opsForHash().entries(WriteBackProgressStore.FLUSHING)).hasSize(2);
+    assertThat(
+            redis.execute(
+                WriteBackProgressStore.RELEASE,
+                List.of(WriteBackProgressStore.FLUSHING),
+                a,
+                "30|30|2"))
+        .isEqualTo(1);
+    assertThat(redis.opsForHash().keys(WriteBackProgressStore.FLUSHING)).containsExactly(b);
   }
 
   @Test
@@ -179,6 +222,13 @@ class WriteBackProgressStoreIT {
 
   private void clearBuffer() {
     redis.delete(List.of(WriteBackProgressStore.DIRTY, WriteBackProgressStore.FLUSHING));
+  }
+
+  private void setDuration(UUID lecture, int seconds) {
+    jdbc.sql("UPDATE lecture SET duration_seconds = :d WHERE id = :l")
+        .param("d", seconds)
+        .param("l", lecture)
+        .update();
   }
 
   private long rows() {

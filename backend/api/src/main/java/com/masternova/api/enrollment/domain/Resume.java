@@ -17,19 +17,24 @@ public final class Resume {
 
   /**
    * The lecture to continue: the last one watched, unless it is complete, then the next trackable
-   * one in curriculum order; nothing watched (or the last one is gone) → the first. Empty when the
-   * course has nothing to watch, or the last trackable lecture is complete.
+   * one in curriculum order; nothing watched (or the last one is gone) → the first. Past the end of
+   * a course that isn't complete (they skipped ahead) → back to the first. Empty only when the
+   * course has nothing to watch, or every lecture is complete.
    *
    * @param trackable the course's trackable lectures, in curriculum order
+   * @param courseComplete every trackable lecture is complete
    */
   public static Optional<UUID> lecture(
-      List<UUID> trackable, Optional<UUID> last, boolean lastComplete) {
+      List<UUID> trackable, Optional<UUID> last, boolean lastComplete, boolean courseComplete) {
+    if (courseComplete) {
+      return Optional.empty();
+    }
     int at = last.map(trackable::indexOf).orElse(-1);
     if (at < 0) {
       return trackable.stream().findFirst();
     }
     int next = lastComplete ? at + 1 : at;
-    return next < trackable.size() ? Optional.of(trackable.get(next)) : Optional.empty();
+    return Optional.of(trackable.get(next < trackable.size() ? next : 0));
   }
 
   /** The second to start a lecture at: where they stopped, or 0 if that was the very end. */

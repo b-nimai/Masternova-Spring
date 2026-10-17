@@ -319,7 +319,7 @@ Design: [`docs/lld/notification.md`](../lld/notification.md).
 |---|---|---|---|
 | `PUT /me/enrollments/{courseId}` | user | — | 200 `{courseId, status, enrolledAt}`; 422 `COURSE_NOT_FREE`; 403 `ENTITLEMENT_REVOKED`; 404 for a draft or unknown course |
 | `GET /me/learning` | user | — | 200 `[LearningCourseResponse]`: the learner's active courses, most recently watched first, **not paged** |
-| `GET /me/courses/{courseId}/progress` | user | — | 200 `{enrolled, percentComplete, completedLectureIds, continueLectureId?, continuePositionSeconds}`; not enrolled → `enrolled: false` |
+| `GET /me/courses/{courseId}/progress` | user | — | 200 `{enrolled, percentComplete, completedLectureIds, continueLectureId?, continuePositionSeconds}`; not enrolled → `enrolled: false`; 404 for an unknown course, or a draft the caller isn't enrolled in. `continueLectureId` is null only when every lecture is complete or there is nothing to watch |
 | `PUT /me/progress/{lectureId}` | user | `{positionSeconds}` (0–86 400) | 200 `{beaconToken, beaconExpiresAt}` |
 | `GET /me/progress/{lectureId}` | user | — | 200 `{positionSeconds, maxPositionSeconds, completed}`; 404 for an unknown lecture |
 | `POST /progress/beacon` | public | `{token, positionSeconds}` | 204; 403 `BEACON_TOKEN_INVALID` |

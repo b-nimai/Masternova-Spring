@@ -83,6 +83,7 @@ class CatalogQueries implements CatalogApi {
                     c.slug(),
                     c.title(),
                     c.instructor().name(),
+                    c.status() == CourseStatus.PUBLISHED,
                     lectures.getOrDefault(c.id(), List.of())))
         .toList();
   }

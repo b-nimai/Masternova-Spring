@@ -4,7 +4,7 @@
 > where they stopped in every lecture, to the second, without a database write per heartbeat.
 
 **Module:** `backend/api/src/main/java/com/masternova/api/enrollment` · **Status:** built (Phase 10: 10.1–10.6)
-**Last updated:** 2026-10-16 · **Angular:** `frontend/src/app/features/learn` (dashboard, player
+**Last updated:** 2026-10-17 · **Angular:** `frontend/src/app/features/learn` (dashboard, player
 heartbeats + beacon), `features/catalog` (enroll / continue CTA, ticks in the curriculum)
 **Pairs with:** [ADR-0021](../adr/0021-modulith-registry-for-in-process-module-listeners.md)
 (durable in-process listeners) · [ADR-0022](../adr/0022-progress-write-back-buffer.md)
@@ -174,17 +174,17 @@ sequenceDiagram
   PW->>DB: enrollment.activeAmong — 1 query: drop the rest
   PW->>DB: upsert lecture_progress (GREATEST, newest wins, completed_at once) — 1 statement
   PW->>DB: refresh enrollment rollups by recount — 1 statement
-  W->>R: DEL flushing
+  W->>R: RELEASE — HDEL each written entry still holding the value read
   B->>H: GET /me/progress/{lecture} (resume)
   H->>W: find(user, [lecture])
-  W->>R: HGET dirty, HGET flushing
-  W->>DB: the row
+  W->>R: HGET dirty, then HGET flushing (the order data moves in)
+  W->>DB: then the row
   W-->>H: merge(row, flushing, dirty)
 ```
 
 **The interesting failure paths:**
 
-- **The api dies after `RENAME`, before `DEL`:** `flushing` survives in Redis. The next flush (any
+- **The api dies after `RENAME`, before the release:** `flushing` survives in Redis. The next flush (any
   replica) writes it before renaming anything. Writing it twice is harmless: the upsert is the
   same merge.
 - **Postgres is down at a flush:** the transaction fails, `flushing` stays, `dirty` keeps
@@ -233,6 +233,11 @@ token framework.
 | Instructor saves the course while enrollments arrive | — | `enrollment_count` is `updatable = false` in JPA: a course save never writes a stale count back | — |
 | Seek to the end without watching | — | counts as complete | accepted: progress is a bookmark, not a certificate |
 | Forged heartbeats | dropped at the flush, `enrollment.progress.dropped{reason}` | Redis memory only, until the next flush | — |
+| A flush outlives its lock and overlaps the next | — | the release deletes only the entries it read **and** that still hold the value it read: the other flush's batch stays | none needed |
+| A read races a flush | — | `find` reads `dirty`, then `flushing`, then the rows — the direction data moves — so an entry that moves between two reads is caught by the next | none needed |
+| A lecture watched before its duration was known | — | `completed_at` is computed from the **merged** max (the row's and the batch's) at every flush, so it completes at the next heartbeat once the duration exists | automatic |
+| An entitlement expires | — | the enrollment stays ACTIVE: the card stays on "My Learning" and the player offers renewal (entitlement decides playback, not enrollment) | by design |
+| Grants/revokes on a pre-Phase-10 pod during the rollout (no listener, no event), or a lost publication | `EnrollmentReconcileJob` logs a non-zero repair | ~2 min after each start, then daily, one replica: the same upserts over the whole entitlement table, the counter moved per changed row | automatic; a repair after the rollout means a lost event: investigate |
 
 ## 9. Data & indexes
 
@@ -267,17 +272,20 @@ none.
 - **Testcontainers `*IT`:**
   - `WriteBackProgressStoreIT` ⭐ (flush on crash): a flush that dies after the `RENAME` loses
     nothing and double-counts nothing; heartbeats during a flush land in the next one; the Lua,
-    SQL and Java merges agree on the same sequences; resume reads through the buffer.
+    SQL and Java merges agree on the same sequences; resume reads through the buffer; a lecture
+    whose duration arrives later completes from the merged max; the release leaves a newer batch.
   - `EnrollmentIT`: purchase → enrolled (async, via the registry); refund → off the dashboard,
     progress kept; re-purchase → back with its progress; revoke-before-grant tombstone; a listener
     that fails is resubmitted; free enrollment (paid → 422, revoked → 403-ish refusal, twice → one
-    row, `enrollment_count` exact).
+    row, already bought → the enrollment, `enrollment_count` exact); a revived tombstone is
+    enrolled at its grant; the reconcile repairs a grant and a revoke no listener saw, then
+    changes nothing.
   - `ProgressIT`: heartbeat → resume at once (buffer) → flush → rollups and percent on the
     dashboard; beacon with a token from another IP or for another lecture → 403; forged lecture
-    dropped.
+    dropped; a draft's progress → 404 for anyone not enrolled.
 - **Angular:** `LearningApi`, `MyLearning` (cards, percent, continue/start, empty state),
   `ProgressTracker` (15 s cadence while playing, flush on pause, beacon on `pagehide` /
-  hidden), `LecturePlayer` (resumes at the returned second), `AccessCta` (enroll for free / continue).
+  hidden, a late answer for the previous lecture ignored), `LecturePlayer` (resumes at the returned second), `AccessCta` (enroll for free / continue).
 
 ## 11. Interview notes — 60-second recall
 

@@ -15,12 +15,12 @@ export type LearningFilter = 'ALL' | 'IN_PROGRESS' | 'COMPLETED';
 export type NextStep = 'START' | 'CONTINUE' | 'REVIEW';
 
 export function nextStep(course: LearningCourseResponse): NextStep {
-  if (course.continueLectureId === null) return 'REVIEW'; // everything watched
+  if (course.continueLectureId === null) return 'REVIEW'; // everything watched (or nothing to)
   return course.lastActivityAt === null ? 'START' : 'CONTINUE';
 }
 
 const isCompleted = (c: LearningCourseResponse) =>
-  c.totalLectures > 0 && c.continueLectureId === null;
+  c.totalLectures > 0 && c.completedLectures >= c.totalLectures;
 
 /**
  * /learning — "My Learning": the learner's courses, most recently watched first, each with how far

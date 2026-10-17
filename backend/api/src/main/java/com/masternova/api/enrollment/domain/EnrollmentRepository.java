@@ -44,4 +44,20 @@ public interface EnrollmentRepository {
    * lecture watched and when. ⭐ A RECOUNT, not {@code +1}: a replayed flush can't double-count.
    */
   void refreshRollups(Collection<UserCourse> pairs);
+
+  /**
+   * The safety net for grants no listener saw (a pre-Phase-10 pod during the rollout, a lost
+   * publication): enrolls every live entitlement that has no ACTIVE, newer-than-it enrollment — the
+   * same rule as {@link #enroll}.
+   *
+   * @return the course of each enrollment it made ACTIVE, once per enrollment
+   */
+  List<UUID> enrollUnseenGrants();
+
+  /**
+   * The same for revokes: ends every ACTIVE enrollment older than its entitlement's revoke.
+   *
+   * @return the course of each enrollment it ended, once per enrollment
+   */
+  List<UUID> revokeUnseenRevokes();
 }

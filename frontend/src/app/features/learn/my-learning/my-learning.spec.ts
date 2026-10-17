@@ -57,7 +57,12 @@ describe('MyLearning', () => {
   it('filters completed courses from those in progress', async () => {
     await load([
       course({}),
-      course({ courseId: 'c2', continueLectureId: null, percentComplete: 100 }),
+      course({
+        courseId: 'c2',
+        continueLectureId: null,
+        completedLectures: 4,
+        percentComplete: 100,
+      }),
     ]);
     const toggles = el().querySelectorAll<HTMLButtonElement>('mat-button-toggle button');
 

@@ -106,4 +106,20 @@ describe('ProgressTracker', () => {
     vi.advanceTimersByTime(HEARTBEAT_MS);
     answer();
   });
+
+  it('ignores a late answer for the lecture it has moved on from', () => {
+    tracker.update({ position: 50, playing: false, event: 'pause' });
+    const late = http.expectOne(BEAT);
+    tracker.track('l2'); // the next lecture, before l1's answer arrives
+    late.flush({ beaconToken: 'tok-l1', beaconExpiresAt: new Date(NOW + 120_000).toISOString() });
+
+    play(5);
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(sendBeacon).not.toHaveBeenCalled(); // l1's token would be refused for l2
+    http.expectOne('/api/v1/me/progress/l2').flush({
+      beaconToken: 'tok-l2',
+      beaconExpiresAt: new Date(NOW + 120_000).toISOString(),
+    });
+  });
 });

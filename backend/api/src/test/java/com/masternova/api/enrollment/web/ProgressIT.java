@@ -139,6 +139,14 @@ class ProgressIT {
   }
 
   @Test
+  void aDraftsProgressIsA404ForAnyoneNotEnrolled() {
+    UUID instructor = new TestInstructors(dataSource).create("Dev Drafter").id();
+    Seeded draft = new TestCourses(dataSource).create(instructor, "DRAFT", 0, true, null);
+    assertThat(get("/api/v1/me/courses/{c}/progress", draft.courseId()))
+        .hasStatus(HttpStatus.NOT_FOUND); // not "enrolled: false": that would confirm it exists
+  }
+
+  @Test
   void aPositionNoPlayerCouldSendIsA400() {
     assertThat(heartbeat(course.paidLecture(), -1)).hasStatus(HttpStatus.BAD_REQUEST);
     assertThat(heartbeat(course.paidLecture(), 86_401)).hasStatus(HttpStatus.BAD_REQUEST);

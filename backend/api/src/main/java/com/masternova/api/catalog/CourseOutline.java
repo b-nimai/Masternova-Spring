@@ -7,12 +7,15 @@ import java.util.UUID;
 /**
  * A course as a learner's dashboard shows it (enrollment, Phase 10): its name, who teaches it, and
  * its lectures in curriculum order. Any state: a learner keeps a course its instructor unpublished.
+ *
+ * @param published whether anyone may see it (a draft is invisible to everyone not enrolled)
  */
 public record CourseOutline(
     UUID courseId,
     String slug,
     String title,
     String instructorName,
+    boolean published,
     List<LectureOutline> lectures) {
 
   public CourseOutline {

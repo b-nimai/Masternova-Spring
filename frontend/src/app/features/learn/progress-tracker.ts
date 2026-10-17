@@ -77,10 +77,14 @@ export class ProgressTracker {
     }
     const position = this.position;
     this.lastSent = position;
+    // ⭐ an answer that lands after track() moved on belongs to the previous lecture: drop it
+    const current = () => this.lectureId === lectureId;
     this.api.heartbeat(lectureId, position).subscribe({
-      next: (answer) => (this.beaconToken = answer),
+      next: (answer) => {
+        if (current()) this.beaconToken = answer;
+      },
       error: () => {
-        if (this.lastSent === position) this.lastSent = -1; // try again next tick
+        if (current() && this.lastSent === position) this.lastSent = -1; // try again next tick
       },
     });
   }

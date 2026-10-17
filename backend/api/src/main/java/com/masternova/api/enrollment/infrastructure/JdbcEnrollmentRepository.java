@@ -65,7 +65,8 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
   /**
    * ⭐ Inserts, or revives a REVOKED row whose status is OLDER than this grant. An ACTIVE row, or a
    * revoke newer than this grant, matches nothing: 0 rows, "no change". {@code enrolled_at} keeps
-   * the first enrollment (a re-purchase is not a new learner).
+   * the first enrollment (a re-purchase is not a new learner); a revived tombstone takes this
+   * grant's.
    */
   @Override
   public boolean enroll(UUID userId, UUID courseId, EntitlementSource source, Instant at) {
@@ -76,7 +77,9 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
                 ON CONFLICT (user_id, course_id) DO UPDATE
                    SET status = 'ACTIVE', source = EXCLUDED.source,
                        status_at = EXCLUDED.status_at,
-                       enrolled_at = LEAST(enrollment.enrolled_at, EXCLUDED.enrolled_at)
+                       -- a tombstone (no source) was never enrolled: its time is a revoke's
+                       enrolled_at = CASE WHEN enrollment.source IS NULL THEN EXCLUDED.enrolled_at
+                                          ELSE LEAST(enrollment.enrolled_at, EXCLUDED.enrolled_at) END
                  WHERE enrollment.status = 'REVOKED'
                    AND enrollment.status_at < EXCLUDED.status_at
                 """)
@@ -175,6 +178,49 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
         .param("users", SqlArrays.of("uuid", list.stream().map(UserCourse::userId).toArray()))
         .param("courses", SqlArrays.of("uuid", list.stream().map(UserCourse::courseId).toArray()))
         .update();
+  }
+
+  /**
+   * ⭐ {@link #enroll} for the whole entitlement table in one statement: the same upsert and the
+   * same {@code WHERE}, so it races the listener safely — whichever writes first wins, the other
+   * matches nothing, and {@code RETURNING} lists only the rows this statement changed. Reads
+   * entitlement's table directly, like V23's backfill (ADR-0021): read-only, and the only
+   * cross-module SQL in enrollment.
+   */
+  @Override
+  public List<UUID> enrollUnseenGrants() {
+    return jdbc.sql(
+            """
+            INSERT INTO enrollment (user_id, course_id, source, status, enrolled_at, status_at)
+            SELECT user_id, course_id, source, 'ACTIVE', granted_at, granted_at
+            FROM entitlement WHERE revoked_at IS NULL
+            ON CONFLICT (user_id, course_id) DO UPDATE
+               SET status = 'ACTIVE', source = EXCLUDED.source,
+                   status_at = EXCLUDED.status_at,
+                   enrolled_at = CASE WHEN enrollment.source IS NULL THEN EXCLUDED.enrolled_at
+                                      ELSE LEAST(enrollment.enrolled_at, EXCLUDED.enrolled_at) END
+             WHERE enrollment.status = 'REVOKED'
+               AND enrollment.status_at < EXCLUDED.status_at
+            RETURNING course_id
+            """)
+        .query(UUID.class)
+        .list();
+  }
+
+  /** {@link #revoke}'s first statement for the whole table; a missing row needs no tombstone. */
+  @Override
+  public List<UUID> revokeUnseenRevokes() {
+    return jdbc.sql(
+            """
+            UPDATE enrollment en SET status = 'REVOKED', status_at = e.revoked_at
+            FROM entitlement e
+            WHERE e.user_id = en.user_id AND e.course_id = en.course_id
+              AND e.revoked_at IS NOT NULL
+              AND en.status = 'ACTIVE' AND en.status_at < e.revoked_at
+            RETURNING en.course_id
+            """)
+        .query(UUID.class)
+        .list();
   }
 
   static Enrollment map(ResultSet rs) throws SQLException {

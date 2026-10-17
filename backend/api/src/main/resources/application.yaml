@@ -88,6 +88,7 @@ masternova: # → MasternovaProperties (typed + validated at startup)
     segment-url-ttl: 30m
   enrollment: # → EnrollmentProperties (ADR-0022, docs/lld/progress.md)
     flush-every: 30s # the progress buffer → Postgres; the most a Redis loss costs
+    reconcile-every: 24h # the net under the listener: enrollment ← entitlement (EnrollmentReconcileJob)
     # signs progress beacons (≥ 32 bytes). Dev-only default; the stack mounts a file secret.
     beacon-secret: ${PROGRESS_BEACON_SECRET:dev-only-progress-beacon-secret-0123456789abcdef}
     beacon-ttl: 2m

@@ -32,9 +32,9 @@ import org.springframework.data.redis.core.script.RedisScript;
  *       user:lecture}, value {@code last|max|atMillis}. Atomic in Redis, so two replicas can't race
  *       the read-modify-write of {@code max}. No SQL.
  *   <li>{@link #flush}: {@code RENAME} {@value #DIRTY} → {@value #FLUSHING} (atomic: the next
- *       heartbeat starts a new hash), write the batch through the wrapped store, {@code DEL}. A
- *       {@value #FLUSHING} left by a crashed flush is written first — again, harmlessly: the merge
- *       is idempotent.
+ *       heartbeat starts a new hash), write the batch through the wrapped store, delete what was
+ *       written. A {@value #FLUSHING} left by a crashed flush is written first — again, harmlessly:
+ *       the merge is idempotent.
  *   <li>{@link #find}: the wrapped store's rows, merged with what is still in either hash, so a
  *       resume never goes back in time.
  *   <li>⭐ Fails open: Redis down → the heartbeat is written through (counted as {@code direct}),
@@ -88,6 +88,24 @@ public final class WriteBackProgressStore implements ProgressStore {
           """,
           Long.class);
 
+  /**
+   * ⭐ Deletes from the flushing hash only the entries this flush read AND wrote — still holding the
+   * same value. If a slow flush overlapped another (the lock expired), the other's new batch is
+   * left alone; when every entry is gone, Redis drops the key itself. ARGV: field, value, …
+   */
+  static final RedisScript<Long> RELEASE =
+      RedisScript.of(
+          """
+          local n = 0
+          for i = 1, #ARGV, 2 do
+            if redis.call('HGET', KEYS[1], ARGV[i]) == ARGV[i + 1] then
+              n = n + redis.call('HDEL', KEYS[1], ARGV[i])
+            end
+          end
+          return n
+          """,
+          Long.class);
+
   private static final Logger log = LoggerFactory.getLogger(WriteBackProgressStore.class);
 
   private final ProgressStore inner;
@@ -128,17 +146,21 @@ public final class WriteBackProgressStore implements ProgressStore {
     ProgressUpdate.mergeByRow(updates).forEach(this::record);
   }
 
-  /** The rows, then whatever newer the buffer holds (both hashes: a flush may be in progress). */
+  /**
+   * The buffer, then the rows. ⭐ Read in the order data MOVES — dirty → flushing → Postgres — so an
+   * update that moves on between two reads is caught by the next one: a swap after the dirty read
+   * lands in flushing, a flush that commits after the flushing read is in the rows.
+   */
   @Override
   public Map<UUID, ProgressUpdate> find(UUID userId, Collection<UUID> lectureIds) {
-    Map<UUID, ProgressUpdate> merged = new HashMap<>(inner.find(userId, lectureIds));
+    Map<UUID, ProgressUpdate> merged = new HashMap<>();
     if (lectureIds.isEmpty()) {
       return merged;
     }
     List<UUID> ids = List.copyOf(lectureIds);
     List<Object> fields = ids.stream().<Object>map(id -> field(userId, id)).toList();
     try {
-      for (String hash : List.of(FLUSHING, DIRTY)) {
+      for (String hash : List.of(DIRTY, FLUSHING)) {
         List<Object> values = redis.opsForHash().multiGet(hash, fields);
         for (int i = 0; i < ids.size(); i++) {
           parse(userId, ids.get(i), values.get(i))
@@ -148,6 +170,9 @@ public final class WriteBackProgressStore implements ProgressStore {
     } catch (DataAccessException e) { // the rows are at most one flush behind
       log.warn("progress buffer unavailable, reading rows only: {}", e.getMessage());
     }
+    inner
+        .find(userId, lectureIds)
+        .forEach((id, row) -> merged.merge(id, row, ProgressUpdate::merge));
     return merged;
   }
 
@@ -177,7 +202,13 @@ public final class WriteBackProgressStore implements ProgressStore {
     for (int from = 0; from < batch.size(); from += BATCH) {
       inner.recordAll(batch.subList(from, Math.min(from + BATCH, batch.size())));
     }
-    redis.delete(FLUSHING); // only after every chunk committed
+    List<Object> written = new ArrayList<>(entries.size() * 2); // only after every chunk committed
+    entries.forEach(
+        (field, value) -> {
+          written.add(String.valueOf(field));
+          written.add(String.valueOf(value));
+        });
+    redis.execute(RELEASE, List.of(FLUSHING), written.toArray());
     return batch.size();
   }
 

@@ -18,7 +18,10 @@ including one sent a second ago) and "My Learning" (percent complete, last lectu
    up, `last` is the newest by heartbeat time. No SQL on the heartbeat path.
 2. **A flush every 30 s** (`@Scheduled`, one replica via ShedLock) moves the batch to Postgres:
    `RENAME dirty → flushing` (atomic: new heartbeats start a new `dirty`), read it, write it in
-   one transaction (one batched upsert + the rollups), then `DEL flushing`.
+   one transaction (one batched upsert + the rollups), then release it. *(Amended 2026-10-17,
+   Phase 10 review: the release is a Lua script that `HDEL`s only the entries the flush read and
+   that still hold the value it read, not `DEL flushing`: a flush that outlived its ShedLock
+   could otherwise delete the next flush's batch unwritten.)*
 3. **The merge is the same in three places** (Java `ProgressUpdate.merge`, the Lua script, the
    SQL upsert) and is **commutative, associative and idempotent**. That is what makes the flush
    crash-safe without coordination: a flush that died after the `RENAME` leaves `flushing`

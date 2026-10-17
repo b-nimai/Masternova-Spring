@@ -170,6 +170,62 @@ class EnrollmentIT {
         .isEqualTo("ENTITLEMENT_REVOKED");
   }
 
+  @Test
+  void enrollingForFreeInACourseAlreadyBoughtAnswersTheEnrollment() {
+    enrollments.granted(learner, paid.courseId(), EntitlementSource.PURCHASE, Instant.now());
+
+    assertThat(enroll(paid.courseId())) // not 422 COURSE_NOT_FREE
+        .hasStatusOk()
+        .bodyJson()
+        .extractingPath("$.status")
+        .isEqualTo("ACTIVE");
+    assertThat(source(learner, paid.courseId())).isEqualTo("PURCHASE"); // and still bought
+  }
+
+  @Test
+  void aGrantAfterAnOlderRevokeTombstoneIsEnrolledAtTheGrant() {
+    Instant revokedAt = Instant.parse("2026-10-01T10:00:00Z");
+    Instant grantedAt = revokedAt.plus(Duration.ofDays(3));
+    enrollments.revoked(learner, paid.courseId(), revokedAt); // no row: a tombstone
+
+    assertThat(enrollments.granted(learner, paid.courseId(), EntitlementSource.PURCHASE, grantedAt))
+        .isTrue();
+
+    assertThat(enrolledAt(learner, paid.courseId())).isEqualTo(grantedAt); // not the revoke's
+  }
+
+  @Test
+  void theReconcileRepairsWhatNoListenerSawAndThenChangesNothing() {
+    UUID other = new TestInstructors(dataSource).create("Omar Other").id();
+    Instant t = Instant.now().minus(Duration.ofHours(1));
+    // a pre-Phase-10 pod: a grant with no event, and a revoke with no event
+    jdbc.sql(
+            "INSERT INTO entitlement (user_id, course_id, source, granted_at)"
+                + " VALUES (:u, :c, 'PURCHASE', :t)")
+        .param("u", learner)
+        .param("c", paid.courseId())
+        .param("t", java.sql.Timestamp.from(t))
+        .update();
+    enrollments.granted(other, paid.courseId(), EntitlementSource.PURCHASE, t);
+    jdbc.sql(
+            "INSERT INTO entitlement (user_id, course_id, source, granted_at, revoked_at,"
+                + " revoke_reason) VALUES (:u, :c, 'PURCHASE', :t, :r, 'refund')")
+        .param("u", other)
+        .param("c", paid.courseId())
+        .param("t", java.sql.Timestamp.from(t))
+        .param("r", java.sql.Timestamp.from(t.plusSeconds(60)))
+        .update();
+    assertThat(enrollmentCount(paid.courseId())).isEqualTo(1); // other's, about to end
+
+    assertThat(enrollments.reconcile()).isEqualTo(2);
+
+    assertThat(status(learner, paid.courseId())).isEqualTo("ACTIVE");
+    assertThat(status(other, paid.courseId())).isEqualTo("REVOKED");
+    assertThat(enrollmentCount(paid.courseId())).isEqualTo(1); // +1 −1
+    assertThat(enrollments.reconcile()).isZero(); // idempotent
+    assertThat(enrollmentCount(paid.courseId())).isEqualTo(1);
+  }
+
   // --- helpers ---
 
   private MockMvcTester.MockMvcRequestBuilder enroll(UUID courseId) {

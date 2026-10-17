@@ -35,7 +35,9 @@ class JdbcLectureProgressRepository implements LectureProgressRepository {
    *   <li>{@code max = GREATEST(old, new)} — monotonic;
    *   <li>{@code last} from whichever is newer by {@code (updated_at, last)} — a ROW comparison,
    *       the same tie-break as Java and Lua;
-   *   <li>{@code completed_at} = the old one if any, else this batch's (if it completes it).
+   *   <li>{@code completed_at} = the old one if any, else now if the MERGED max reaches 90 % of the
+   *       lecture's current duration — so a lecture watched before its length was known completes
+   *       at its next heartbeat, not only if one batch alone reaches the end.
    * </ul>
    */
   @Override
@@ -48,9 +50,15 @@ class JdbcLectureProgressRepository implements LectureProgressRepository {
             """
             INSERT INTO lecture_progress (user_id, lecture_id, course_id, last_position_seconds,
                                           max_position_seconds, updated_at, completed_at)
-            SELECT u, l, c, last, mx, at, CASE WHEN done THEN at END
-            FROM unnest(:users, :lectures, :courses, :lasts, :maxes, :ats, :done)
-                 AS b (u, l, c, last, mx, at, done)
+            SELECT b.u, b.l, b.c, b.last, b.mx, b.at,
+                   -- Completion.isComplete over the MERGED max and the lecture's current duration
+                   CASE WHEN b.dur > 0
+                         AND GREATEST(b.mx, COALESCE(lp.max_position_seconds, 0))::bigint * 10
+                             >= b.dur::bigint * 9
+                        THEN b.at END
+            FROM unnest(:users, :lectures, :courses, :lasts, :maxes, :ats, :durations)
+                 AS b (u, l, c, last, mx, at, dur)
+            LEFT JOIN lecture_progress lp ON lp.user_id = b.u AND lp.lecture_id = b.l
             ON CONFLICT (user_id, lecture_id) DO UPDATE SET
               max_position_seconds =
                 GREATEST(lecture_progress.max_position_seconds, EXCLUDED.max_position_seconds),
@@ -68,7 +76,7 @@ class JdbcLectureProgressRepository implements LectureProgressRepository {
         .param("lasts", array("int4", list, r -> r.update().lastPositionSeconds()))
         .param("maxes", array("int4", list, r -> r.update().maxPositionSeconds()))
         .param("ats", array("timestamptz", list, r -> Timestamp.from(r.update().at())))
-        .param("done", array("bool", list, TrackedProgress::isComplete))
+        .param("durations", array("int4", list, TrackedProgress::durationSeconds))
         .update();
   }
 

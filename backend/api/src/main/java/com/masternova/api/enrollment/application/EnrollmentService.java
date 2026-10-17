@@ -63,6 +63,21 @@ public class EnrollmentService {
   }
 
   /**
+   * Repairs what no listener saw (see {@link EnrollmentRepository#enrollUnseenGrants}): one
+   * transaction, the counter moved once per row that really changed.
+   *
+   * @return how many enrollments it changed — anything but 0 is worth a log line
+   */
+  @Transactional
+  public int reconcile() {
+    List<UUID> enrolled = enrollments.enrollUnseenGrants();
+    List<UUID> ended = enrollments.revokeUnseenRevokes();
+    enrolled.forEach(courseId -> catalog.adjustEnrollmentCount(courseId, +1));
+    ended.forEach(courseId -> catalog.adjustEnrollmentCount(courseId, -1));
+    return enrolled.size() + ended.size();
+  }
+
+  /**
    * Enrolls in a published, free course. ⭐ Grants {@code FREE_ENROLLMENT} AND enrolls in one
    * transaction, so the answer is already true when it returns; the listener's later copy of the
    * same grant is then a no-op. Idempotent: a second call (or a course already bought) changes
@@ -70,6 +85,16 @@ public class EnrollmentService {
    */
   @Transactional
   public Enrollment enrollFree(UUID userId, UUID courseId) {
+    // ⭐ a grant after a revoke restores access, so re-enrolling would undo a refund or an admin.
+    //    Asked FIRST: the enrollment may still be ACTIVE while the listener's revoke is on its way.
+    if (entitlements.isRevoked(userId, courseId)) {
+      throw new ForbiddenException(
+          "ENTITLEMENT_REVOKED", "Your access to this course was withdrawn.");
+    }
+    Optional<Enrollment> held = enrollments.find(userId, courseId).filter(Enrollment::isActive);
+    if (held.isPresent()) {
+      return held.get(); // ⭐ already enrolled (bought, or a retry): the answer is the same
+    }
     CourseOffer course =
         catalog.offers(List.of(courseId)).stream()
             .filter(o -> o.availability() == Availability.PUBLISHED) // drafts are invisible
@@ -78,11 +103,6 @@ public class EnrollmentService {
     if (!course.isFree()) {
       throw new RuleViolationException(
           "COURSE_NOT_FREE", "This course is for sale: buy it to enroll.");
-    }
-    // ⭐ a grant after a revoke restores access, so re-enrolling would undo a refund or an admin
-    if (entitlements.isRevoked(userId, courseId)) {
-      throw new ForbiddenException(
-          "ENTITLEMENT_REVOKED", "Your access to this course was withdrawn.");
     }
     entitlements.grant(userId, courseId, EntitlementSource.FREE_ENROLLMENT, Optional.empty());
     granted(userId, courseId, EntitlementSource.FREE_ENROLLMENT, clock.instant());

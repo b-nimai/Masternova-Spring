@@ -3,7 +3,7 @@
 > **One-liner:** wrap an object in another that has the **same interface**, holds the original,
 > and **adds behaviour** around its calls. Callers can't tell, and the wrapped object doesn't know.
 
-**Type:** Structural · **Status:** built (Phases 8.3, 10.3) · **Last updated:** 2026-10-16
+**Type:** Structural · **Status:** built (Phases 8.3, 10.3) · **Last updated:** 2026-10-17
 **Real code:** `com.masternova.api.entitlement.infrastructure.CachedEntitlementRepository`
 (Decorator) wrapping `JdbcEntitlementRepository` (ConcreteComponent), both implementing
 `entitlement.domain.EntitlementRepository` (Component), wired in `EntitlementConfig`
@@ -119,7 +119,7 @@ loss costs a learner a few seconds of bookmark. The same shape, a different beha
 |---|---|---|
 | Component | `ProgressStore` | `record` · `recordAll` · `find` |
 | ConcreteComponent | `ProgressWriter` | validated write-through: one catalog query, one enrollment query, one upsert, one rollup recount per batch, one transaction |
-| Decorator | `WriteBackProgressStore` | `record` = one Lua merge into a Redis hash, no SQL; `flush()` every 30 s = `RENAME dirty → flushing`, `recordAll` the batch, `DEL`; `find` merges the buffer into the rows |
+| Decorator | `WriteBackProgressStore` | `record` = one Lua merge into a Redis hash, no SQL; `flush()` every 30 s = `RENAME dirty → flushing`, `recordAll` the batch, release what was written (`HDEL` if unchanged); `find` merges the buffer into the rows |
 | Client | `ProgressService`, `LearningQueries` | inject `ProgressStore`, never know |
 
 ```java

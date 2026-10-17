@@ -7,7 +7,8 @@ import java.util.UUID;
 /**
  * One course's progress for its learner, read through the buffer (a second old at most).
  *
- * @param continueLectureId null when not enrolled, or every lecture is complete
+ * @param continueLectureId null when not enrolled, every lecture is complete, or there is nothing
+ *     to watch
  */
 public record CourseProgressResponse(
     UUID courseId,

@@ -16,24 +16,30 @@ class ResumeTest {
 
   @Test
   void nothingWatchedStartsAtTheFirstLecture() {
-    assertThat(Resume.lecture(COURSE, Optional.empty(), false)).contains(A);
+    assertThat(Resume.lecture(COURSE, Optional.empty(), false, false)).contains(A);
   }
 
   @Test
   void anUnfinishedLectureIsContinuedAFinishedOneMovesOn() {
-    assertThat(Resume.lecture(COURSE, Optional.of(B), false)).contains(B);
-    assertThat(Resume.lecture(COURSE, Optional.of(B), true)).contains(C);
+    assertThat(Resume.lecture(COURSE, Optional.of(B), false, false)).contains(B);
+    assertThat(Resume.lecture(COURSE, Optional.of(B), true, false)).contains(C);
   }
 
   @Test
-  void theLastLectureFinishedLeavesNothingToContinue() {
-    assertThat(Resume.lecture(COURSE, Optional.of(C), true)).isEmpty();
-    assertThat(Resume.lecture(List.of(), Optional.empty(), false)).isEmpty();
+  void aCompleteCourseLeavesNothingToContinue() {
+    assertThat(Resume.lecture(COURSE, Optional.of(C), true, true)).isEmpty();
+    assertThat(Resume.lecture(List.of(), Optional.empty(), false, false)).isEmpty();
+  }
+
+  @Test
+  void theLastLectureFinishedOfAnIncompleteCourseWrapsToTheFirst() {
+    // they skipped ahead: the end is done, the start isn't — Continue must not say "Review"
+    assertThat(Resume.lecture(COURSE, Optional.of(C), true, false)).contains(A);
   }
 
   @Test
   void aLectureNoLongerInTheCurriculumStartsOver() {
-    assertThat(Resume.lecture(COURSE, Optional.of(UUID.randomUUID()), true)).contains(A);
+    assertThat(Resume.lecture(COURSE, Optional.of(UUID.randomUUID()), true, false)).contains(A);
   }
 
   @Test

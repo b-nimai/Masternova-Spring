@@ -13,8 +13,4 @@ public record TrackedProgress(ProgressUpdate update, UUID courseId, int duration
     Objects.requireNonNull(update, "update");
     Objects.requireNonNull(courseId, "courseId");
   }
-
-  public boolean isComplete() {
-    return Completion.isComplete(update.maxPositionSeconds(), durationSeconds);
-  }
 }
