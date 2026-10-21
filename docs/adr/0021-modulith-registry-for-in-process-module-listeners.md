@@ -75,6 +75,11 @@ to the registry for the enrollment listener. Different tables, different jobs, a
   - A second table on the write path of every grant and revoke (one `INSERT`, one `DELETE`).
   - We depend on Modulith's table format for operations (reading `event_publication` in an
     incident). The schema is versioned by Modulith (`v2`), and the migration pins the one we run.
+  - *(Added 2026-10-17, found by the Phase 10 image build.)* Modulith's `databaseType` bean opens
+    a connection at startup to ask which database it is, and the image's AOT training run starts
+    with no database. `EventRegistryDatabaseConfig` replaces that bean definition with POSTGRES
+    (named by string: the type is package-private), so a Modulith upgrade that moves it fails
+    every start loudly.
 - **Revisit when:** a broker arrives (externalize the same events), or Modulith's resubmission
   gains coordination across instances (then drop ShedLock from the resubmitter).
 

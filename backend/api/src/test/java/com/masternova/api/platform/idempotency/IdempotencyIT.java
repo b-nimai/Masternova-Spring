@@ -34,7 +34,7 @@ class IdempotencyIT {
 
   /** A test-only endpoint: counts how often its body REALLY runs. */
   @RestController
-  static class EnrollmentController {
+  static class CountingController {
     final AtomicInteger executions = new AtomicInteger();
     final AtomicInteger failuresLeft = new AtomicInteger();
     final AtomicInteger delayMillis = new AtomicInteger(); // makes concurrent requests overlap
@@ -63,8 +63,8 @@ class IdempotencyIT {
   @TestConfiguration(proxyBeanMethods = false)
   static class Endpoints {
     @Bean
-    EnrollmentController enrollmentController() {
-      return new EnrollmentController();
+    CountingController countingController() {
+      return new CountingController();
     }
 
     /**
@@ -79,7 +79,7 @@ class IdempotencyIT {
   }
 
   @LocalServerPort int port;
-  @Autowired EnrollmentController controller;
+  @Autowired CountingController controller;
   private final HttpClient http = HttpClient.newHttpClient();
 
   @BeforeEach
