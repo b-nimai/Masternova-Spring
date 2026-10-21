@@ -140,7 +140,8 @@ sequenceDiagram
    SQL function `catalog_embedding_text`, which also builds the text sent to the model: one
    definition, hashed once per write of the row instead of once per sweep).
 2. Embed them in **one batch call**, outside any transaction (a model call is slow; holding a
-   connection across it starves the pool).
+   connection across it starves the pool). If the batch fails, each text is tried alone, so one
+   text the model always refuses can't block the courses after it, run after run.
 3. Upsert each `(course_id, model, content_hash, embedding)`. If the course was edited during the
    call, its hash no longer matches and the next run re-embeds it.
 4. Delete the embeddings of courses that are no longer published, so the HNSW index holds only
