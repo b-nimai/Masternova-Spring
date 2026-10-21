@@ -15,6 +15,9 @@ import java.util.function.Function;
  */
 record NewestFirstCursor(Instant at, UUID id) {
 
+  /** The controllers' {@code @Max}; checked again here, where {@code limit + 1} is computed. */
+  static final int MAX_LIMIT = 50;
+
   String encode() {
     return CursorTokens.encode(at.toString(), id.toString());
   }
@@ -46,6 +49,9 @@ record NewestFirstCursor(Instant at, UUID id) {
    */
   static <T> CursorPage<T> page(
       String token, int limit, Fetch<T> fetch, Function<T, Instant> at, Function<T, UUID> id) {
+    if (limit < 1 || limit > MAX_LIMIT) {
+      throw new IllegalArgumentException("a page holds 1.." + MAX_LIMIT + " rows: " + limit);
+    }
     NewestFirstCursor after = decode(token);
     List<T> rows =
         fetch.rows(after == null ? null : after.at(), after == null ? null : after.id(), limit + 1);

@@ -30,6 +30,16 @@ class HybridRankerTest {
   }
 
   @Test
+  void aLimitOutsideItsBoundsIsRefusedBeforeAnyArithmetic() {
+    CourseRanker words = ranker(SearchMode.KEYWORD, new ArrayList<>(), list(a));
+    HybridRanker hybrid = new HybridRanker(words, words);
+
+    assertThatThrownBy(() -> hybrid.rank("q", 0)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> hybrid.rank("q", Integer.MAX_VALUE)) // × 3 would overflow
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void aModelFailurePassesThroughForTheServiceToDegrade() {
     CourseRanker words = ranker(SearchMode.KEYWORD, new ArrayList<>(), list(a));
     CourseRanker broken =

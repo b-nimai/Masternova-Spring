@@ -36,6 +36,9 @@ public final class HybridRanker implements CourseRanker {
 
   @Override
   public List<RankedCourse> rank(String query, int limit) {
+    if (limit < 1 || limit > MAX_CANDIDATES) { // bounds the product below: no overflow
+      throw new IllegalArgumentException("limit must be 1.." + MAX_CANDIDATES + ": " + limit);
+    }
     int candidates = Math.min(limit * CANDIDATES_PER_RESULT, MAX_CANDIDATES);
     List<RankedCourse> byMeaning = semantic.rank(query, candidates); // first: it may throw
     List<RankedCourse> byWords = keyword.rank(query, candidates);

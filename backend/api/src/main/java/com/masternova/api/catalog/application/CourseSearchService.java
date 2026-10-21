@@ -51,7 +51,8 @@ public class CourseSearchService {
   }
 
   /**
-   * @param mode what was asked for; {@code ran} in the result is what actually ranked
+   * @param ran what actually ranked (keywords when the model was unavailable)
+   * @param degraded whether {@code ran} differs from the mode asked for
    * @param courses the cards, best first
    */
   public record SearchResult(SearchMode ran, boolean degraded, List<Course> courses) {}
