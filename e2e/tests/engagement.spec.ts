@@ -19,10 +19,12 @@ test.describe("engagement + search", () => {
     await expect(suggestion).toContainText("Kubernetes");
 
     // Enter with no option highlighted submits the text as typed (no Escape: on a type="search"
-    // input, Chromium's Escape CLEARS the text)
+    // input, Chromium's Escape CLEARS the text). A whole word: a prefix is the typeahead's job, and
+    // full-text search stems "kuberne" apart from "kubernetes" (CI has no model to match by meaning)
+    await box.fill("kubernetes");
     await box.press("Enter");
-    await expect(page).toHaveURL(/\/search\?q=kuberne/);
-    await expect(page.getByTestId("search-title")).toContainText("kuberne");
+    await expect(page).toHaveURL(/\/search\?q=kubernetes/);
+    await expect(page.getByTestId("search-title")).toContainText("kubernetes");
     await expect(page.getByTestId("results").locator("app-course-card").first()).toBeVisible();
   });
 
@@ -30,7 +32,8 @@ test.describe("engagement + search", () => {
     page,
   }) => {
     const email = uniqueEmail();
-    await signUp(page, email, "E2E Reviewer");
+    const name = `Reviewer ${email.slice(4, 17)}`; // unique: earlier runs reviewed the same course
+    await signUp(page, email, name);
     await page.goto("/login");
     await logIn(page, email);
     await expect(page.getByTestId("user-menu")).toBeVisible(); // logged in before navigating away
@@ -47,7 +50,7 @@ test.describe("engagement + search", () => {
     await page.getByTestId("save-review").click();
 
     await expect(
-      reviews.getByTestId("review-item").filter({ hasText: "E2E Reviewer" }),
+      reviews.getByTestId("review-item").filter({ hasText: name }),
     ).toContainText("Clear and practical.");
     await expect(page.getByTestId("save-review")).toHaveText(/Update review/);
   });
