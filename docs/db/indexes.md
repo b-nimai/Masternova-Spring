@@ -160,3 +160,26 @@ SQL, so here they ship.
 - **OFFSET page 250 stays at 15.7 ms** whatever you index: the reason for keyset.
 - **Expression index + no `ANALYZE` = a wrong plan** (1.38 vs 0.68 ms): V8 analyzes.
 - Rejected with numbers: the category index (never chosen), the non-partial composite (bigger).
+
+## 9. Phase 11 — search indexes (2026-10-21)
+
+Same dataset (`make seed COURSES=10000`, Postgres 17 + pgvector 0.8.1 in `pgvector/pgvector:pg17`),
+migrations V1–V26 applied, then V27 timed on the seeded table. Warm cache, `EXPLAIN ANALYZE`,
+the exact SQL of `KeywordRanker` and `CourseRepository.suggestTitles`.
+
+| What | With index | Forced sequential scan |
+|---|---|---|
+| V27: `ADD COLUMN search_vector … GENERATED … STORED` (rewrites `course`, `ACCESS EXCLUSIVE`) | 212 ms | — |
+| V27: `CREATE INDEX course_search_idx USING gin` | 13 ms | — |
+| keyword "redis interview" (459 matches, top 60) | 2.2 ms (bitmap on `course_search_idx`) | 4.3 ms |
+| keyword "machine learning" (464 matches) | 1.5 ms | 3.5 ms |
+| keyword "zebra" (no match) | **0.015 ms** | 1.8 ms |
+| typeahead "kubernets" (typo, top 8) | 2.0 ms (bitmap on V8's `course_title_trgm_idx`) | — |
+
+- The GIN index matters most where a B-tree can't help at all: **rare and absent words** (120×).
+  For common words most of the cost is `ts_rank_cd` over every match, which an index can't skip;
+  at this catalog size a sequential scan is only ~2× slower. The seed's descriptions are one
+  sentence long; real descriptions make the sequential scan (which must detoast and test every
+  vector) slower and the index's lead wider.
+- The rewrite lock (212 ms for 11 MB) is acceptable once. The rule for a large table stays: plain
+  column + trigger + batched backfill.

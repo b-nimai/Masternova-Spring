@@ -150,7 +150,7 @@ No event, no listener: the sweep **is** the mechanism, so a missed event, a mode
 new model name all heal the same way. The cost is ≤ 60 s of freshness, the force accepted in §2.
 
 **Typeahead** (`GET /search/suggestions?q=`): up to 8 published titles, ranked by trigram
-`word_similarity` with the title, using V8's `course_title_trgm_idx`. No model call (MEASURE-PENDING); it
+`word_similarity` with the title, using V8's `course_title_trgm_idx`. No model call (2.0 ms on 10,000 courses); it
 also forgives typos ("kubernets"). Angular sends it through `debounceTime(200)` →
 `distinctUntilChanged` → **`switchMap`**, which unsubscribes from (cancels) the previous request
 when a new keystroke arrives.
@@ -189,12 +189,14 @@ when a new keystroke arrives.
 
 - `course.search_vector` generated `STORED` + **GIN** index (partial on `status = 'PUBLISHED'`).
   The `ADD COLUMN … GENERATED … STORED` rewrites `course` under an `ACCESS EXCLUSIVE` lock:
-  MEASURE-PENDING on 10,000 seeded courses, acceptable once; on a large production table it would be an
+  212 ms on 10,000 seeded courses (11 MB), acceptable once; on a large production table it would be an
   expand in batches (a plain column + trigger + backfill) instead.
 - `course_embedding` (PK `course_id` → `course ON DELETE CASCADE`) + **HNSW** index
   `vector_cosine_ops` (`m = 16, ef_construction = 64`, pgvector's defaults).
 
-Measured with `make seed COURSES=10000` (EXPLAIN ANALYZE, docs/db/indexes.md §5): MEASURE-PENDING.
+Measured with `make seed COURSES=10000` (EXPLAIN ANALYZE, [docs/db/indexes.md §9](../db/indexes.md#9-phase-11--search-indexes-2026-10-21)):
+keyword search 1.5–2.2 ms with the GIN index vs 3.5–4.3 ms by sequential scan for common words,
+and 0.015 ms vs 1.8 ms for a word nobody uses; HNSW-PENDING.
 
 ## 10. Tests that prove it
 

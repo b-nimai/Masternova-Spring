@@ -108,4 +108,31 @@ public interface CourseRepository
           """,
       nativeQuery = true)
   int updateRating(UUID id, int count, BigDecimal average);
+
+  /** Search results' cards: these courses with their category, in ONE statement (any order). */
+  @Query("select c from Course c join fetch c.category where c.id in :ids")
+  List<Course> findWithCategoryByIdIn(Collection<UUID> ids);
+
+  /** A typeahead suggestion: what the box shows and where it links. */
+  interface TitleSuggestion {
+    String getSlug();
+
+    String getTitle();
+  }
+
+  /**
+   * ⭐ Typeahead by TRIGRAM word similarity: {@code :text <% title} is true when the text is similar
+   * to some word run of the title, so a prefix ("kube") and a typo ("kubernets") both match. It is
+   * an operator {@code course_title_trgm_idx} (V8, {@code gin_trgm_ops}) can answer.
+   */
+  @Query(
+      value =
+          """
+          SELECT slug, title FROM course
+          WHERE status = 'PUBLISHED' AND lower(:text) <% lower(title)
+          ORDER BY word_similarity(lower(:text), lower(title)) DESC, enrollment_count DESC, id
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<TitleSuggestion> suggestTitles(String text, int limit);
 }
