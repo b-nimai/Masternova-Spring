@@ -1,5 +1,8 @@
 package com.masternova.api.catalog.domain;
 
+import static org.awaitility.Awaitility.await;
+
+import java.time.Duration;
 import java.util.UUID;
 import javax.sql.DataSource;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -34,10 +37,29 @@ public final class TestInstructors {
     return new Instructor(id, name);
   }
 
+  /**
+   * ⭐ Module listeners (Phase 10's enrollment) run AFTER the test's commit, on their own threads.
+   * Deleting their publication rows doesn't stop one already running: a refund's two revocations
+   * were still updating {@code enrollment} while {@code DELETE FROM course} cascaded into the same
+   * rows in another order, and Postgres reported a deadlock. Wait until none is in flight
+   * (completion-mode: delete, so a row is work not yet done; a FAILED one won't be retried here).
+   */
+  private void awaitListeners() {
+    await()
+        .atMost(Duration.ofSeconds(10))
+        .until(
+            () ->
+                jdbc.sql("SELECT count(*) FROM event_publication WHERE status <> 'FAILED'")
+                    .query(Long.class)
+                    .single(),
+            n -> n == 0);
+  }
+
   /** For tests that commit (@SpringBootTest): courses first, because of the foreign key. */
   public void deleteAll() {
+    awaitListeners();
     jdbc.sql("DELETE FROM entitlement").update(); // Phase 8: rows reference courses and users
-    jdbc.sql("DELETE FROM event_publication").update(); // Phase 10: listeners still to run
+    jdbc.sql("DELETE FROM event_publication").update(); // Phase 10: the FAILED ones left
     jdbc.sql("DELETE FROM purchase_order").update(); // Phase 9: orders (and lines) cite courses
     jdbc.sql("DELETE FROM coupon").update(); // and coupons; a coupon may name a course
     jdbc.sql("DELETE FROM course").update();
