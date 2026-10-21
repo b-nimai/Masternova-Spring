@@ -183,3 +183,30 @@ the exact SQL of `KeywordRanker` and `CourseRepository.suggestTitles`.
   vector) slower and the index's lead wider.
 - The rewrite lock (212 ms for 11 MB) is acceptable once. The rule for a large table stays: plain
   column + trigger + batched backfill.
+
+**Semantic search (V28).** 9,039 published courses with random 768-dimension vectors (the timing
+of a k-NN query doesn't depend on what the vectors mean), the exact SQL of `SemanticRanker`:
+
+| What | Result |
+|---|---|
+| `CREATE INDEX … USING hnsw (embedding vector_cosine_ops)` on 9,039 vectors | 8.4 s (`m = 16`, `ef_construction = 64`) |
+| 100 nearest, HNSW, `ef_search = 100` (warm) | **2.6 ms** |
+| 100 nearest, exact (index scans off: sequential scan + top-N sort) | 43 ms |
+| the sweep's stale-course query when nothing is stale (md5 over every published course's text) | 24 ms per run (once a minute) |
+
+Three findings, each now in code and in a test:
+
+1. **`hnsw.ef_search` caps the rows an HNSW scan returns.** Asking for `LIMIT 60` returned
+   **40 rows**: pgvector's default `ef_search` is 40, and the hybrid ranker asks for up to 100
+   candidates. `SemanticRanker` sets `ef_search = max(limit, 40)` with `set_config(…, true)`
+   (transaction-local) before the query. `SemanticSearchIT.moreThanFortyNeighboursCanBeAskedFor`
+   fails without it, but only with sequential scans and sorts disabled for that IT: on a 55-row
+   test table the planner never picks the index.
+2. **Dead entries starve an HNSW scan.** HNSW keeps deleted (or updated: every re-embedding)
+   rows in its graph until `VACUUM`. With 55 deleted entries and 2 live rows, the search found
+   **0 of 2** (1 of 2 on a rerun), even with pgvector 0.8's `hnsw.iterative_scan`, and 2 of 2
+   after `VACUUM`. So V28 vacuums the table at 2 % dead + 50 rows instead of 20 %, and the
+   ranker still turns on `iterative_scan = relaxed_order`, which helps with rows the join filters
+   out (unpublished since the last sweep).
+3. The distance cut-off sits in an **outer** query around `ORDER BY embedding <=> :q LIMIT n`:
+   inside, it would no longer be the index's ordering and the plan falls back to the exact scan.

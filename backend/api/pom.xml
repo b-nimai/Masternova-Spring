@@ -107,6 +107,12 @@
 		</dependency>
 		<!-- one replica runs the progress flush and the publication resubmitter (Phase 10) -->
 		<dependency>
+			<!-- semantic search's embeddings (ADR-0024): OllamaEmbeddingModel behind Spring AI's
+			     EmbeddingModel, built in CatalogSearchConfig; no starter (it adds chat clients) -->
+			<groupId>org.springframework.ai</groupId>
+			<artifactId>spring-ai-ollama</artifactId>
+		</dependency>
+		<dependency>
 			<groupId>net.javacrumbs.shedlock</groupId>
 			<artifactId>shedlock-spring</artifactId>
 		</dependency>

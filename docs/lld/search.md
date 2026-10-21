@@ -54,8 +54,7 @@ classDiagram
     class SearchController { GET /search/courses · GET /search/suggestions }
   }
   namespace application {
-    class CourseSearchService { +search(q, mode, limit) +suggest(q) }
-    class CourseEmbeddingIndexer { +indexBatch() }
+    class CourseSearchService { +search(q, mode, limit) +suggest(q) «Context» }
   }
   namespace domain {
     class CourseRanker { <<interface, Strategy>> +rank(query, limit) }
@@ -68,7 +67,8 @@ classDiagram
     class SemanticRanker { <<ConcreteStrategy>> embedding <=> query }
     class QueryEmbedder { timeout + breaker over EmbeddingModel }
     class CourseEmbeddingJob { @Scheduled + ShedLock }
-    class JdbcCourseEmbeddings
+    class CourseEmbeddingIndexer { +indexBatch() SQL + one model call }
+    class SearchConfig { wires all of it, only if enabled }
   }
   CourseSearchService --> CourseRanker : by mode
   HybridRanker ..|> CourseRanker
@@ -80,8 +80,7 @@ classDiagram
   SemanticRanker --> QueryEmbedder
   QueryEmbedder --> EmbeddingModel : Spring AI (Ollama)
   CourseEmbeddingJob --> CourseEmbeddingIndexer
-  CourseEmbeddingIndexer --> JdbcCourseEmbeddings : stale → embed → upsert
-  CourseEmbeddingIndexer --> EmbeddingModel
+  CourseEmbeddingIndexer --> EmbeddingModel : stale → embed (one batch) → upsert
   CourseSearchService --> CourseRepository : summaries, in rank order
 ```
 
@@ -185,29 +184,42 @@ when a new keystroke arrives.
 
 ## 9. Data & indexes
 
-`V26__catalog_search.sql`:
+`V27__catalog_search.sql` and `V28__catalog_embedding.sql`:
 
 - `course.search_vector` generated `STORED` + **GIN** index (partial on `status = 'PUBLISHED'`).
   The `ADD COLUMN … GENERATED … STORED` rewrites `course` under an `ACCESS EXCLUSIVE` lock:
   212 ms on 10,000 seeded courses (11 MB), acceptable once; on a large production table it would be an
   expand in batches (a plain column + trigger + backfill) instead.
 - `course_embedding` (PK `course_id` → `course ON DELETE CASCADE`) + **HNSW** index
-  `vector_cosine_ops` (`m = 16, ef_construction = 64`, pgvector's defaults).
+  `vector_cosine_ops` (`m = 16, ef_construction = 64`, pgvector's defaults), autovacuumed at 2 %
+  dead rows (HNSW keeps dead entries in its graph until vacuum).
+
+**Transactions:** none around a search. The semantic ranker waits up to 2 s on the model, so each
+ranker's query (the semantic one with its two transaction-local settings) and the card load are
+short statements of their own; no pooled connection waits on the model. The sweep calls the model
+outside any transaction and upserts in one short one.
 
 Measured with `make seed COURSES=10000` (EXPLAIN ANALYZE, [docs/db/indexes.md §9](../db/indexes.md#9-phase-11--search-indexes-2026-10-21)):
 keyword search 1.5–2.2 ms with the GIN index vs 3.5–4.3 ms by sequential scan for common words,
-and 0.015 ms vs 1.8 ms for a word nobody uses; HNSW-PENDING.
+and 0.015 ms vs 1.8 ms for a word nobody uses; the 100 nearest of 9,039 vectors in 2.6 ms with
+HNSW vs 43 ms exact. Two HNSW traps found there and fixed: `hnsw.ef_search` (default 40) caps
+the rows a scan returns, so the ranker raises it per query; dead graph entries hide live rows
+until `VACUUM`, so V28 vacuums the table early and the ranker turns on `hnsw.iterative_scan`.
 
 ## 10. Tests that prove it
 
 - `RankFusionTest`: RRF laws (both lists → higher, order kept on ties, k matters, empty inputs).
 - `HybridRankerTest`: fuses; semantic unavailable → the keyword list and `degraded`.
 - `QueryEmbedderTest`: a failure opens the breaker; within 30 s no model call; after, one try.
-- `CourseSearchIT`: stemming ("deploying" finds "Deploy"), title outranks description, Hindi with
-  `simple`, drafts never found, suggestions forgive a typo; semantic and hybrid with a
-  deterministic hashing `EmbeddingModel`; an `EmbeddingModel` that throws → 200 `degraded`.
-- `CourseEmbeddingIndexerIT`: missing, stale (edited), wrong-model → re-embedded; unpublished →
-  deleted; a failed batch leaves nothing half-written.
+- `KeywordSearchIT`: stemming ("deploying" finds "Deploy"), title outranks description, Hindi
+  with `simple`, drafts never found, an edit searchable at once, stop words and broken syntax,
+  suggestions forgive a prefix and a typo; semantic asked with no model configured → `degraded`.
+- `SemanticSearchIT`: semantic and hybrid with a deterministic hashing `EmbeddingModel`; a model
+  that throws → keywords, `degraded`.
+- `RankingTest` (pattern lab): the same Strategy without Spring.
+- `SemanticSearchIT` (the sweep): missing, stale (edited), wrong-model → re-embedded;
+  unpublished → deleted; a failed batch leaves nothing written and the next run retries; more than
+  40 neighbours (the `ef_search` cap, mutation-checked).
 
 ## 11. Interview notes — 60-second recall
 

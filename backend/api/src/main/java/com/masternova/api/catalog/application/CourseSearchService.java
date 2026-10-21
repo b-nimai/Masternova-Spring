@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Course search (search LLD §4–§5). ⭐ The CONTEXT of the rankers' Strategy: it picks the ranker for
@@ -57,7 +56,11 @@ public class CourseSearchService {
    */
   public record SearchResult(SearchMode ran, boolean degraded, List<Course> courses) {}
 
-  @Transactional(readOnly = true)
+  /**
+   * ⭐ NOT one transaction: the semantic ranker waits up to 2 s on the model, and a surrounding
+   * transaction would hold a pooled connection through that wait. Each ranker's query and the card
+   * load are short statements of their own.
+   */
   public SearchResult search(String query, SearchMode mode, int limit) {
     String text = query.strip();
     CourseRanker ranker = rankers.getOrDefault(mode, rankers.get(SearchMode.KEYWORD));
@@ -79,7 +82,6 @@ public class CourseSearchService {
   }
 
   /** Up to 8 published titles for the typeahead: no model call, one indexed query. */
-  @Transactional(readOnly = true)
   public List<TitleSuggestion> suggest(String query) {
     return courses.suggestTitles(query.strip(), SUGGESTIONS);
   }

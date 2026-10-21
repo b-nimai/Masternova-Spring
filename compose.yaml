@@ -26,6 +26,9 @@ x-app-env: &app-env
   # spans → Tempo (profile `observability`). Without it running the exporter only logs that it
   # couldn't send; the apps never wait on it (batched, in the background).
   MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_ENDPOINT: http://tempo:4318/v1/traces
+  # semantic search (ADR-0024): on, and failing open to keywords unless `make ai` runs Ollama
+  MASTERNOVA_SEARCH_EMBEDDING_ENABLED: 'true'
+  MASTERNOVA_SEARCH_EMBEDDING_BASE_URL: http://ollama:11434
 
 # Without rotation the json-file log of a chatty container grows until the disk is full.
 x-logging: &logging
@@ -139,6 +142,35 @@ services:
     ports:
       - '1026:1025' # SMTP
       - '8026:8025' # web UI
+
+  # ---- semantic search's embedding model (profile: ai; `make ai`) — ADR-0024 ----
+  # Opt-in: a 3 GB image and a 274 MB model nobody needs for keyword search. Without it the api
+  # answers semantic and hybrid searches from keywords (`degraded: true`).
+
+  ollama:
+    profiles: [ai]
+    image: ollama/ollama:0.40.6
+    ports:
+      - '127.0.0.1:11434:11434' # `make api` reaches it here; the api container by name
+    volumes:
+      - ollamamodels:/root/.ollama # pulled models survive a restart
+    healthcheck:
+      test: ['CMD', 'ollama', 'list']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  ollama-init: # pulls the embedding model once (a no-op when it's already in the volume)
+    profiles: [ai]
+    image: ollama/ollama:0.40.6
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ['ollama', 'pull', 'nomic-embed-text']
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: 'no'
 
   # ---- applications (profile: app) ----
 
@@ -375,6 +407,7 @@ volumes:
   promdata: # Prometheus' 30 days of samples (the SLO window), at most 2 GB
   tempodata: # Tempo's 48 h of traces
   lokidata: # Loki's 72 h of log lines
+  ollamamodels: # the embedding model (profile ai), 274 MB
 
 secrets:
   jwt_access_secret:

@@ -369,3 +369,22 @@ Implemented by `enrollment.web.EnrollmentController`, `ProgressController` and
 
 Implemented by `engagement.web.ReviewController`, `MyReviewController` and `QuestionController`.
 Design: [`docs/lld/engagement.md`](../lld/engagement.md), ADR-0023.
+
+## 17. Search
+
+| Endpoint | Auth | Answer |
+|---|---|---|
+| `GET /search/courses?q=&mode=&limit=` | public | 200 `{mode, degraded, items: CourseSummary[]}`, best first; `q` 1–200 chars, `mode` `KEYWORD` \| `SEMANTIC` \| `HYBRID` (default), `limit` 1–50 (default 20) |
+| `GET /search/suggestions?q=` | public | 200 `[{slug, title}]`, at most 8; `q` 2–100 chars |
+
+- **Ranked, not paged.** No cursor: relevance is computed per query. For deep browsing, use the
+  filtered catalog (§2).
+- **`mode` in the answer is what actually ran.** `degraded: true` means semantic ranking was asked
+  for but the embedding model was unavailable (or semantic search isn't enabled where you are),
+  so these are keyword results. A client can show "showing keyword matches" and must not treat
+  it as an error.
+- **Under `/search`, not `/courses/search`:** that would shadow a course whose slug is "search".
+- Published courses only, for everyone (drafts are never searchable, even by their owner).
+
+Implemented by `catalog.web.SearchController` → `CourseSearchService`. Design:
+[`docs/lld/search.md`](../lld/search.md), ADR-0024.

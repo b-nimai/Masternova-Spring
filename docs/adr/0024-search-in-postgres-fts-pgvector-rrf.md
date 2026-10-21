@@ -48,8 +48,12 @@ cluster: CNPG `17-standard`, extension created at init).
   `course` only when the text changes (the vector is generated, the embedding is a separate row).
 - Adding the generated column rewrites `course` once under an `ACCESS EXCLUSIVE` lock (measured in
   the search LLD §9). Acceptable at this size; a large table would get a trigger + batched backfill.
-- The api now depends on Spring AI 2.0 (and through it `spring-webflux`, `reactor-core` and
-  Jackson 2 for the Ollama client; servlet MVC stays the web stack because it is present).
+- The api now depends on Spring AI 2.0 (`spring-ai-ollama` and through it `spring-ai-model`,
+  `spring-webflux` and `reactor-core`; it uses Jackson 3 like the rest of the app). Servlet MVC
+  stays the web stack: Boot picks it when both are present.
+- Two pgvector behaviours shape the query (docs/db/indexes.md §9): `hnsw.ef_search` caps the rows
+  a scan returns (raised per query), and dead graph entries hide live rows until `VACUUM` (V28
+  vacuums the table early; `hnsw.iterative_scan` is on per query).
 - The cluster has no Ollama, so its search is keyword-only. Deploying a model there (D6 or later)
   is a chart change, not a code change.
 - A new embedding model re-embeds the catalog at 32 courses per minute (10,000 courses ≈ 5 h);
