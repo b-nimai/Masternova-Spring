@@ -1,0 +1,67 @@
+.lecture-qa {
+  margin-top: 24px;
+}
+
+.ask,
+.reply {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 48rem;
+}
+
+.questions {
+  list-style: none;
+  padding: 0;
+
+  > li {
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+}
+
+.question {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 0;
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+  }
+}
+
+.meta {
+  color: var(--mat-sys-on-surface-variant);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.instructor {
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+  border-radius: 4px;
+  padding: 0 6px;
+  margin-left: 4px;
+}
+
+.thread {
+  padding: 0 0 16px 16px;
+}
+
+.answer {
+  border-left: 2px solid var(--mat-sys-outline-variant);
+  padding-left: 12px;
+  margin-top: 12px;
+}
+
+.body {
+  white-space: pre-line;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}

@@ -1,0 +1,89 @@
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.average {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  .number {
+    font-size: 2.5rem;
+    font-weight: 600;
+  }
+}
+
+.stars {
+  color: var(--mat-sys-tertiary);
+}
+
+.bars {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  min-width: 220px;
+
+  li {
+    display: grid;
+    grid-template-columns: 2.5rem 1fr 3rem;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--mat-sys-surface-variant);
+    overflow: hidden;
+
+    span {
+      display: block;
+      height: 100%;
+      background: var(--mat-sys-tertiary);
+    }
+  }
+}
+
+.my-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+  max-width: 40rem;
+
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+
+  li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+  }
+
+  .who {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0;
+  }
+
+  .when {
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  .body {
+    white-space: pre-line;
+  }
+}

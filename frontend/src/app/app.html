@@ -5,6 +5,12 @@
     </button>
   }
   <a routerLink="/" class="brand">Masternova</a>
+  @if (!isHandset()) {
+    <!-- ⭐ deferred: the autocomplete, forms and form-field code (~134 kB) leave the first load -->
+    @defer (on idle) {
+      <app-search-box class="search" />
+    }
+  }
   <span class="spacer"></span>
   <a
     mat-icon-button
@@ -39,6 +45,11 @@
     [opened]="sidenavOpened()"
     (closedStart)="drawerOpen.set(false)"
   >
+    @if (isHandset()) {
+      @defer (on idle) {
+        <app-search-box class="drawer-search" (searched)="closeOnHandset()" />
+      }
+    }
     <mat-nav-list>
       @for (item of navItems(); track item.link) {
         <a

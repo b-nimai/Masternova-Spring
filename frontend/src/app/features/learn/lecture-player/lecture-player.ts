@@ -13,6 +13,7 @@ import {
   PlaybackFailure,
   PlaybackProgress,
 } from '../../../shared/hls-player/hls-player';
+import { LectureQa } from '../lecture-qa/lecture-qa';
 import { ProgressTracker } from '../progress-tracker';
 
 /** What the page shows — a discriminated union, switched on in the template. */
@@ -43,7 +44,14 @@ const FAILURES: Record<string, string> = {
  *    component. The resume point is a nicety: if it fails, the lecture starts at 0.
  */
 @Component({
-  imports: [HlsPlayer, MatButtonModule, MatIconModule, MatProgressSpinnerModule, RouterLink],
+  imports: [
+    HlsPlayer,
+    LectureQa,
+    MatButtonModule,
+    MatIconModule,
+    MatProgressSpinnerModule,
+    RouterLink,
+  ],
   providers: [ProgressTracker],
   selector: 'app-lecture-player',
   styleUrl: './lecture-player.scss',

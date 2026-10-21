@@ -16,6 +16,7 @@ import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
 import { AccessCta } from '../access-cta/access-cta';
 import { LEVEL_LABELS } from '../catalog-labels';
+import { CourseReviews } from '../course-reviews/course-reviews';
 import { Curriculum } from '../curriculum/curriculum';
 
 /**
@@ -33,6 +34,7 @@ import { Curriculum } from '../curriculum/curriculum';
  * ⭐ Phase 10: a THIRD resource, chained on the access: a signed-in viewer who may watch gets
  *    their progress (read through the buffer, so a lecture watched a second ago already counts):
  *    the call to action continues where they stopped, and the curriculum ticks what's done.
+ * ⭐ Phase 11: reviews below the curriculum, deferred too; enrolled learners get the form.
  */
 @Component({
   imports: [
@@ -45,6 +47,7 @@ import { Curriculum } from '../curriculum/curriculum';
     DurationPipe,
     Curriculum,
     AccessCta,
+    CourseReviews,
   ],
   selector: 'app-course-detail',
   styleUrl: './course-detail.scss',

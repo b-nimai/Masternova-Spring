@@ -30,4 +30,11 @@
       </section>
     }
   }
+
+  @if (s.kind === 'playing') {
+    <!-- Phase 11: the lecture's Q&A; deferred, the video comes first -->
+    @defer (on idle) {
+      <app-lecture-qa [lectureId]="lectureId()" />
+    }
+  }
 </article>

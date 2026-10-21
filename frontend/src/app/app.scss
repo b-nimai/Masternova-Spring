@@ -31,3 +31,14 @@
 .active {
   background: var(--mat-sys-secondary-container);
 }
+
+.search {
+  margin-left: 24px;
+  flex: 0 1 28rem;
+  font-size: 0.875rem;
+}
+
+.drawer-search {
+  display: block;
+  padding: 12px 16px 0;
+}

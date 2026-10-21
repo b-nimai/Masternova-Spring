@@ -18,6 +18,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/catalog/catalog').then((m) => m.Catalog),
   },
   {
+    path: 'search', // Phase 11: ranked search; ?q= and ?mode= bind to the page's inputs
+    loadComponent: () =>
+      import('./features/search/search-results/search-results').then((m) => m.SearchResults),
+  },
+  {
     path: 'courses/:slug', // :slug → the component's `slug` input (withComponentInputBinding)
     loadComponent: () =>
       import('./features/catalog/course-detail/course-detail').then((m) => m.CourseDetail),

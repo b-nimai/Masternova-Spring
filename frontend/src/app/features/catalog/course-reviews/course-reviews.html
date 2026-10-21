@@ -1,0 +1,118 @@
+<section class="course-reviews" data-testid="reviews">
+  <h2>Reviews</h2>
+
+  @if (summary.value(); as s) {
+    <div class="summary">
+      <div class="average">
+        <span class="number" data-testid="average">{{
+          s.count > 0 ? (s.average | number: '1.1-1') : '—'
+        }}</span>
+        <span class="stars" aria-hidden="true">
+          @for (n of stars; track n) {
+            <mat-icon inline>{{
+              s.average >= n - 0.25 ? 'star' : s.average >= n - 0.75 ? 'star_half' : 'star_border'
+            }}</mat-icon>
+          }
+        </span>
+        <span class="count">{{ s.count }} {{ s.count === 1 ? 'rating' : 'ratings' }}</span>
+      </div>
+      <ul class="bars" aria-label="Ratings by stars">
+        @for (row of distribution(); track row.star) {
+          <li>
+            <span>{{ row.star }}★</span>
+            <span class="bar"><span [style.width.%]="row.percent"></span></span>
+            <span class="percent">{{ row.percent }}%</span>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+
+  @if (canReview()) {
+    <form class="my-review" data-testid="my-review" (ngSubmit)="save()">
+      <h3>{{ mine.value() ? 'Your review' : 'Rate this course' }}</h3>
+      <div class="rating" role="radiogroup" aria-label="Your rating">
+        @for (n of stars; track n) {
+          <button
+            mat-icon-button
+            type="button"
+            role="radio"
+            [attr.aria-checked]="draftRating() === n"
+            [attr.aria-label]="n + (n === 1 ? ' star' : ' stars')"
+            [attr.data-testid]="'star-' + n"
+            (click)="draftRating.set(n)"
+          >
+            <mat-icon>{{ n <= draftRating() ? 'star' : 'star_border' }}</mat-icon>
+          </button>
+        }
+      </div>
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>What did you think? (optional)</mat-label>
+        <textarea
+          matInput
+          rows="3"
+          name="body"
+          data-testid="review-body"
+          [maxlength]="maxLength"
+          [ngModel]="draftBody()"
+          (ngModelChange)="draftBody.set($event)"
+        ></textarea>
+        <mat-hint align="end">{{ draftBody().length }} / {{ maxLength }}</mat-hint>
+      </mat-form-field>
+      @if (formError(); as error) {
+        <p class="form-error" data-testid="review-error">{{ error }}</p>
+      }
+      <div class="actions">
+        <button
+          mat-flat-button
+          type="submit"
+          data-testid="save-review"
+          [disabled]="draftRating() < 1 || saving()"
+        >
+          {{ mine.value() ? 'Update review' : 'Post review' }}
+        </button>
+        @if (mine.value()) {
+          <button mat-button type="button" [disabled]="saving()" (click)="remove()">Delete</button>
+        }
+      </div>
+    </form>
+  }
+
+  @if (reviews().length === 0) {
+    <p data-testid="no-reviews">No reviews yet.</p>
+  } @else {
+    <ol class="list">
+      @for (r of reviews(); track r.id) {
+        <li data-testid="review-item">
+          <p class="who">
+            <strong>{{ r.authorName }}</strong>
+            <span class="stars" [attr.aria-label]="r.rating + ' out of 5'">
+              @for (n of stars; track n) {
+                <mat-icon inline aria-hidden="true">{{
+                  n <= r.rating ? 'star' : 'star_border'
+                }}</mat-icon>
+              }
+            </span>
+            <span class="when"
+              >{{ r.createdAt | date: 'mediumDate' }}{{ r.edited ? ' · edited' : '' }}</span
+            >
+          </p>
+          @if (r.body) {
+            <p class="body">{{ r.body }}</p>
+          }
+        </li>
+      }
+    </ol>
+    @if (nextCursor()) {
+      <button
+        mat-button
+        type="button"
+        data-testid="more-reviews"
+        [disabled]="loadingMore()"
+        (click)="showMore()"
+      >
+        Show more reviews
+      </button>
+    }
+  }
+</section>

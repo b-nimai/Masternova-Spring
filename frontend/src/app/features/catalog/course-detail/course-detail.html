@@ -75,5 +75,17 @@
         <mat-spinner diameter="28" />
       }
     </section>
+
+    @if (c.status === 'PUBLISHED') {
+      <!-- Phase 11: deferred like the curriculum; the form only for an enrolled learner -->
+      @defer (on viewport) {
+        <app-course-reviews
+          [courseId]="c.id"
+          [canReview]="progress.hasValue() && progress.value().enrolled"
+        />
+      } @placeholder {
+        <p>Reviews</p>
+      }
+    }
   }
 </article>
