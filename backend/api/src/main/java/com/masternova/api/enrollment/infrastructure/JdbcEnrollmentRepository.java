@@ -31,6 +31,22 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
       last_lecture_id, last_activity_at
       """;
 
+  /**
+   * ⭐ The ordering rule of every enroll, written once: insert, or revive a REVOKED row whose status
+   * is OLDER than this grant. An ACTIVE row, or a newer revoke, matches nothing.
+   */
+  private static final String REVIVE_ON_CONFLICT =
+      """
+      ON CONFLICT (user_id, course_id) DO UPDATE
+         SET status = 'ACTIVE', source = EXCLUDED.source,
+             status_at = EXCLUDED.status_at,
+             -- a tombstone (no source) was never enrolled: its time is a revoke's
+             enrolled_at = CASE WHEN enrollment.source IS NULL THEN EXCLUDED.enrolled_at
+                                ELSE LEAST(enrollment.enrolled_at, EXCLUDED.enrolled_at) END
+       WHERE enrollment.status = 'REVOKED'
+         AND enrollment.status_at < EXCLUDED.status_at
+      """;
+
   private final JdbcClient jdbc;
 
   JdbcEnrollmentRepository(JdbcClient jdbc) {
@@ -74,15 +90,8 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
                 """
                 INSERT INTO enrollment (user_id, course_id, source, status, enrolled_at, status_at)
                 VALUES (:user, :course, :source, 'ACTIVE', :at, :at)
-                ON CONFLICT (user_id, course_id) DO UPDATE
-                   SET status = 'ACTIVE', source = EXCLUDED.source,
-                       status_at = EXCLUDED.status_at,
-                       -- a tombstone (no source) was never enrolled: its time is a revoke's
-                       enrolled_at = CASE WHEN enrollment.source IS NULL THEN EXCLUDED.enrolled_at
-                                          ELSE LEAST(enrollment.enrolled_at, EXCLUDED.enrolled_at) END
-                 WHERE enrollment.status = 'REVOKED'
-                   AND enrollment.status_at < EXCLUDED.status_at
-                """)
+                """
+                    + REVIVE_ON_CONFLICT)
             .param("user", userId)
             .param("course", courseId)
             .param("source", source.name())
@@ -139,9 +148,8 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
                   ON p.user_id = e.user_id AND p.course_id = e.course_id
                 WHERE e.status = 'ACTIVE'
                 """)
-            .param("users", SqlArrays.of("uuid", list.stream().map(UserCourse::userId).toArray()))
-            .param(
-                "courses", SqlArrays.of("uuid", list.stream().map(UserCourse::courseId).toArray()))
+            .param("users", SqlArrays.of("uuid", list, UserCourse::userId))
+            .param("courses", SqlArrays.of("uuid", list, UserCourse::courseId))
             .query(
                 (rs, n) ->
                     new UserCourse(
@@ -175,14 +183,14 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
                   GROUP BY p.user_id, p.course_id) s
             WHERE e.user_id = s.user_id AND e.course_id = s.course_id
             """)
-        .param("users", SqlArrays.of("uuid", list.stream().map(UserCourse::userId).toArray()))
-        .param("courses", SqlArrays.of("uuid", list.stream().map(UserCourse::courseId).toArray()))
+        .param("users", SqlArrays.of("uuid", list, UserCourse::userId))
+        .param("courses", SqlArrays.of("uuid", list, UserCourse::courseId))
         .update();
   }
 
   /**
-   * ⭐ {@link #enroll} for the whole entitlement table in one statement: the same upsert and the
-   * same {@code WHERE}, so it races the listener safely — whichever writes first wins, the other
+   * ⭐ {@link #enroll} for the whole entitlement table in one statement: the same {@link
+   * #REVIVE_ON_CONFLICT}, so it races the listener safely — whichever writes first wins, the other
    * matches nothing, and {@code RETURNING} lists only the rows this statement changed. Reads
    * entitlement's table directly, like V23's backfill (ADR-0021): read-only, and the only
    * cross-module SQL in enrollment.
@@ -194,15 +202,9 @@ class JdbcEnrollmentRepository implements EnrollmentRepository {
             INSERT INTO enrollment (user_id, course_id, source, status, enrolled_at, status_at)
             SELECT user_id, course_id, source, 'ACTIVE', granted_at, granted_at
             FROM entitlement WHERE revoked_at IS NULL
-            ON CONFLICT (user_id, course_id) DO UPDATE
-               SET status = 'ACTIVE', source = EXCLUDED.source,
-                   status_at = EXCLUDED.status_at,
-                   enrolled_at = CASE WHEN enrollment.source IS NULL THEN EXCLUDED.enrolled_at
-                                      ELSE LEAST(enrollment.enrolled_at, EXCLUDED.enrolled_at) END
-             WHERE enrollment.status = 'REVOKED'
-               AND enrollment.status_at < EXCLUDED.status_at
-            RETURNING course_id
-            """)
+            """
+                + REVIVE_ON_CONFLICT
+                + " RETURNING course_id")
         .query(UUID.class)
         .list();
   }

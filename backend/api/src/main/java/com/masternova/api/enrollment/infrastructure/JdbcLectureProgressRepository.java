@@ -1,5 +1,6 @@
 package com.masternova.api.enrollment.infrastructure;
 
+import com.masternova.api.enrollment.domain.Completion;
 import com.masternova.api.enrollment.domain.LectureProgressRepository;
 import com.masternova.api.enrollment.domain.ProgressUpdate;
 import com.masternova.api.enrollment.domain.TrackedProgress;
@@ -10,7 +11,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.springframework.jdbc.core.SqlTypeValue;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -53,8 +53,8 @@ class JdbcLectureProgressRepository implements LectureProgressRepository {
             SELECT b.u, b.l, b.c, b.last, b.mx, b.at,
                    -- Completion.isComplete over the MERGED max and the lecture's current duration
                    CASE WHEN b.dur > 0
-                         AND GREATEST(b.mx, COALESCE(lp.max_position_seconds, 0))::bigint * 10
-                             >= b.dur::bigint * 9
+                         AND GREATEST(b.mx, COALESCE(lp.max_position_seconds, 0))::bigint * 100
+                             >= b.dur::bigint * :percent
                         THEN b.at END
             FROM unnest(:users, :lectures, :courses, :lasts, :maxes, :ats, :durations)
                  AS b (u, l, c, last, mx, at, dur)
@@ -70,13 +70,14 @@ class JdbcLectureProgressRepository implements LectureProgressRepository {
               updated_at = GREATEST(lecture_progress.updated_at, EXCLUDED.updated_at),
               completed_at = COALESCE(lecture_progress.completed_at, EXCLUDED.completed_at)
             """)
-        .param("users", array("uuid", list, r -> r.update().userId()))
-        .param("lectures", array("uuid", list, r -> r.update().lectureId()))
-        .param("courses", array("uuid", list, TrackedProgress::courseId))
-        .param("lasts", array("int4", list, r -> r.update().lastPositionSeconds()))
-        .param("maxes", array("int4", list, r -> r.update().maxPositionSeconds()))
-        .param("ats", array("timestamptz", list, r -> Timestamp.from(r.update().at())))
-        .param("durations", array("int4", list, TrackedProgress::durationSeconds))
+        .param("users", SqlArrays.of("uuid", list, r -> r.update().userId()))
+        .param("lectures", SqlArrays.of("uuid", list, r -> r.update().lectureId()))
+        .param("courses", SqlArrays.of("uuid", list, TrackedProgress::courseId))
+        .param("lasts", SqlArrays.of("int4", list, r -> r.update().lastPositionSeconds()))
+        .param("maxes", SqlArrays.of("int4", list, r -> r.update().maxPositionSeconds()))
+        .param("ats", SqlArrays.of("timestamptz", list, r -> Timestamp.from(r.update().at())))
+        .param("percent", Completion.COMPLETE_PERCENT)
+        .param("durations", SqlArrays.of("int4", list, TrackedProgress::durationSeconds))
         .update();
   }
 
@@ -104,9 +105,5 @@ class JdbcLectureProgressRepository implements LectureProgressRepository {
         .list()
         .stream()
         .collect(Collectors.toUnmodifiableMap(ProgressUpdate::lectureId, Function.identity()));
-  }
-
-  private static <T> SqlTypeValue array(String type, List<T> rows, Function<T, Object> value) {
-    return SqlArrays.of(type, rows.stream().map(value).toArray());
   }
 }

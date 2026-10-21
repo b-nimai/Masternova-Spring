@@ -8,10 +8,10 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Enrollment and progress tuning, bound from {@code masternova.enrollment.*} (ADR-0022).
+ * Enrollment and progress tuning, bound from {@code masternova.enrollment.*} (ADR-0022). The
+ * schedules ({@code flush-every}, {@code reconcile-every}) are read by their jobs'
+ * {@code @Scheduled} placeholders, not here.
  *
- * @param flushEvery how often the buffer is written to Postgres — the most progress a Redis loss
- *     costs
  * @param beaconSecret signs beacon tokens (HMAC-SHA256, ≥ 32 bytes; a file secret in the container
  *     stack). Its own key: one leaked key opens one door.
  * @param beaconTtl how long a beacon token works. Every heartbeat (15 s) renews it, so it only has
@@ -20,6 +20,4 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties(prefix = "masternova.enrollment")
 public record EnrollmentProperties(
-    @DefaultValue("30s") @NotNull Duration flushEvery,
-    @NotBlank String beaconSecret,
-    @DefaultValue("2m") @NotNull Duration beaconTtl) {}
+    @NotBlank String beaconSecret, @DefaultValue("2m") @NotNull Duration beaconTtl) {}

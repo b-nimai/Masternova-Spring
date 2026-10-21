@@ -2,6 +2,8 @@ package com.masternova.api.enrollment.infrastructure;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.List;
+import java.util.function.Function;
 import org.springframework.jdbc.core.SqlTypeValue;
 import org.springframework.jdbc.core.support.AbstractSqlTypeValue;
 
@@ -18,6 +20,10 @@ final class SqlArrays {
    * @param type the element type as Postgres names it: {@code uuid}, {@code int4}, {@code bool},
    *     {@code timestamptz}
    */
+  static <T> SqlTypeValue of(String type, List<T> rows, Function<T, Object> value) {
+    return of(type, rows.stream().map(value).toArray());
+  }
+
   static SqlTypeValue of(String type, Object[] values) {
     return new AbstractSqlTypeValue() {
       @Override

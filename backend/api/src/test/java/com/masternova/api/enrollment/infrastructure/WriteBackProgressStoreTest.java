@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -72,8 +73,10 @@ class WriteBackProgressStoreTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
   void redisDownAResumeReadsTheRows() {
-    when(redis.opsForHash()).thenThrow(new RedisConnectionFailureException("down"));
+    when(redis.executePipelined(any(RedisCallback.class)))
+        .thenThrow(new RedisConnectionFailureException("down"));
     ProgressUpdate row = ProgressUpdate.heartbeat(USER, LECTURE, 300, T0);
     inner.rows.put(LECTURE, row);
 
@@ -83,8 +86,8 @@ class WriteBackProgressStoreTest {
   @Test
   void theBufferFormatRoundTripsAndJunkIsDropped() {
     ProgressUpdate u = new ProgressUpdate(USER, LECTURE, 30, 600, T0);
-    assertThat(WriteBackProgressStore.value(u)).isEqualTo("30|600|" + T0.toEpochMilli());
-    assertThat(WriteBackProgressStore.parse(USER, LECTURE, WriteBackProgressStore.value(u)))
+    // the format the Lua MERGE writes: last|max|atMillis
+    assertThat(WriteBackProgressStore.parse(USER, LECTURE, "30|600|" + T0.toEpochMilli()))
         .contains(u);
 
     assertThat(WriteBackProgressStore.parse(USER, LECTURE, "30|600")).isEmpty();

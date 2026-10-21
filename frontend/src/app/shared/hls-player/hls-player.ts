@@ -22,15 +22,15 @@ export interface PlaybackFailure {
   status?: number;
 }
 
+const PROGRESS_EVENTS = ['play', 'pause', 'seeked', 'ended', 'timeupdate'] as const;
+
 /** Where the viewer is, each time the video element says so (Phase 10: progress heartbeats). */
 export interface PlaybackProgress {
   /** Seconds into the video. */
   position: number;
   playing: boolean;
-  event: 'play' | 'pause' | 'seeked' | 'ended' | 'timeupdate';
+  event: (typeof PROGRESS_EVENTS)[number];
 }
-
-const PROGRESS_EVENTS = ['play', 'pause', 'seeked', 'ended', 'timeupdate'] as const;
 
 /**
  * Plays an HLS master playlist (ADR-0013): hls.js wherever Media Source Extensions exist, the
@@ -55,7 +55,7 @@ export class HlsPlayer {
   readonly startAt = input(0);
   /** A fatal playback error: the parent may re-issue a ticket and resume at `position`. */
   readonly failed = output<PlaybackFailure>();
-  /** Play, pause, seek, end, and ~4 times a second while playing (`timeupdate`). */
+  /** Play, pause, seek, end, and once per whole second while playing (`timeupdate`). */
   readonly playbackProgress = output<PlaybackProgress>();
 
   private readonly video = viewChild.required<ElementRef<HTMLVideoElement>>('video');
@@ -69,14 +69,15 @@ export class HlsPlayer {
       video.addEventListener('error', () => {
         if (!this.hls) this.fail('MEDIA_ERROR');
       });
+      let second = -1;
       for (const event of PROGRESS_EVENTS) {
-        video.addEventListener(event, () =>
-          this.playbackProgress.emit({
-            position: video.currentTime || 0,
-            playing: !video.paused && !video.ended,
-            event,
-          }),
-        );
+        video.addEventListener(event, () => {
+          const position = video.currentTime || 0;
+          // ⭐ `timeupdate` fires ~4×/s and every output is a change detection: say whole seconds
+          if (event === 'timeupdate' && Math.floor(position) === second) return;
+          second = Math.floor(position);
+          this.playbackProgress.emit({ position, playing: !video.paused && !video.ended, event });
+        });
       }
     });
     afterRenderEffect(() => {

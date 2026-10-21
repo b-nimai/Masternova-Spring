@@ -6,6 +6,9 @@ package com.masternova.api.enrollment.domain;
  */
 public final class Completion {
 
+  /** The share of a known duration that completes a lecture; the flush's SQL binds it too. */
+  public static final int COMPLETE_PERCENT = 90;
+
   private Completion() {}
 
   /**
@@ -17,12 +20,13 @@ public final class Completion {
   }
 
   /**
-   * ⭐ 90 % of a KNOWN duration, in integers ({@code max × 10 ≥ duration × 9}: no floating point).
-   * The credits at the end don't have to be watched. A lecture with no known length can't be
-   * completed by watching.
+   * ⭐ {@value #COMPLETE_PERCENT} % of a KNOWN duration, in integers ({@code max × 100 ≥ duration ×
+   * 90}: no floating point). The credits at the end don't have to be watched. A lecture with no
+   * known length can't be completed by watching.
    */
   public static boolean isComplete(int maxPositionSeconds, int durationSeconds) {
-    return durationSeconds > 0 && maxPositionSeconds * 10L >= durationSeconds * 9L;
+    return durationSeconds > 0
+        && maxPositionSeconds * 100L >= durationSeconds * (long) COMPLETE_PERCENT;
   }
 
   /** Completed / trackable, rounded down, 0–100 (the curriculum may have shrunk since). */

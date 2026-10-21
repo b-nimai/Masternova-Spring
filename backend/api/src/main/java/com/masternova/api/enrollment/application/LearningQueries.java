@@ -97,8 +97,8 @@ public class LearningQueries {
       return new CourseProgress(courseId, false, 0, Set.of(), Optional.empty(), 0);
     }
     List<LectureOutline> trackable = trackable(outline);
-    Map<UUID, ProgressUpdate> rows =
-        progress.find(userId, trackable.stream().map(LectureOutline::lectureId).toList());
+    Map<UUID, LectureOutline> byId = byId(trackable);
+    Map<UUID, ProgressUpdate> rows = progress.find(userId, byId.keySet());
     Set<UUID> completed =
         trackable.stream()
             .filter(l -> isComplete(rows.get(l.lectureId()), l))
@@ -110,14 +110,8 @@ public class LearningQueries {
             .map(ProgressUpdate::lectureId);
     Optional<UUID> next =
         Resume.lecture(
-            ids(trackable),
-            last,
-            last.filter(completed::contains).isPresent(),
-            !trackable.isEmpty() && completed.size() == trackable.size());
-    int position =
-        next.flatMap(id -> trackable.stream().filter(l -> l.lectureId().equals(id)).findFirst())
-            .map(l -> resumeAt(rows.get(l.lectureId()), l))
-            .orElse(0);
+            ids(trackable), last, last.filter(completed::contains).isPresent(), completed.size());
+    int position = next.map(id -> resumeAt(rows.get(id), byId.get(id))).orElse(0);
     return new CourseProgress(
         courseId,
         true,
@@ -137,16 +131,20 @@ public class LearningQueries {
     return row == null
         ? new LectureResume(lectureId, 0, 0, false)
         : new LectureResume(
-            lectureId, resumeAt(row, lecture), row.maxPositionSeconds(), isComplete(row, lecture));
+            lectureId,
+            resumeAt(row, lecture),
+            row.maxPositionSeconds(),
+            Completion.isTrackable(lecture.video(), lecture.durationSeconds())
+                && isComplete(row, lecture));
   }
 
   private static LearningCourse card(
       Enrollment e, CourseOutline outline, Map<UUID, ProgressUpdate> last) {
     List<LectureOutline> trackable = trackable(outline);
+    Map<UUID, LectureOutline> byId = byId(trackable);
     boolean lastComplete =
         e.lastLectureId()
-            .flatMap(id -> trackable.stream().filter(l -> l.lectureId().equals(id)).findFirst())
-            .filter(l -> isComplete(last.get(l.lectureId()), l))
+            .filter(id -> byId.containsKey(id) && isComplete(last.get(id), byId.get(id)))
             .isPresent();
     // the rollup may count a lecture the curriculum has since dropped: clamp to what exists
     int completed = Math.min(e.completedLectures(), trackable.size());
@@ -157,11 +155,7 @@ public class LearningQueries {
         Completion.percent(completed, trackable.size()),
         e.enrolledAt(),
         e.lastActivityAt(),
-        Resume.lecture(
-            ids(trackable),
-            e.lastLectureId(),
-            lastComplete,
-            !trackable.isEmpty() && completed >= trackable.size()));
+        Resume.lecture(ids(trackable), e.lastLectureId(), lastComplete, completed));
   }
 
   private static List<LectureOutline> trackable(CourseOutline outline) {
@@ -174,9 +168,14 @@ public class LearningQueries {
     return lectures.stream().map(LectureOutline::lectureId).toList();
   }
 
+  private static Map<UUID, LectureOutline> byId(List<LectureOutline> lectures) {
+    return lectures.stream()
+        .collect(Collectors.toMap(LectureOutline::lectureId, Function.identity()));
+  }
+
+  /** For a trackable lecture: callers filter with {@link #trackable} first. */
   private static boolean isComplete(ProgressUpdate row, LectureOutline lecture) {
     return row != null
-        && Completion.isTrackable(lecture.video(), lecture.durationSeconds())
         && Completion.isComplete(row.maxPositionSeconds(), lecture.durationSeconds());
   }
 

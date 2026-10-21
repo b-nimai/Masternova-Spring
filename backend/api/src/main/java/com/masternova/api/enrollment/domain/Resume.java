@@ -22,11 +22,11 @@ public final class Resume {
    * course has nothing to watch, or every lecture is complete.
    *
    * @param trackable the course's trackable lectures, in curriculum order
-   * @param courseComplete every trackable lecture is complete
+   * @param completed how many of them are complete
    */
   public static Optional<UUID> lecture(
-      List<UUID> trackable, Optional<UUID> last, boolean lastComplete, boolean courseComplete) {
-    if (courseComplete) {
+      List<UUID> trackable, Optional<UUID> last, boolean lastComplete, int completed) {
+    if (!trackable.isEmpty() && completed >= trackable.size()) {
       return Optional.empty();
     }
     int at = last.map(trackable::indexOf).orElse(-1);

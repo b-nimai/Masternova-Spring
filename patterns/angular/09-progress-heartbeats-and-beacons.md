@@ -4,13 +4,13 @@
 > last position out of a page that is closing, and resume exactly there next time, all without
 > the player knowing any of it.
 
-**Last updated:** 2026-10-16 · **Roadmap:** 10.5
+**Last updated:** 2026-10-17 · **Roadmap:** 10.5
 **Code:**
 - `core/api/learning-api.ts`: `LearningApi`, interfaces mirroring the DTOs by name, and `beacon()`
   (outside `HttpClient`, on purpose);
 - `features/learn/progress-tracker.ts`: `ProgressTracker`, a service scoped to the player component;
 - `shared/hls-player/`: the `playbackProgress` output (play, pause, seek, end, `timeupdate`);
-- `features/learn/lecture-player/`: resume point → ticket → play, progress → tracker;
+- `features/learn/lecture-player/`: resume point + ticket (at once) → play, progress → tracker;
 - `features/learn/my-learning/`: route `/learning` (the nav's "My Learning");
 - `features/catalog/access-cta/`, `course-detail/`, `curriculum/`: "Continue learning", "Enroll for
   free", the ticks.
@@ -45,7 +45,7 @@ constructor() {
   pause is the classic leak. One stream, gated by state, torn down once.
 - **The `HlsPlayer` stays dumb.** It emits what the `<video>` says (`playbackProgress`); it knows
   nothing about heartbeats. The tracker knows nothing about hls.js. The player page joins them.
-- **Pause, seek and end are sent at once;** `timeupdate` (about 4 a second) only updates the
+- **Pause, seek and end are sent at once;** `timeupdate` (the player passes on whole seconds only: each output is a change detection) only updates the
   position. **The same second twice is sent once**, so a paused player costs nothing.
 - **Errors are swallowed.** A failed heartbeat retries at the next tick; nothing appears on screen.
   It's a bookmark.
@@ -75,14 +75,19 @@ fire reliably on phones (and `unload` breaks the back/forward cache); "hidden" i
 thing a mobile page hears. Hidden → beacon is harmless if the user comes back: the next heartbeat
 just sends a newer position.
 
-## 3. Resume: ask first, then ticket ⭐⭐
+## 3. Resume and ticket, asked at once ⭐⭐
 
 ```ts
-this.request = this.learning.lectureProgress(this.lectureId()).pipe(
+const startAt = this.learning.lectureProgress(this.lectureId()).pipe(
   map((p) => p.positionSeconds),
   catchError(() => of(0)),                        // ⭐ a nicety: never block playback on it
-).subscribe((startAt) => this.ticket(startAt));   // the playback token, then HlsPlayer [startAt]
+);
+this.request = forkJoin({ ticket: this.api.playback(this.lectureId()), startAt })
+  .subscribe(({ ticket, startAt }) => /* HlsPlayer [src] + [startAt] */);
 ```
+
+The ticket doesn't need the position, so the two requests go together: one round trip before the
+first frame, not two (a simplify-pass fix).
 
 The server answers through the write-back buffer, so a heartbeat sent a second ago already counts
 (and a position in the last 10 s restarts the lecture). The re-ticketing of note 07 still resumes
@@ -133,5 +138,5 @@ Revisit with the Figma open before Phase D5's polish.
   `takeUntilDestroyed`, a last heartbeat in `onDestroy`.
 - **`sendBeacon` on `pagehide` / hidden**, credential in the body (no headers possible), renewed by
   every heartbeat; falls back to a normal request without a valid token.
-- **Resume first, ticket second;** a failed resume starts at 0.
+- **Resume and ticket in one `forkJoin`;** a failed resume starts at 0.
 - **Dashboard lags (rollups), course page doesn't (buffer).**

@@ -3,7 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
-import { catchError, map, of, Subscription } from 'rxjs';
+import { catchError, forkJoin, map, Observable, of, Subscription } from 'rxjs';
 import { DenialReason, EntitlementApi } from '../../../core/api/entitlement-api';
 import { LearningApi } from '../../../core/api/learning-api';
 import { asProblem } from '../../../core/api/problem';
@@ -84,31 +84,27 @@ export class LecturePlayer {
     this.ticket(failure.position); // most likely an expired token: re-ticket, resume
   }
 
-  protected retry(): void {
-    this.resume();
-  }
-
   protected onProgress(progress: PlaybackProgress): void {
     this.tracker.update(progress);
   }
 
-  /** Where they stopped, then a ticket that starts there. */
-  private resume(): void {
-    this.request?.unsubscribe();
+  /** Where they stopped and a ticket, asked at once (one round trip, not two); also "Try again". */
+  protected resume(): void {
     this.state.set({ kind: 'loading' });
-    this.request = this.learning
-      .lectureProgress(this.lectureId())
-      .pipe(
-        map((p) => p.positionSeconds),
-        catchError(() => of(0)),
-      )
-      .subscribe((startAt) => this.ticket(startAt));
+    const startAt = this.learning.lectureProgress(this.lectureId()).pipe(
+      map((p) => p.positionSeconds),
+      catchError(() => of(0)), // a nicety: never block playback on it
+    );
+    this.ticket(startAt);
   }
 
-  private ticket(startAt: number): void {
+  private ticket(startAt: number | Observable<number>): void {
     this.request?.unsubscribe();
-    this.request = this.api.playback(this.lectureId()).subscribe({
-      next: (ticket) => {
+    this.request = forkJoin({
+      ticket: this.api.playback(this.lectureId()),
+      startAt: typeof startAt === 'number' ? of(startAt) : startAt,
+    }).subscribe({
+      next: ({ ticket, startAt }) => {
         this.ticketedAt = Date.now();
         this.state.set({ kind: 'playing', url: ticket.manifestUrl, startAt });
       },

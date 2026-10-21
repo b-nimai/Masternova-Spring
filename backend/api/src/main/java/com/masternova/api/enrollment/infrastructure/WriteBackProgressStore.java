@@ -6,6 +6,7 @@ import com.masternova.kernel.pattern.DesignPattern;
 import com.masternova.kernel.pattern.Pattern;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -17,6 +18,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -158,10 +160,19 @@ public final class WriteBackProgressStore implements ProgressStore {
       return merged;
     }
     List<UUID> ids = List.copyOf(lectureIds);
-    List<Object> fields = ids.stream().<Object>map(id -> field(userId, id)).toList();
+    byte[][] fields = ids.stream().map(id -> bytes(field(userId, id))).toArray(byte[][]::new);
     try {
-      for (String hash : List.of(DIRTY, FLUSHING)) {
-        List<Object> values = redis.opsForHash().multiGet(hash, fields);
+      // ⭐ one round trip: both HMGETs pipelined — Redis still runs them in this order
+      List<Object> both =
+          redis.executePipelined(
+              (RedisCallback<Object>)
+                  c -> {
+                    c.hashCommands().hMGet(bytes(DIRTY), fields);
+                    c.hashCommands().hMGet(bytes(FLUSHING), fields);
+                    return null;
+                  });
+      for (Object hash : both) {
+        List<?> values = (List<?>) hash;
         for (int i = 0; i < ids.size(); i++) {
           parse(userId, ids.get(i), values.get(i))
               .ifPresent(u -> merged.merge(u.lectureId(), u, ProgressUpdate::merge));
@@ -212,12 +223,12 @@ public final class WriteBackProgressStore implements ProgressStore {
     return batch.size();
   }
 
-  static String field(UUID userId, UUID lectureId) {
-    return userId + ":" + lectureId;
+  private static byte[] bytes(String s) {
+    return s.getBytes(StandardCharsets.UTF_8);
   }
 
-  static String value(ProgressUpdate u) {
-    return u.lastPositionSeconds() + "|" + u.maxPositionSeconds() + "|" + u.at().toEpochMilli();
+  static String field(UUID userId, UUID lectureId) {
+    return userId + ":" + lectureId;
   }
 
   private static Optional<ProgressUpdate> parse(Object field, Object value) {
