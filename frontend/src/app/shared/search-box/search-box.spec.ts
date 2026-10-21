@@ -13,7 +13,11 @@ describe('SearchBox', () => {
     vi.useFakeTimers();
     await TestBed.configureTestingModule({
       imports: [SearchBox],
-      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([{ path: '**', children: [] }]),
+      ],
     }).compileComponents();
     fixture = TestBed.createComponent(SearchBox);
     http = TestBed.inject(HttpTestingController);
@@ -68,6 +72,27 @@ describe('SearchBox', () => {
     type('go'); // trims to the same text
     vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
     http.expectNone((r) => r.url === '/api/v1/search/suggestions');
+  });
+
+  it('keeps suggesting after a suggestion was picked', async () => {
+    type('kub');
+    vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
+    http
+      .expectOne((r) => r.params.get('q') === 'kub')
+      .flush([{ slug: 'k8s', title: 'Kubernetes in Practice' }]);
+    fixture.detectChanges();
+
+    input.dispatchEvent(new Event('focusin'));
+    fixture.detectChanges();
+    const option = document.querySelector<HTMLElement>('[data-testid="suggestion"]');
+    expect(option).not.toBeNull();
+    option?.click(); // MatAutocomplete writes the option's OBJECT into the control
+    vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
+    fixture.detectChanges(); // used to throw: `.trim` of an object killed the stream
+
+    type('dock');
+    vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
+    http.expectOne((r) => r.params.get('q') === 'dock').flush([]);
   });
 
   it('keeps suggesting after a failed request', () => {

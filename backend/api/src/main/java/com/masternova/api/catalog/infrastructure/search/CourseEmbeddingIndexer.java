@@ -2,8 +2,11 @@ package com.masternova.api.catalog.infrastructure.search;
 
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.transaction.support.TransactionOperations;
@@ -18,22 +21,22 @@ class CourseEmbeddingIndexer {
 
   static final int DIMENSIONS = 768; // V28's vector(768): nomic-embed-text
 
+  private static final Logger log = LoggerFactory.getLogger(CourseEmbeddingIndexer.class);
+
   /**
-   * ⭐ The embedded text and its hash come from ONE expression, in SQL: the comparison and the
-   * embedding can't disagree about what "the text" is. Truncated to stay inside the model's
-   * context.
+   * ⭐ Staleness by HASH: {@code course.embedding_text_hash} is a generated column (V29), so a sweep
+   * with nothing to do compares two short strings per course instead of rebuilding and hashing
+   * every description. Only the stale batch's text is built, by the same SQL function the hash is
+   * made from (one definition).
    */
   private static final String STALE =
       """
-      WITH wanted AS (
-          SELECT c.id, left(c.title || E'\\n' || coalesce(c.subtitle, '') || E'\\n'
-                            || c.description, 8000) AS text
-          FROM course c WHERE c.status = 'PUBLISHED'
-      )
-      SELECT w.id, w.text, md5(w.text) AS hash
-      FROM wanted w LEFT JOIN course_embedding e ON e.course_id = w.id
-      WHERE e.course_id IS NULL OR e.model <> :model OR e.content_hash <> md5(w.text)
-      ORDER BY w.id
+      SELECT c.id, catalog_embedding_text(c.title, c.subtitle, c.description) AS text,
+             c.embedding_text_hash AS hash
+      FROM course c LEFT JOIN course_embedding e ON e.course_id = c.id
+      WHERE c.status = 'PUBLISHED'
+        AND (e.course_id IS NULL OR e.model <> :model OR e.content_hash <> c.embedding_text_hash)
+      ORDER BY c.id
       LIMIT :batch
       """;
 
@@ -91,16 +94,12 @@ class CourseEmbeddingIndexer {
     if (stale.isEmpty()) {
       return new Run(0, removed);
     }
-    List<float[]> vectors = model.embed(stale.stream().map(Stale::text).toList());
-    if (vectors.size() != stale.size()) {
-      throw new IllegalStateException(
-          "the model returned " + vectors.size() + " vectors for " + stale.size() + " texts");
-    }
+    List<Embedded> embedded = embed(stale);
     Timestamp now = Timestamp.from(clock.instant());
     tx.executeWithoutResult(
         s -> {
-          for (int i = 0; i < stale.size(); i++) {
-            float[] vector = vectors.get(i);
+          for (Embedded e : embedded) {
+            float[] vector = e.vector();
             if (vector.length != DIMENSIONS) { // a model with another dimension needs a migration
               throw new IllegalStateException(
                   modelName
@@ -121,14 +120,44 @@ class CourseEmbeddingIndexer {
                        SET model = EXCLUDED.model, content_hash = EXCLUDED.content_hash,
                            embedding = EXCLUDED.embedding, embedded_at = EXCLUDED.embedded_at
                     """)
-                .param("id", stale.get(i).courseId())
+                .param("id", e.course().courseId())
                 .param("model", modelName)
-                .param("hash", stale.get(i).hash())
+                .param("hash", e.course().hash())
                 .param("vector", Vectors.literal(vector))
                 .param("at", now)
                 .update();
           }
         });
-    return new Run(stale.size(), removed);
+    return new Run(embedded.size(), removed);
+  }
+
+  private record Embedded(Stale course, float[] vector) {}
+
+  private List<Embedded> embed(List<Stale> stale) {
+    try {
+      List<float[]> vectors = model.embed(stale.stream().map(Stale::text).toList());
+      if (vectors.size() != stale.size()) {
+        throw new IllegalStateException(
+            "the model returned " + vectors.size() + " vectors for " + stale.size() + " texts");
+      }
+      List<Embedded> all = new ArrayList<>();
+      for (int i = 0; i < stale.size(); i++) {
+        all.add(new Embedded(stale.get(i), vectors.get(i)));
+      }
+      return all;
+    } catch (RuntimeException batchFailed) {
+      List<Embedded> alone = new ArrayList<>();
+      for (Stale course : stale) {
+        try {
+          alone.add(new Embedded(course, model.embed(course.text())));
+        } catch (RuntimeException e) {
+          log.warn("course {}: the model refused its text, skipped this run", course.courseId(), e);
+        }
+      }
+      if (alone.isEmpty()) {
+        throw batchFailed; // every text failed: the model is down, not one text
+      }
+      return alone;
+    }
   }
 }

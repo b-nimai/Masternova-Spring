@@ -158,6 +158,19 @@ class ReviewIT {
     assertThat(tally()).isEqualTo(RatingTally.empty());
   }
 
+  /**
+   * Archived: its learners still review it; its public page (and reviews) is gone, like catalog's.
+   */
+  @Test
+  void anArchivedCourseIsReviewedByItsLearnersButNotListedPublicly() {
+    jdbc.sql("UPDATE course SET status = 'ARCHIVED' WHERE id = :c").param("c", course).update();
+
+    assertThat(put(learner, 5, "")).hasStatusOk();
+    assertThat(mvc.get().uri("/api/v1/courses/{c}/reviews", course))
+        .hasStatus(HttpStatus.NOT_FOUND);
+    assertThat(engagement.catalogRating(course)).containsExactly(1, 500);
+  }
+
   @Test
   void theCoursePageListsReviewsNewestFirstAndPublicly() {
     for (int i = 0; i < 3; i++) {

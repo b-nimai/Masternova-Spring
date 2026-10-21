@@ -31,7 +31,8 @@ columns.
 4. **Nightly reconciliation** (`RatingReconcileJob`, ShedLock, ~3 min after start then every 24 h):
    one `GROUP BY` finds tallies that differ from the reviews; each is repaired in its own
    transaction **under the same lock, re-counted after the lock is held**, and pushed to
-   catalog. A non-zero count is logged at WARN.
+   catalog; then catalog's columns are compared with every tally, and a rating on a course with
+   no tally at all is reset from a recount (normally to 0). A non-zero count is logged at WARN.
 5. **Not an Observer.** An event would put the card's number in a second transaction that can
    fail, lag or be replayed, for a write that is already in a transaction catalog's API can
    join. The reconciler covers what no transaction sees.

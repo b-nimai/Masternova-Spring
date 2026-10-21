@@ -129,6 +129,22 @@ class QuestionIT {
         .hasStatus(HttpStatus.UNAUTHORIZED);
   }
 
+  /** An archived course keeps playing for those who hold it, so its Q&A stays theirs. */
+  @Test
+  void anArchivedCoursesQandAStaysOpenToItsLearners() {
+    UUID question = id(ask(learner, "Before archiving", UUID.randomUUID().toString()));
+    jdbc.sql("UPDATE course SET status = 'ARCHIVED' WHERE id = :c")
+        .param("c", course.courseId())
+        .update();
+
+    assertThat(mvc.get().uri("/api/v1/lectures/{l}/questions", lecture).with(as(learner)))
+        .hasStatusOk();
+    assertThat(answer(learner, question, null, "Still here")).hasStatus(HttpStatus.CREATED);
+    UUID stranger = new TestInstructors(dataSource).create("Sam Stranger").id();
+    assertThat(mvc.get().uri("/api/v1/questions/{q}", question).with(as(stranger)))
+        .hasStatus(HttpStatus.FORBIDDEN);
+  }
+
   @Test
   void aRetriedPostWithTheSameKeyPostsOnce() {
     String key = UUID.randomUUID().toString();

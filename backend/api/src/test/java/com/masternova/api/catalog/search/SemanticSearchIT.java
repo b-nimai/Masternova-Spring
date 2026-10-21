@@ -124,6 +124,25 @@ class SemanticSearchIT {
     assertThat(ids(result)).containsExactly(pods); // the watercolour course is past max-distance
   }
 
+  /** ⭐ One text the model always refuses must not block the batch it's in, run after run. */
+  @Test
+  void aTextTheModelRefusesDoesNotBlockTheOthers() {
+    courses.published("Alpha", null, "POISON text");
+    UUID fine = courses.published("Beta", null, "ordinary text");
+    model.refuse("POISON");
+    try {
+      assertThat(indexer.run()).containsExactly(1, 0); // the batch failed, each alone: 1 of 2
+      assertThat(embedded()).containsExactly(fine);
+      // only the refused text is left: alone it looks like an outage (the job logs it once)
+      assertThatThrownBy(indexer::run).isInstanceOf(IllegalStateException.class);
+      UUID later = courses.published("Gamma", null, "published after"); // … and isn't blocked
+      assertThat(indexer.run()).containsExactly(1, 0);
+      assertThat(embedded()).containsExactlyInAnyOrder(fine, later);
+    } finally {
+      model.refuse(null);
+    }
+  }
+
   /**
    * ⭐ pgvector's HNSW scan returns at most {@code hnsw.ef_search} rows (default 40), whatever the
    * LIMIT: found by EXPLAIN on 10,000 courses (docs/db/indexes.md §9). The ranker raises it per

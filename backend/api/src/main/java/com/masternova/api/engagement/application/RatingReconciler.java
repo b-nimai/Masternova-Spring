@@ -12,7 +12,7 @@ import org.springframework.transaction.support.TransactionOperations;
 /**
  * The net under the exact tally (ADR-0023 §4): repairs what was written AROUND the review code — a
  * user's deletion cascading to their reviews, a manual SQL fix, a pre-Phase-11 pod saving a course
- * with the average it loaded.
+ * with the average it loaded, a rating no review ever explained (written by SQL, or seeded).
  *
  * <p>⭐ Never repairs from a snapshot: each course is fixed in its own transaction that takes the
  * same lock as a review write and recounts AFTER it holds it, so a review committed meanwhile is
@@ -47,7 +47,7 @@ public class RatingReconciler {
         tallies++;
       }
     }
-    return new Repairs(tallies, repairCatalog());
+    return new Repairs(tallies, repairCatalog() + repairUntallied());
   }
 
   private boolean repairTally(UUID courseId) {
@@ -89,5 +89,35 @@ public class RatingReconciler {
       }
       after = page.getLast().courseId();
     }
+  }
+
+  /**
+   * ⭐ Catalog says "4.7 (1,500)" but no tally exists: no review written through this module
+   * explains it. Each such course is set from a recount under the tally lock (normally empty, so 0
+   * ratings) — the same lock-then-recount as {@link #repairTally}, so a first review committing
+   * meanwhile is counted, not erased.
+   */
+  private int repairUntallied() {
+    int repaired = 0;
+    UUID after = null;
+    while (true) {
+      List<UUID> rated = catalog.ratedCourses(after, PAGE);
+      for (UUID courseId : reviews.withoutTally(rated)) {
+        if (Boolean.TRUE.equals(tx.execute(s -> alignCatalog(courseId)))) {
+          repaired++;
+        }
+      }
+      if (rated.size() < PAGE) {
+        return repaired;
+      }
+      after = rated.getLast();
+    }
+  }
+
+  private boolean alignCatalog(UUID courseId) {
+    reviews.lockTally(courseId); // creates the (empty) row: from now on a tally explains it
+    RatingTally truth = reviews.recount(courseId);
+    reviews.saveTally(courseId, truth);
+    return catalog.updateRating(courseId, truth.count(), truth.average());
   }
 }

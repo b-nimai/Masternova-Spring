@@ -4,10 +4,10 @@ import com.masternova.api.catalog.domain.search.EmbeddingUnavailableException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -51,7 +51,11 @@ class QueryEmbedder implements AutoCloseable {
     if (clock.instant().isBefore(openUntil.get())) {
       throw new EmbeddingUnavailableException("embedding breaker open", null);
     }
-    CompletableFuture<float[]> call = CompletableFuture.supplyAsync(() -> model.embed(text), calls);
+    // ⭐ a Future from the executor, not CompletableFuture.supplyAsync: only this kind's
+    // cancel(true)
+    //    INTERRUPTS the running call. A CompletableFuture ignores it, and a timed-out call would
+    //    keep its thread and its HTTP connection to the model until the client's 60 s timeout.
+    Future<float[]> call = calls.submit(() -> model.embed(text));
     try {
       float[] vector = call.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
       openUntil.set(Instant.MIN); // a success closes it

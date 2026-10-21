@@ -9,7 +9,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { Router } from '@angular/router';
-import { catchError, debounceTime, distinctUntilChanged, map, of, switchMap } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap } from 'rxjs';
 import { MIN_SUGGEST_LENGTH, SearchApi, SuggestionResponse } from '../../core/api/search-api';
 
 /** How long typing must pause before the typeahead asks (ms). */
@@ -44,10 +44,18 @@ export class SearchBox {
   /** After navigating (the shell closes a drawer on phones). */
   readonly searched = output<void>();
 
-  protected readonly query = new FormControl('', { nonNullable: true });
+  /**
+   * ⭐ Typed as what MatAutocomplete really writes into it: the text typed, or the OPTION'S VALUE
+   *    (a whole SuggestionResponse) when one is picked. Typed as `string`, the pipeline below called
+   *    `.trim()` on an object 200 ms after a pick, the stream died, and the box never suggested again.
+   */
+  protected readonly query = new FormControl<string | SuggestionResponse>('', {
+    nonNullable: true,
+  });
 
   protected readonly suggestions = toSignal(
     this.query.valueChanges.pipe(
+      filter((value): value is string => typeof value === 'string'), // a pick isn't typing
       debounceTime(SUGGEST_DEBOUNCE_MS),
       map((text) => text.trim()),
       distinctUntilChanged(),
@@ -70,7 +78,8 @@ export class SearchBox {
 
   /** Enter: the ranked results page for the text as typed. */
   protected submit(): void {
-    const q = this.query.value.trim();
+    const value = this.query.value;
+    const q = typeof value === 'string' ? value.trim() : value.title;
     if (q) {
       void this.router.navigate(['/search'], { queryParams: { q } });
       this.searched.emit();

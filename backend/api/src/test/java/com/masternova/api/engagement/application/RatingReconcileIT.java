@@ -86,6 +86,23 @@ class RatingReconcileIT {
     assertThat(engagement.catalogRating(course)).containsExactly(2, 300);
   }
 
+  /** A rating no review explains (written by SQL, or seeded): the course has no tally at all. */
+  @Test
+  void aRatingNoTallyExplainsIsReset() {
+    UUID unreviewed =
+        new TestCourses(dataSource)
+            .create(new TestInstructors(dataSource).create("Omar").id(), "PUBLISHED", 0, true, null)
+            .courseId();
+    jdbc.sql("UPDATE course SET rating_count = 1500, rating_average = 4.7 WHERE id = :c")
+        .param("c", unreviewed)
+        .update();
+
+    assertThat(reconciler.reconcile()).isEqualTo(new Repairs(0, 1));
+    assertThat(engagement.catalogRating(unreviewed)).containsExactly(0, 0);
+    assertThat(repository.tally(unreviewed)).contains(RatingTally.empty());
+    assertThat(reconciler.reconcile()).isEqualTo(new Repairs(0, 0));
+  }
+
   /**
    * ⭐ A review in flight while the job repairs the same course: the job waits on the tally lock and
    * recounts AFTER it — so the new review is in the repaired tally, not erased by it.

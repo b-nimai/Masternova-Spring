@@ -18,6 +18,15 @@ public interface CatalogApi {
   /** The course's facts, in any state, or empty if there's no such course. */
   Optional<CourseFacts> courseFacts(UUID courseId);
 
+  /**
+   * Who teaches the course and its availability, in one small query, or empty if there's no such
+   * course. Added in Phase 11 for engagement's access checks.
+   */
+  Optional<CourseStanding> courseStanding(UUID courseId);
+
+  /** The same for the course this lecture belongs to (two indexed lookups). */
+  Optional<CourseStanding> courseStandingOfLecture(UUID lectureId);
+
   /** Whether there is such a course, in any state — without loading it. */
   boolean courseExists(UUID courseId);
 
@@ -54,4 +63,10 @@ public interface CatalogApi {
    * @return whether the stored summary changed (false: it already said this, or no such course)
    */
   boolean updateRating(UUID courseId, int count, BigDecimal average);
+
+  /**
+   * The courses whose stored rating isn't empty, in id order, after {@code afterCourseId} ({@code
+   * null}: from the first) — the reconciler finds ratings no tally explains (Phase 11).
+   */
+  List<UUID> ratedCourses(UUID afterCourseId, int limit);
 }

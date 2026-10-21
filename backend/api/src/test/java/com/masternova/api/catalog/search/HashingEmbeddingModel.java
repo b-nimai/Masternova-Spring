@@ -24,6 +24,18 @@ public class HashingEmbeddingModel implements EmbeddingModel {
   private final AtomicInteger calls = new AtomicInteger();
   private volatile boolean failing;
   private volatile Duration delay = Duration.ZERO;
+  private volatile String refused;
+  private final AtomicInteger interrupted = new AtomicInteger();
+
+  /** Fails any call that contains a text with this marker, as a model refusing one text would. */
+  public void refuse(String marker) {
+    this.refused = marker;
+  }
+
+  /** How many slow calls were interrupted while they waited (a cancelled query). */
+  public int interrupted() {
+    return interrupted.get();
+  }
 
   public void failing(boolean failing) {
     this.failing = failing;
@@ -44,12 +56,17 @@ public class HashingEmbeddingModel implements EmbeddingModel {
       try {
         Thread.sleep(delay);
       } catch (InterruptedException e) {
+        interrupted.incrementAndGet();
         Thread.currentThread().interrupt();
         throw new IllegalStateException("interrupted", e);
       }
     }
     if (failing) {
       throw new IllegalStateException("model down (test)");
+    }
+    String marker = refused;
+    if (marker != null && request.getInstructions().stream().anyMatch(t -> t.contains(marker))) {
+      throw new IllegalStateException("the model refuses this text (test)");
     }
     List<Embedding> embeddings = new ArrayList<>();
     for (int i = 0; i < request.getInstructions().size(); i++) {

@@ -1,8 +1,8 @@
 package com.masternova.api.engagement.application;
 
 import com.masternova.api.catalog.CatalogApi;
-import com.masternova.api.catalog.CourseFacts;
 import com.masternova.api.catalog.CourseFacts.Availability;
+import com.masternova.api.catalog.CourseStanding;
 import com.masternova.api.engagement.domain.Participant;
 import com.masternova.api.engagement.domain.Participant.CourseRef;
 import com.masternova.api.enrollment.EnrollmentApi;
@@ -32,12 +32,12 @@ public class Participants {
 
   /** The caller's capacity in a published course, or 403 {@code NOT_ENROLLED}. */
   public Participant ofCourse(CurrentUser me, UUID courseId) {
-    return of(me, published(catalog.courseFacts(courseId), "Course", courseId));
+    return of(me, open(catalog.courseStanding(courseId), "Course", courseId));
   }
 
   /** The same for the course a lecture belongs to. */
   public Participant ofLecture(CurrentUser me, UUID lectureId) {
-    return of(me, published(catalog.courseFactsOfLecture(lectureId), "Lecture", lectureId));
+    return of(me, open(catalog.courseStandingOfLecture(lectureId), "Lecture", lectureId));
   }
 
   /**
@@ -45,7 +45,7 @@ public class Participants {
    * learner (enrolled), never by role.
    */
   public Participant.Learner reviewer(CurrentUser me, UUID courseId) {
-    CourseRef course = published(catalog.courseFacts(courseId), "Course", courseId);
+    CourseRef course = open(catalog.courseStanding(courseId), "Course", courseId);
     if (course.instructorId().equals(me.id())) {
       throw new ForbiddenException("OWN_COURSE", "You can't review a course you teach.");
     }
@@ -55,9 +55,13 @@ public class Participants {
     return new Participant.Learner(me.id(), course);
   }
 
-  /** The course must be published to be reviewed or discussed; its id and teacher, else 404. */
+  /** For the public reads: the course must be published (as its page), else 404. */
   public CourseRef publishedCourse(UUID courseId) {
-    return published(catalog.courseFacts(courseId), "Course", courseId);
+    return catalog
+        .courseStanding(courseId)
+        .filter(c -> c.availability() == Availability.PUBLISHED)
+        .map(Participants::ref)
+        .orElseThrow(() -> new NotFoundException("Course", courseId));
   }
 
   private Participant of(CurrentUser me, CourseRef course) {
@@ -73,11 +77,15 @@ public class Participants {
     throw notEnrolled();
   }
 
-  private static CourseRef published(Optional<CourseFacts> facts, String resource, UUID id) {
-    return facts
-        .filter(f -> f.availability() == Availability.PUBLISHED)
-        .map(f -> new CourseRef(f.courseId(), f.instructorId()))
+  private static CourseRef open(Optional<CourseStanding> course, String resource, UUID id) {
+    return course
+        .filter(c -> c.availability() != Availability.UNPUBLISHED)
+        .map(Participants::ref)
         .orElseThrow(() -> new NotFoundException(resource, id));
+  }
+
+  private static CourseRef ref(CourseStanding c) {
+    return new CourseRef(c.courseId(), c.instructorId());
   }
 
   private static ForbiddenException notEnrolled() {

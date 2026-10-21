@@ -186,6 +186,21 @@ class JdbcReviewRepository implements ReviewRepository {
         .list();
   }
 
+  @Override
+  public List<UUID> withoutTally(List<UUID> courseIds) {
+    if (courseIds.isEmpty()) {
+      return List.of();
+    }
+    return jdbc.sql(
+            """
+            SELECT c.id FROM unnest(:ids) AS c(id)
+            WHERE NOT EXISTS (SELECT 1 FROM course_rating r WHERE r.course_id = c.id)
+            """)
+        .param("ids", courseIds.toArray(UUID[]::new))
+        .query((rs, n) -> rs.getObject("id", UUID.class))
+        .list();
+  }
+
   private static RatingTally tally(ResultSet rs) throws SQLException {
     return RatingTally.of(
         rs.getInt("stars_1"),

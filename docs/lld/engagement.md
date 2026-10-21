@@ -45,7 +45,7 @@ an answer from the instructor or another learner, with replies to replies.
 | `course_rating` | row, one per reviewed course | the stored tally: the **serialisation point** of every review write for that course (§5) |
 | `Question` | row (`question`), on a lecture | title 1–150, body ≤ 5,000; `answer_count` = its answers; `course_id` copied from the lecture at creation (the list and the access check need it, and a lecture never changes course) |
 | `Answer` | row (`answer`), in a question | `depth` 1–3 (1 = answers the question, 2–3 = replies); a reply's parent is in the same question (composite FK) and `depth = parent.depth + 1` (checked on insert); **422 `REPLY_TOO_DEEP`** beyond 3 |
-| `Participant` | sealed result of the access check | `Learner` (enrolled), `Instructor` (teaches it), `Admin`; anything else is 403 `NOT_ENROLLED` |
+| `Participant` | sealed result of the access check | `Learner` (enrolled), `Instructor` (teaches it), `Admin`; anything else is 403 `NOT_ENROLLED`. The course must be **open**: published or archived (an archived course keeps playing for those who hold it, so its Q&A and reviews stay theirs). A draft is 404. The public reads (the course page's list and summary) need it published, like the page. One small query per check (`CatalogApi.courseStanding`: teacher + availability, no curriculum) |
 
 **Why a depth cap of 3.** A deeper tree is unreadable on a phone and is how a thread turns into
 a chat. Udemy and Stack Overflow keep it at two levels. Three still allows "answer → follow-up
@@ -148,7 +148,11 @@ sequenceDiagram
 3. Catalog's columns are compared with every tally (500 locked tallies per transaction, an
    `UPDATE … WHERE … IS DISTINCT FROM`), which repairs a course saved by a pre-Phase-11 pod with
    the average it had loaded (its entity still wrote the column).
-4. A non-zero repair count is logged at WARN: something wrote around the code.
+4. Ratings no tally explains: catalog's rated courses (`CatalogApi.ratedCourses`, paged) that
+   have no tally row are set from a recount under the lock, normally 0 ratings. A course rated by
+   SQL, or by an old seed, would otherwise show "4.7 (1,500)" over an empty review list forever
+   (Phase 11 review). The dev seed now writes tallies and derives the summary from them.
+5. A non-zero repair count is logged at WARN: something wrote around the code.
 
 ⭐ Recounting in step 1's snapshot and writing that would be wrong: a review committing between
 the snapshot and the write would be erased by the "repair". The lock-then-recount in step 2 is

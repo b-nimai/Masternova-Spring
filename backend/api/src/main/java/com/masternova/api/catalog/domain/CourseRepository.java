@@ -135,4 +135,23 @@ public interface CourseRepository
           """,
       nativeQuery = true)
   List<TitleSuggestion> suggestTitles(String text, int limit);
+
+  /** One row, no curriculum: what an access check needs ({@code CatalogApi.courseStanding}). */
+  @Query(
+      """
+      select new com.masternova.api.catalog.domain.CourseStandingRow(c.id, c.instructorId, c.status)
+      from Course c where c.id = :id
+      """)
+  Optional<CourseStandingRow> findStandingById(UUID id);
+
+  /** The courses whose stored rating isn't empty, a page at a time in id order (Phase 11). */
+  @Query(
+      value =
+          """
+          SELECT id FROM course
+          WHERE rating_count > 0 AND (CAST(:after AS uuid) IS NULL OR id > CAST(:after AS uuid))
+          ORDER BY id LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<UUID> findRatedIds(String after, int limit);
 }

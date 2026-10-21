@@ -47,5 +47,8 @@ public interface ReviewRepository {
    */
   List<CourseTally> lockTallies(UUID afterCourseId, int limit);
 
+  /** Which of these courses have no stored tally (never reviewed through the code). */
+  List<UUID> withoutTally(List<UUID> courseIds);
+
   record CourseTally(UUID courseId, RatingTally tally) {}
 }

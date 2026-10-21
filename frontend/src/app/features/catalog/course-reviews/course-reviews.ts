@@ -7,7 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { catchError, of, throwError } from 'rxjs';
+import { catchError, of, Subscription, throwError } from 'rxjs';
 import { EngagementApi, ReviewResponse } from '../../../core/api/engagement-api';
 import { asProblem } from '../../../core/api/problem';
 
@@ -53,9 +53,17 @@ export class CourseReviews {
     stream: ({ params: id }) => this.api.ratingSummary(id),
   });
 
+  /**
+   * ⭐ `hasValue()` before `value()`: a resource in ERROR throws from `value()` (cart.html notes the
+   *    same rule), so a failed summary would break the whole block instead of hiding the bars.
+   */
+  protected readonly summaryValue = computed(() =>
+    this.summary.hasValue() ? this.summary.value() : undefined,
+  );
+
   /** The bars, 5★ first, as a share of all ratings. */
   protected readonly distribution = computed(() => {
-    const s = this.summary.value();
+    const s = this.summaryValue();
     return [5, 4, 3, 2, 1].map((star) => ({
       star,
       count: s?.stars[star - 1] ?? 0,
@@ -80,6 +88,9 @@ export class CourseReviews {
         ),
   });
 
+  /** The saved review, or null (none yet, or it couldn't be loaded: the form starts empty). */
+  protected readonly myReview = computed(() => (this.mine.hasValue() ? this.mine.value() : null));
+
   protected readonly draftRating = signal(0);
   protected readonly draftBody = signal('');
   protected readonly saving = signal(false);
@@ -93,7 +104,7 @@ export class CourseReviews {
     });
     // the draft starts from the saved review, whenever it (re)loads
     effect(() => {
-      const review = this.mine.value();
+      const review = this.myReview();
       untracked(() => {
         this.draftRating.set(review?.rating ?? 0);
         this.draftBody.set(review?.body ?? '');
@@ -101,13 +112,19 @@ export class CourseReviews {
     });
   }
 
+  /**
+   * ⭐ The list's one request in flight. Starting page one over cancels it: a "Show more" answer
+   *    landing after a write reset the list would append a page of the OLD list (duplicate ids).
+   */
+  private page?: Subscription;
+
   protected showMore(): void {
     const cursor = this.nextCursor();
     if (!cursor || this.loadingMore()) {
       return;
     }
     this.loadingMore.set(true);
-    this.api.reviews(this.courseId(), cursor).subscribe({
+    this.page = this.api.reviews(this.courseId(), cursor).subscribe({
       next: (page) => {
         this.reviews.update((list) => [...list, ...page.items]);
         this.nextCursor.set(page.nextCursor);
@@ -159,7 +176,9 @@ export class CourseReviews {
   }
 
   private loadFirstPage(courseId: string): void {
-    this.api.reviews(courseId, null).subscribe({
+    this.page?.unsubscribe();
+    this.loadingMore.set(false);
+    this.page = this.api.reviews(courseId, null).subscribe({
       next: (page) => {
         this.reviews.set(page.items);
         this.nextCursor.set(page.nextCursor);

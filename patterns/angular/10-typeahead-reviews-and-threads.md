@@ -88,6 +88,22 @@ key.
 
 ## 6. Pitfalls met
 
+Found by the phase's code review, each with a spec now:
+
+- **A picked option is an OBJECT in the control.** `MatAutocompleteTrigger` writes the option's
+  value (`{slug, title}`) into the `FormControl`, so `map((text) => text.trim())` threw 200 ms
+  after a pick, the stream ended, and the box never suggested again. The control is typed
+  `FormControl<string | SuggestionResponse>` and a `filter(typeof === 'string')` comes first.
+- **`value()` throws on a resource in error.** `summary.value()` in a `computed` broke the whole
+  reviews block when the summary failed. Read through `hasValue() ? value() : undefined`.
+- **A stale page after a reset.** "Show more" in flight, then a save resets the list: the late
+  page was appended to the new list (duplicate `track` keys). The list keeps its one
+  `Subscription` and unsubscribes when it starts over.
+- **Q&A inside the player's `@switch`.** Shown only while `playing`, so article lectures and
+  playback failures had none, and an error destroyed a question being typed. It sits outside.
+- **Mutation-checking a spec:** after reverting a mutated file, `touch` it. The test builder
+  served the mutated transpile once more.
+
 - **`whenStable()` hangs while a resource is loading.** A loading `rxResource` (and an in-flight
   `HttpClient` call) is a *pending task*, so the fixture isn't stable until the test flushes the
   request. Before a flush: `TestBed.tick()`. After it: `await fixture.whenStable()` (the resource's

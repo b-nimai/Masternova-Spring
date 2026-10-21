@@ -136,8 +136,9 @@ sequenceDiagram
 **Keeping embeddings fresh** (`CourseEmbeddingJob`, every 60 s, one replica):
 
 1. One query returns up to 32 published courses whose embedding is missing, or whose `model` or
-   `content_hash` differs from what the course would produce now (`md5(text)` computed in SQL
-   from the same expression that returns the text: one definition).
+   `content_hash` differs from the course's **generated** `embedding_text_hash` (V29: md5 of the
+   SQL function `catalog_embedding_text`, which also builds the text sent to the model: one
+   definition, hashed once per write of the row instead of once per sweep).
 2. Embed them in **one batch call**, outside any transaction (a model call is slow; holding a
    connection across it starves the pool).
 3. Upsert each `(course_id, model, content_hash, embedding)`. If the course was edited during the
@@ -177,7 +178,9 @@ when a new keystroke arrives.
 | Failure | How it is detected | Behaviour | Recovery |
 | ------- | ------------------ | --------- | -------- |
 | Ollama down / not deployed (CI, the k3d cluster) | connection refused, timeout | keyword ranking, `degraded: true`, counted in `search.requests{degraded}`; the breaker skips the model for 30 s | none needed: the next query after 30 s tries again |
-| Indexer can't reach the model | exception in the batch call | that run does nothing, logs once at WARN | the next run (60 s) retries the same courses |
+| Indexer can't reach the model | exception in the batch call, and in every single-text retry | that run does nothing, logs once at WARN | the next run (60 s) retries the same courses |
+| The model refuses one course's text | the batch fails, that text fails alone | the others in the batch are embedded; that course is skipped (WARN) | retried every run; fixing its text (an edit) changes its hash |
+| A query times out on the model | the 2 s budget | the call is **interrupted** (a `Future` from the executor: `CompletableFuture.cancel` wouldn't), freeing its connection | the breaker opens for 30 s |
 | A course edited during embedding | hash differs next run | the old vector is served for ≤ 60 s | the next run re-embeds |
 | Model changed (`masternova.search.embedding.model`) | `model` column differs | courses are re-embedded 32 per minute; meanwhile semantic search compares old and new vectors (garbage-ish, never an error) | a different dimension needs a migration (`vector(768)` is the type) |
 | A query of stop words only ("the") | empty `tsquery` | keyword returns nothing, semantic still may | — |
@@ -190,6 +193,9 @@ when a new keystroke arrives.
   The `ADD COLUMN … GENERATED … STORED` rewrites `course` under an `ACCESS EXCLUSIVE` lock:
   212 ms on 10,000 seeded courses (11 MB), acceptable once; on a large production table it would be an
   expand in batches (a plain column + trigger + backfill) instead.
+- V29: `catalog_embedding_text(title, subtitle, description)` (`IMMUTABLE` SQL function) and
+  `course.embedding_text_hash` generated from it (the rewrite: 294 ms on 10,000 courses). The
+  sweep's no-op run went from 24 ms (hashing every description) to 7 ms.
 - `course_embedding` (PK `course_id` → `course ON DELETE CASCADE`) + **HNSW** index
   `vector_cosine_ops` (`m = 16, ef_construction = 64`, pgvector's defaults), autovacuumed at 2 %
   dead rows (HNSW keeps dead entries in its graph until vacuum).

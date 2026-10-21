@@ -1,7 +1,7 @@
 <section class="course-reviews" data-testid="reviews">
   <h2>Reviews</h2>
 
-  @if (summary.value(); as s) {
+  @if (summaryValue(); as s) {
     <div class="summary">
       <div class="average">
         <span class="number" data-testid="average">{{
@@ -30,7 +30,7 @@
 
   @if (canReview()) {
     <form class="my-review" data-testid="my-review" (ngSubmit)="save()">
-      <h3>{{ mine.value() ? 'Your review' : 'Rate this course' }}</h3>
+      <h3>{{ myReview() ? 'Your review' : 'Rate this course' }}</h3>
       <div class="rating" role="radiogroup" aria-label="Your rating">
         @for (n of stars; track n) {
           <button
@@ -69,9 +69,9 @@
           data-testid="save-review"
           [disabled]="draftRating() < 1 || saving()"
         >
-          {{ mine.value() ? 'Update review' : 'Post review' }}
+          {{ myReview() ? 'Update review' : 'Post review' }}
         </button>
-        @if (mine.value()) {
+        @if (myReview()) {
           <button mat-button type="button" [disabled]="saving()" (click)="remove()">Delete</button>
         }
       </div>

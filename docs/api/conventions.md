@@ -361,7 +361,8 @@ Implemented by `enrollment.web.EnrollmentController`, `ProgressController` and
 - **One review per learner per course**, so writing is a `PUT` on the pair: idempotent, no key.
   Only an **actively enrolled** learner who doesn't teach the course may review it.
 - **A participant** is an enrolled learner, the course's instructor or an admin. Anyone else gets
-  403 `NOT_ENROLLED`; a lecture of an unpublished course is 404.
+  403 `NOT_ENROLLED`. The course must be published or **archived** (its learners keep its Q&A and
+  may still review it); a draft is 404. The public review list and summary need it published.
 - **A thread is a flat list in reading order** (each answer, then its replies, oldest first). Indent
   by `depth` (1–3); `parentId` names the answer a reply belongs to. `byInstructor` marks the
   course's teacher. At most 500 answers are returned (`truncated: true` beyond).

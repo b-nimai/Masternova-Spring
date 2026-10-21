@@ -6,6 +6,7 @@ import com.masternova.api.catalog.CourseFacts.Availability;
 import com.masternova.api.catalog.CourseFacts.LectureFacts;
 import com.masternova.api.catalog.CourseOffer;
 import com.masternova.api.catalog.CourseOutline;
+import com.masternova.api.catalog.CourseStanding;
 import com.masternova.api.catalog.LectureOutline;
 import com.masternova.api.catalog.domain.Course;
 import com.masternova.api.catalog.domain.CourseRepository;
@@ -39,6 +40,18 @@ class CatalogQueries implements CatalogApi {
   @Override
   public Optional<CourseFacts> courseFacts(UUID courseId) {
     return courses.findFactsById(courseId).map(CatalogQueries::facts);
+  }
+
+  @Override
+  public Optional<CourseStanding> courseStanding(UUID courseId) {
+    return courses
+        .findStandingById(courseId)
+        .map(r -> new CourseStanding(r.courseId(), r.instructorId(), availability(r.status())));
+  }
+
+  @Override
+  public Optional<CourseStanding> courseStandingOfLecture(UUID lectureId) {
+    return courses.findCourseIdByLectureId(lectureId).flatMap(this::courseStanding);
   }
 
   @Override
@@ -106,6 +119,11 @@ class CatalogQueries implements CatalogApi {
   @Transactional // joins the caller's: the summary moves with the review that changed it
   public boolean updateRating(UUID courseId, int count, BigDecimal average) {
     return courses.updateRating(courseId, count, Course.checkedRatingAverage(average, count)) > 0;
+  }
+
+  @Override
+  public List<UUID> ratedCourses(UUID afterCourseId, int limit) {
+    return courses.findRatedIds(afterCourseId == null ? null : afterCourseId.toString(), limit);
   }
 
   private static LectureOutline outline(LectureRow r) {

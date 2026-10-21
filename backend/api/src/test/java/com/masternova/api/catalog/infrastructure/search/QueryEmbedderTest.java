@@ -48,6 +48,10 @@ class QueryEmbedderTest {
     model.delay(Duration.ZERO);
     assertThatThrownBy(() -> embedder.embed("slow")) // open
         .isInstanceOf(EmbeddingUnavailableException.class);
+    // ⭐ and the abandoned call was INTERRUPTED, not left holding its thread and connection
+    org.awaitility.Awaitility.await()
+        .atMost(Duration.ofSeconds(2))
+        .until(() -> model.interrupted() == 1);
   }
 
   static final class MutableClock extends Clock {

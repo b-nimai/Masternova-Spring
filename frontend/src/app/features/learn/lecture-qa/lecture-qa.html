@@ -63,7 +63,12 @@
 
         @if (openId() === q.id) {
           <div class="thread" data-testid="thread">
-            @if (thread.value(); as t) {
+            @if (thread.error()) {
+              <p data-testid="thread-error">
+                We couldn't load this thread.
+                <button mat-button type="button" (click)="thread.reload()">Retry</button>
+              </p>
+            } @else if (thread.hasValue() ? thread.value() : null; as t) {
               @if (t.question.body) {
                 <p class="body">{{ t.question.body }}</p>
               }

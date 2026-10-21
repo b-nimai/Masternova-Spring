@@ -83,6 +83,48 @@ describe('CourseReviews', () => {
       .flush({ items: [], nextCursor: null });
   });
 
+  it('drops a "Show more" page that lands after the list was started over', async () => {
+    await render(true);
+    http
+      .expectOne('/api/v1/me/reviews/c1')
+      .flush({ status: 404 }, { status: 404, statusText: 'Not Found' });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    el('more-reviews')?.click();
+    const stale = http.expectOne((r) => r.params.get('cursor') === 'next');
+    el('star-3')?.click();
+    fixture.detectChanges();
+    el('save-review')?.click();
+    http.expectOne((r) => r.method === 'PUT').flush(review('mine', 3));
+    TestBed.tick();
+
+    expect(stale.cancelled).toBe(true); // ⭐ its page belonged to the old list
+    http
+      .expectOne('/api/v1/courses/c1/reviews/summary')
+      .flush({ average: 4, count: 3, stars: [0, 0, 1, 1, 1] });
+    http
+      .expectOne((r) => r.url === '/api/v1/courses/c1/reviews' && !r.params.has('cursor'))
+      .flush({ items: [review('mine', 3), review('r1', 5)], nextCursor: null });
+  });
+
+  it('still lists reviews when the summary fails', async () => {
+    fixture.componentRef.setInput('courseId', 'c1');
+    fixture.detectChanges();
+    TestBed.tick();
+    http
+      .expectOne('/api/v1/courses/c1/reviews/summary')
+      .flush({ status: 500 }, { status: 500, statusText: 'Server Error' });
+    http
+      .expectOne((r) => r.url === '/api/v1/courses/c1/reviews')
+      .flush({ items: [review('r1', 5)], nextCursor: null });
+    await fixture.whenStable();
+    fixture.detectChanges(); // used to throw: value() of a resource in error
+
+    expect(el('average')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('[data-testid="review-item"]').length).toBe(1);
+  });
+
   it('explains a refusal instead of failing', async () => {
     await render(true);
     http

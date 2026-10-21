@@ -193,6 +193,7 @@ of a k-NN query doesn't depend on what the vectors mean), the exact SQL of `Sema
 | 100 nearest, HNSW, `ef_search = 100` (warm) | **2.6 ms** |
 | 100 nearest, exact (index scans off: sequential scan + top-N sort) | 43 ms |
 | the sweep's stale-course query when nothing is stale (md5 over every published course's text) | 24 ms per run (once a minute) |
+| … after V29 (a generated `embedding_text_hash` compared instead; Phase 11 review) | **7 ms** (V29's rewrite of `course`: 294 ms) |
 
 Three findings, each now in code and in a test:
 
