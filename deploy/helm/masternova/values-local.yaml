@@ -4,7 +4,7 @@
 #    pushed to GHCR from a commit on main; `make k8s-bump TAG=sha-…` changes it, as your commit.
 #    (The inner loop, `make k8s-deploy`, overrides registry + tag with locally built images.)
 image:
-  tag: sha-ccf78bb # the newest commit with all three images on GHCR (CI fix in D4.5, ci.yml)
+  tag: sha-a2f5c0b # the newest commit with all three images on GHCR (CI fix in D4.5, ci.yml)
 
 config:
   STORAGE_ENDPOINT: http://seaweedfs:8333 # the infra chart's SeaweedFS
