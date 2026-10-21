@@ -138,19 +138,19 @@ class CourseTest {
   @Test
   void theRatingSummaryIsConsistent() {
     Course course = draft("k8s-zero", "en");
-    course.updateRatingSummary(new BigDecimal("4.567"), 12);
+    course.initialRatingSummary(new BigDecimal("4.567"), 12);
     assertThat(course.ratingAverage()).isEqualByComparingTo("4.57");
     assertThat(course.ratingCount()).isEqualTo(12);
 
-    assertThatThrownBy(() -> course.updateRatingSummary(new BigDecimal("5.1"), 3))
+    assertThatThrownBy(() -> course.initialRatingSummary(new BigDecimal("5.1"), 3))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> course.updateRatingSummary(new BigDecimal("-1"), 3))
+    assertThatThrownBy(() -> course.initialRatingSummary(new BigDecimal("-1"), 3))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> course.updateRatingSummary(BigDecimal.ONE, -1))
+    assertThatThrownBy(() -> course.initialRatingSummary(BigDecimal.ONE, -1))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> course.updateRatingSummary(BigDecimal.ZERO, 3))
+    assertThatThrownBy(() -> course.initialRatingSummary(BigDecimal.ZERO, 3))
         .isInstanceOf(IllegalArgumentException.class);
-    assertThatThrownBy(() -> course.updateRatingSummary(BigDecimal.ONE, 0))
+    assertThatThrownBy(() -> course.initialRatingSummary(BigDecimal.ONE, 0))
         .isInstanceOf(IllegalArgumentException.class);
   }
 

@@ -122,10 +122,12 @@ public class Course {
   @JoinColumn(name = "category_id")
   private Category category;
 
-  @Column(name = "rating_average", nullable = false, precision = 3, scale = 2)
+  // ⭐ written only by CourseRepository.updateRating (engagement's tally, Phase 11, ADR-0023): never
+  //    by a save of this entity, which would write back the average it loaded minutes ago
+  @Column(name = "rating_average", nullable = false, precision = 3, scale = 2, updatable = false)
   private BigDecimal ratingAverage;
 
-  @Column(name = "rating_count", nullable = false)
+  @Column(name = "rating_count", nullable = false, updatable = false)
   private int ratingCount;
 
   // ⭐ written only by CourseRepository.adjustEnrollmentCount (enrollment, Phase 10): never by a
@@ -542,16 +544,30 @@ public class Course {
     updatedAt = micros(now);
   }
 
-  /** The rating summary is owned by engagement (Phase 11); catalog stores it to sort by it. */
-  public void updateRatingSummary(BigDecimal average, int count) {
+  /**
+   * A rating summary for a course not yet saved (the test data builder): the columns are not
+   * updatable, so on a loaded course this would be silently lost — engagement writes them through
+   * {@code CatalogApi.updateRating} instead.
+   */
+  void initialRatingSummary(BigDecimal average, int count) {
+    ratingAverage = checkedRatingAverage(average, count);
+    ratingCount = count;
+  }
+
+  /**
+   * The rule of a rating summary (owned by engagement, Phase 11; catalog stores it to sort by it):
+   * an average of 0–5 over a non-negative count, both zero or neither.
+   *
+   * @return the average at the column's scale (2, HALF_UP)
+   */
+  public static BigDecimal checkedRatingAverage(BigDecimal average, int count) {
     if (count < 0 || average.signum() < 0 || average.compareTo(MAX_RATING) > 0) {
       throw new IllegalArgumentException("a rating average is 0–5 over a non-negative count");
     }
     if ((count == 0) != (average.signum() == 0)) {
       throw new IllegalArgumentException("an average needs ratings, and ratings need an average");
     }
-    ratingAverage = average.setScale(2, java.math.RoundingMode.HALF_UP);
-    ratingCount = count;
+    return average.setScale(2, java.math.RoundingMode.HALF_UP);
   }
 
   // ------------------------------------------------------------------ rules

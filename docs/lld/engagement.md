@@ -145,7 +145,10 @@ sequenceDiagram
 2. Each one is repaired in its **own short transaction**: lock the tally row, recount *that
    course* (a fresh statement, so a review committed while we waited is counted), write, push to
    catalog.
-3. A non-zero repair count is logged at WARN: something wrote around the code.
+3. Catalog's columns are compared with every tally (500 locked tallies per transaction, an
+   `UPDATE … WHERE … IS DISTINCT FROM`), which repairs a course saved by a pre-Phase-11 pod with
+   the average it had loaded (its entity still wrote the column).
+4. A non-zero repair count is logged at WARN: something wrote around the code.
 
 ⭐ Recounting in step 1's snapshot and writing that would be wrong: a review committing between
 the snapshot and the write would be erased by the "repair". The lock-then-recount in step 2 is
@@ -206,9 +209,9 @@ worker's emails, enrollment following entitlement).
 
 ## 9. Data & indexes
 
-`V25__engagement.sql`: `review` (`UNIQUE (course_id, user_id)` = "one each" and the learner's
+`V25__engagement_review.sql`: `review` (`UNIQUE (course_id, user_id)` = "one each" and the learner's
 lookup; `(course_id, created_at DESC, id DESC)` = the newest-first keyset page), `course_rating`
-(PK `course_id`), `question` (`(lecture_id, created_at DESC, id DESC)` = the lecture's page),
+(PK `course_id`); `V26__engagement_qa.sql`: `question` (`(lecture_id, created_at DESC, id DESC)` = the lecture's page),
 `answer` (`(question_id, parent_id)` = each level of the recursive CTE; `UNIQUE (question_id, id)`
 for the composite FK that keeps a reply in its parent's question). All FKs to `course`,
 `lecture` and `app_user` are `ON DELETE CASCADE`: a deleted course takes its engagement with it.
@@ -222,10 +225,12 @@ one per repaired course, never one for the whole run.
   below 0.
 - `ReviewIT`: create → edit → delete moves the tally and catalog's columns exactly; **20 concurrent
   `PUT`s by one learner → count 1**; 10 learners concurrently → count 10, sum exact; not enrolled →
-  403; the instructor → 403 `OWN_COURSE`; a draft → 404; the catalog update rolls back with a
-  failed review.
-- `RatingReconcileIT`: cascade-deleting a user → drift found → repaired, catalog updated; a review
-  committed while the job waits on the lock is kept.
+  403; the instructor → 403 `OWN_COURSE`; a draft → 404; newest-first pages and the summary,
+  public. Mutation-checked: reading the old rating before taking the lock fails the 20-writer test
+  (10 reviews counted for one learner).
+- `RatingReconcileIT`: cascade-deleting a user → drift found → repaired, catalog updated; a stale
+  catalog summary (a pre-Phase-11 pod's save) repaired; a review committed while the job waits on
+  the lock is kept.
 - `QuestionIT`: keyset pages with no duplicates while new questions arrive; the thread in reading
   order; depth 4 → 422; an answer from the instructor is flagged; not enrolled → 403; a retried
   post with the same key → one row.

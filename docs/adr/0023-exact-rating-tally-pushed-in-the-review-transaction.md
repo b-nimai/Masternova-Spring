@@ -48,8 +48,10 @@ columns.
 - **Drift is bounded by a day** for writes around the code (cascades, manual SQL), and visible
   (the WARN). The reconciler doesn't erase a review committed while it waits: it counts after the
   lock, in a new statement (`RatingReconcileIT`).
-- `Course.updateRatingSummary` (a Phase 5 placeholder that set the columns through the entity) is
-  gone; the rule it checked (0–5, count and average both zero or both not) is now `RatingTally`'s.
+- `Course.updateRatingSummary` (a Phase 5 placeholder that set the columns through the entity, now
+  silently lost on a loaded course) is gone. Its rule (0–5, count and average both zero or both
+  not) is `Course.checkedRatingAverage`, applied by `updateRating`; the test data builder sets a
+  summary only on a course not yet saved.
 
 ## Alternatives considered
 

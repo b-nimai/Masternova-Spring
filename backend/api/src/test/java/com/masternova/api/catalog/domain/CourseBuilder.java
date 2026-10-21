@@ -191,7 +191,7 @@ public final class CourseBuilder {
       spec.lectures().forEach(lecture -> lecture.addTo(course, section));
     }
     if (ratingAverage != null) {
-      course.updateRatingSummary(ratingAverage, ratingCount);
+      course.initialRatingSummary(ratingAverage, ratingCount);
     }
     if (submitted || publishedAt != null) {
       Instant at = publishedAt != null ? publishedAt : createdAt;

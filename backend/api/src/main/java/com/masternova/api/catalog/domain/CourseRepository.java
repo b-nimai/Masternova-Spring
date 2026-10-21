@@ -1,6 +1,7 @@
 package com.masternova.api.catalog.domain;
 
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -91,4 +92,20 @@ public interface CourseRepository
           "UPDATE course SET enrollment_count = GREATEST(enrollment_count + :delta, 0) WHERE id = :id",
       nativeQuery = true)
   int adjustEnrollmentCount(UUID id, int delta);
+
+  /**
+   * ⭐ Sets the rating summary engagement computed from its locked tally (ADR-0023): absolute
+   * values, joining the caller's transaction, never bumping {@code version} (a review is not an
+   * edit). {@code IS DISTINCT FROM}: a value already right matches nothing, so the reconciler can
+   * count what it really repaired.
+   */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE course SET rating_count = :count, rating_average = :average
+          WHERE id = :id AND (rating_count, rating_average) IS DISTINCT FROM (:count, :average)
+          """,
+      nativeQuery = true)
+  int updateRating(UUID id, int count, BigDecimal average);
 }

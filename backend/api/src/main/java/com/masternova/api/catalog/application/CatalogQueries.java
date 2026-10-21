@@ -12,6 +12,7 @@ import com.masternova.api.catalog.domain.CourseRepository;
 import com.masternova.api.catalog.domain.CourseStatus;
 import com.masternova.api.catalog.domain.LectureKind;
 import com.masternova.api.catalog.domain.LectureRow;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * {@link CatalogApi} — the read side other modules use. Two statements per course's facts, one per
- * batch of offers, two per batch of outlines. Plus one counter others write (enrollments).
+ * batch of offers, two per batch of outlines. Plus the numbers others write: enrollments, ratings.
  */
 @Service
 @Transactional(readOnly = true)
@@ -99,6 +100,12 @@ class CatalogQueries implements CatalogApi {
   @Transactional // joins the caller's: the counter moves with the caller's own change
   public void adjustEnrollmentCount(UUID courseId, int delta) {
     courses.adjustEnrollmentCount(courseId, delta);
+  }
+
+  @Override
+  @Transactional // joins the caller's: the summary moves with the review that changed it
+  public boolean updateRating(UUID courseId, int count, BigDecimal average) {
+    return courses.updateRating(courseId, count, Course.checkedRatingAverage(average, count)) > 0;
   }
 
   private static LectureOutline outline(LectureRow r) {
