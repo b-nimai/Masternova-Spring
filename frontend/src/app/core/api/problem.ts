@@ -35,6 +35,11 @@ export function asProblem(error: unknown): Problem | null {
   return null;
 }
 
+/** A 404: "doesn't exist (for you)" — an answer, not an outage. */
+export function isNotFound(error: unknown): boolean {
+  return error instanceof HttpErrorResponse && error.status === 404;
+}
+
 /** `{ email: 'Enter a valid email address.' }` — ready to attach to form controls. */
 export function fieldErrors(problem: Problem | null): Record<string, string> {
   const result: Record<string, string> = {};

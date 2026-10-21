@@ -141,11 +141,16 @@ sequenceDiagram
    definition, hashed once per write of the row instead of once per sweep).
 2. Embed them in **one batch call**, outside any transaction (a model call is slow; holding a
    connection across it starves the pool). If the batch fails, each text is tried alone, so one
-   text the model always refuses can't block the courses after it, run after run.
+   text the model always refuses can't block the courses after it, run after run. A text refused
+   while others succeed is **remembered** (course → hash, per replica) and skipped until it
+   changes; two failures before any success are an outage, and the run stops (a hanging model
+   would otherwise cost 32 read timeouts).
 3. Upsert each `(course_id, model, content_hash, embedding)`. If the course was edited during the
    call, its hash no longer matches and the next run re-embeds it.
 4. Delete the embeddings of courses that are no longer published, so the HNSW index holds only
    what search can return.
+5. A full batch means more are waiting: the job runs up to 10 batches per tick (320 courses a
+   minute) inside its 5-minute lock, so a new model or a big import drains in ~30 min, not 5 h.
 
 No event, no listener: the sweep **is** the mechanism, so a missed event, a model outage or a
 new model name all heal the same way. The cost is ≤ 60 s of freshness, the force accepted in §2.
@@ -202,16 +207,17 @@ when a new keystroke arrives.
   dead rows (HNSW keeps dead entries in its graph until vacuum).
 
 **Transactions:** none around a search. The semantic ranker waits up to 2 s on the model, so each
-ranker's query (the semantic one with its two transaction-local settings) and the card load are
-short statements of their own; no pooled connection waits on the model. The sweep calls the model
+ranker's query and the card load are short auto-commit statements of their own (the HNSW
+settings are per connection); no pooled connection waits on the model. The sweep calls the model
 outside any transaction and upserts in one short one.
 
 Measured with `make seed COURSES=10000` (EXPLAIN ANALYZE, [docs/db/indexes.md §9](../db/indexes.md#9-phase-11--search-indexes-2026-10-21)):
 keyword search 1.5–2.2 ms with the GIN index vs 3.5–4.3 ms by sequential scan for common words,
 and 0.015 ms vs 1.8 ms for a word nobody uses; the 100 nearest of 9,039 vectors in 2.6 ms with
 HNSW vs 43 ms exact. Two HNSW traps found there and fixed: `hnsw.ef_search` (default 40) caps
-the rows a scan returns, so the ranker raises it per query; dead graph entries hide live rows
-until `VACUUM`, so V28 vacuums the table early and the ranker turns on `hnsw.iterative_scan`.
+the rows a scan returns, so every connection sets it to 100; dead graph entries hide live rows
+until `VACUUM`, so V28 vacuums the table early and every connection turns on
+`hnsw.iterative_scan` (Hikari `connection-init-sql`).
 
 ## 10. Tests that prove it
 

@@ -7,7 +7,7 @@
       <input
         matInput
         name="title"
-        maxlength="150"
+        [maxlength]="limits.questionTitle"
         data-testid="ask-title"
         [ngModel]="askTitle()"
         (ngModelChange)="askTitle.set($event)"
@@ -20,7 +20,7 @@
           matInput
           rows="3"
           name="body"
-          maxlength="5000"
+          [maxlength]="limits.postBody"
           [ngModel]="askBody()"
           (ngModelChange)="askBody.set($event)"
         ></textarea>
@@ -86,13 +86,13 @@
                     · {{ a.createdAt | date: 'short' }}
                   </p>
                   <p class="body">{{ a.body }}</p>
-                  @if (a.depth < maxDepth) {
+                  @if (a.depth < limits.answerDepth) {
                     <button mat-button type="button" (click)="startReply(a)">Reply</button>
                   }
                 </div>
               }
               @if (t.truncated) {
-                <p class="meta">Only the first 500 answers are shown.</p>
+                <p class="meta">Only the first {{ limits.threadAnswers }} answers are shown.</p>
               }
               <form class="reply" (ngSubmit)="postReply()">
                 <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -101,7 +101,7 @@
                     matInput
                     rows="2"
                     name="reply"
-                    maxlength="5000"
+                    [maxlength]="limits.postBody"
                     data-testid="reply-body"
                     [ngModel]="replyBody()"
                     (ngModelChange)="replyBody.set($event)"

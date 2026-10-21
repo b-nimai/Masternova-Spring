@@ -144,6 +144,14 @@ public interface CourseRepository
       """)
   Optional<CourseStandingRow> findStandingById(UUID id);
 
+  /** The same for the course of a lecture: one join, no aggregate. */
+  @Query(
+      """
+      select new com.masternova.api.catalog.domain.CourseStandingRow(c.id, c.instructorId, c.status)
+      from Lecture l join l.section s join s.course c where l.id = :lectureId
+      """)
+  Optional<CourseStandingRow> findStandingByLectureId(UUID lectureId);
+
   /** The courses whose stored rating isn't empty, a page at a time in id order (Phase 11). */
   @Query(
       value =

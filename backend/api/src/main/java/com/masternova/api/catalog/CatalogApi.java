@@ -65,6 +65,13 @@ public interface CatalogApi {
   boolean updateRating(UUID courseId, int count, BigDecimal average);
 
   /**
+   * {@link #updateRating} for many courses in ONE statement (the reconciler's pages of 500).
+   *
+   * @return how many stored summaries changed
+   */
+  int updateRatings(List<RatingSummary> ratings);
+
+  /**
    * The courses whose stored rating isn't empty, in id order, after {@code afterCourseId} ({@code
    * null}: from the first) — the reconciler finds ratings no tally explains (Phase 11).
    */

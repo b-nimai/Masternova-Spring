@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { Observable } from 'rxjs';
-import { CursorPage } from './catalog-api';
+import { CursorPage } from './cursor-page';
 
 /** Mirrors `ReviewResponse`. The author is a name only, never an id. */
 export interface ReviewResponse {
@@ -58,8 +58,17 @@ export interface QuestionThreadResponse {
   truncated: boolean;
 }
 
-/** How deep a reply may go (the server answers 422 `REPLY_TOO_DEEP` beyond). */
-export const MAX_ANSWER_DEPTH = 3;
+/** The server's limits, mirrored (`Review`, `Question`, `Answer`, `QuestionQueries`). */
+export const LIMITS = {
+  reviewBody: 2000,
+  questionTitle: 150,
+  /** A question's details and an answer's text. */
+  postBody: 5000,
+  /** How deep a reply may go: 422 `REPLY_TOO_DEEP` beyond. */
+  answerDepth: 3,
+  /** A thread shows at most this many answers (`truncated` beyond). */
+  threadAnswers: 500,
+} as const;
 
 /** The engagement module's API (API conventions §16): reviews and lecture Q&A. */
 @Service()

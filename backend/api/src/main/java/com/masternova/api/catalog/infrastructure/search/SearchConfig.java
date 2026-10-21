@@ -61,9 +61,8 @@ class SearchConfig {
   }
 
   @Bean
-  SemanticRanker semanticRanker(
-      JdbcClient jdbc, TransactionOperations tx, QueryEmbedder embedder, SearchProperties props) {
-    return new SemanticRanker(jdbc, tx, embedder, props.maxDistance());
+  SemanticRanker semanticRanker(JdbcClient jdbc, QueryEmbedder embedder, SearchProperties props) {
+    return new SemanticRanker(jdbc, embedder, props.maxDistance());
   }
 
   @Bean

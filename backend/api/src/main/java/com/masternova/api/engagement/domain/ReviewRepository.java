@@ -27,7 +27,8 @@ public interface ReviewRepository {
   /** Inserts the review, or overwrites the learner's existing one (same id). */
   void save(Review review);
 
-  void delete(UUID reviewId);
+  /** Deletes the learner's review of the course; the rating it had, if there was one. */
+  Optional<Integer> delete(UUID courseId, UUID userId);
 
   /** The course's reviews, newest first, after the cursor ({@code null}: from the top). */
   List<Review> page(UUID courseId, Instant beforeAt, UUID beforeId, int limit);

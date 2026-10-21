@@ -1,7 +1,7 @@
 package com.masternova.api.engagement.application;
 
 import com.masternova.api.engagement.domain.Answer;
-import com.masternova.api.engagement.domain.Participant;
+import com.masternova.api.engagement.domain.CourseRef;
 import com.masternova.api.engagement.domain.Question;
 import com.masternova.api.engagement.domain.QuestionRepository;
 import com.masternova.api.identity.CurrentUser;
@@ -40,11 +40,11 @@ public class QuestionService {
   /** 404 for a lecture not in a published course; 403 {@code NOT_ENROLLED}. */
   @Transactional
   public Posted<Question> ask(CurrentUser me, UUID lectureId, String title, String body) {
-    Participant who = participants.ofLecture(me, lectureId);
+    CourseRef course = participants.ofLecture(me, lectureId);
     Question question =
-        Question.ask(who.course().courseId(), lectureId, me.id(), name(me), title, body, now());
+        Question.ask(course.courseId(), lectureId, me.id(), name(me), title, body, now());
     questions.insert(question);
-    return new Posted<>(question, who.course().instructorId());
+    return new Posted<>(question, course.instructorId());
   }
 
   /**
@@ -56,7 +56,7 @@ public class QuestionService {
   public Posted<Answer> answer(CurrentUser me, UUID questionId, UUID parentId, String body) {
     Question question =
         questions.find(questionId).orElseThrow(() -> new NotFoundException("Question", questionId));
-    Participant who = participants.ofLecture(me, question.lectureId()); // as for asking
+    CourseRef course = participants.ofLecture(me, question.lectureId()); // as for asking
     Instant now = now();
     Answer answer =
         parentId == null
@@ -66,7 +66,7 @@ public class QuestionService {
                 .orElseThrow(() -> new NotFoundException("Answer", parentId))
                 .reply(me.id(), name(me), body, now);
     questions.insert(answer);
-    return new Posted<>(answer, who.course().instructorId());
+    return new Posted<>(answer, course.instructorId());
   }
 
   private String name(CurrentUser me) {

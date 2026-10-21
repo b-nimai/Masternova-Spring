@@ -1,7 +1,7 @@
 package com.masternova.api.engagement.application;
 
 import com.masternova.api.engagement.domain.Answer;
-import com.masternova.api.engagement.domain.Participant;
+import com.masternova.api.engagement.domain.CourseRef;
 import com.masternova.api.engagement.domain.Question;
 import com.masternova.api.engagement.domain.QuestionRepository;
 import com.masternova.api.identity.CurrentUser;
@@ -36,32 +36,27 @@ public class QuestionQueries {
       Question question, List<Answer> answers, boolean truncated, UUID instructorId) {}
 
   public QuestionPage page(CurrentUser me, UUID lectureId, String cursor, int limit) {
-    Participant who = participants.ofLecture(me, lectureId);
-    NewestFirstCursor after = NewestFirstCursor.decode(cursor);
-    List<Question> rows =
-        questions.page(
-            lectureId,
-            after == null ? null : after.at(),
-            after == null ? null : after.id(),
-            limit + 1); // ⭐ one more: "is there a next page?"
-    String next = null;
-    if (rows.size() > limit) {
-      rows = List.copyOf(rows.subList(0, limit));
-      next = new NewestFirstCursor(rows.getLast().createdAt(), rows.getLast().id()).encode();
-    }
-    return new QuestionPage(new CursorPage<>(rows, next), who.course().instructorId());
+    CourseRef course = participants.ofLecture(me, lectureId);
+    CursorPage<Question> page =
+        NewestFirstCursor.page(
+            cursor,
+            limit,
+            (at, id, n) -> questions.page(lectureId, at, id, n),
+            Question::createdAt,
+            Question::id);
+    return new QuestionPage(page, course.instructorId());
   }
 
   public QuestionThread thread(CurrentUser me, UUID questionId) {
     Question question =
         questions.find(questionId).orElseThrow(() -> new NotFoundException("Question", questionId));
-    Participant who = participants.ofLecture(me, question.lectureId());
+    CourseRef course = participants.ofLecture(me, question.lectureId());
     List<Answer> answers = questions.thread(questionId, MAX_THREAD + 1);
     boolean truncated = answers.size() > MAX_THREAD;
     return new QuestionThread(
         question,
         truncated ? List.copyOf(answers.subList(0, MAX_THREAD)) : answers,
         truncated,
-        who.course().instructorId());
+        course.instructorId());
   }
 }

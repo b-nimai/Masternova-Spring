@@ -7,11 +7,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { of } from 'rxjs';
+import { Observable } from 'rxjs';
 import {
   AnswerResponse,
   EngagementApi,
-  MAX_ANSWER_DEPTH,
+  LIMITS,
   QuestionSummary,
 } from '../../../core/api/engagement-api';
 import { asProblem } from '../../../core/api/problem';
@@ -44,7 +44,7 @@ export class LectureQa {
 
   readonly lectureId = input.required<string>();
 
-  protected readonly maxDepth = MAX_ANSWER_DEPTH;
+  protected readonly limits = LIMITS;
 
   protected readonly questions = signal<QuestionSummary[]>([]);
   protected readonly nextCursor = signal<string | null>(null);
@@ -52,19 +52,19 @@ export class LectureQa {
 
   protected readonly askTitle = signal('');
   protected readonly askBody = signal('');
-  private askKey = crypto.randomUUID();
+  private readonly askDraft = new Draft();
 
   /** The open thread, or none. */
   protected readonly openId = signal<string | null>(null);
   protected readonly thread = rxResource({
     params: () => this.openId() ?? undefined,
-    stream: ({ params: id }) => (id ? this.api.thread(id) : of(null)),
+    stream: ({ params: id }) => this.api.thread(id),
   });
 
   /** The answer being replied to (null = answering the question itself). */
   protected readonly replyTo = signal<string | null>(null);
   protected readonly replyBody = signal('');
-  private replyKey = crypto.randomUUID();
+  private readonly replyDraft = new Draft();
 
   protected readonly posting = signal(false);
   protected readonly postError = signal<string | null>(null);
@@ -88,26 +88,18 @@ export class LectureQa {
 
   protected ask(): void {
     const title = this.askTitle().trim();
-    if (!title || this.posting()) {
+    if (!title) {
       return;
     }
-    this.posting.set(true);
-    this.postError.set(null);
-    this.api.ask(this.lectureId(), { title, body: this.askBody().trim() }, this.askKey).subscribe({
-      next: (question) => {
-        this.posting.set(false);
-        this.askKey = crypto.randomUUID();
+    this.post(
+      (key) => this.api.ask(this.lectureId(), { title, body: this.askBody().trim() }, key),
+      this.askDraft,
+      (question) => {
         this.askTitle.set('');
         this.askBody.set('');
         this.questions.update((list) => [question, ...list]);
       },
-      error: (e: unknown) => {
-        if (isRefusal(e)) {
-          this.askKey = crypto.randomUUID();
-        }
-        this.failed(e);
-      },
-    });
+    );
   }
 
   protected open(questionId: string): void {
@@ -119,21 +111,19 @@ export class LectureQa {
   protected startReply(answer: AnswerResponse | null): void {
     this.replyTo.set(answer?.id ?? null);
     this.replyBody.set('');
-    this.replyKey = crypto.randomUUID();
+    this.replyDraft.renew();
   }
 
   protected postReply(): void {
     const questionId = this.openId();
     const body = this.replyBody().trim();
-    if (!questionId || !body || this.posting()) {
+    if (!questionId || !body) {
       return;
     }
-    this.posting.set(true);
-    this.postError.set(null);
-    this.api.answer(questionId, { parentAnswerId: this.replyTo(), body }, this.replyKey).subscribe({
-      next: () => {
-        this.posting.set(false);
-        this.replyKey = crypto.randomUUID();
+    this.post(
+      (key) => this.api.answer(questionId, { parentAnswerId: this.replyTo(), body }, key),
+      this.replyDraft,
+      () => {
         this.replyBody.set('');
         this.replyTo.set(null);
         this.thread.reload(); // the new answer in its place in reading order
@@ -141,9 +131,29 @@ export class LectureQa {
           list.map((q) => (q.id === questionId ? { ...q, answerCount: q.answerCount + 1 } : q)),
         );
       },
+    );
+  }
+
+  /** One post: busy while in flight, the draft's key kept or renewed by the outcome (§5). */
+  private post<T>(
+    request: (key: string) => Observable<T>,
+    draft: Draft,
+    done: (r: T) => void,
+  ): void {
+    if (this.posting()) {
+      return;
+    }
+    this.posting.set(true);
+    this.postError.set(null);
+    request(draft.key).subscribe({
+      next: (result) => {
+        this.posting.set(false);
+        draft.renew();
+        done(result);
+      },
       error: (e: unknown) => {
         if (isRefusal(e)) {
-          this.replyKey = crypto.randomUUID();
+          draft.renew();
         }
         this.failed(e);
       },
@@ -176,6 +186,15 @@ export class LectureQa {
           ? 'Enroll in this course to take part.'
           : "We couldn't post that. Try again.",
     );
+  }
+}
+
+/** A post's Idempotency-Key: kept across retries of the same post, renewed for the next one. */
+class Draft {
+  key = crypto.randomUUID();
+
+  renew(): void {
+    this.key = crypto.randomUUID();
   }
 }
 

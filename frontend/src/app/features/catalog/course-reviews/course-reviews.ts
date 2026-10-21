@@ -1,5 +1,4 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -8,11 +7,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { catchError, of, Subscription, throwError } from 'rxjs';
-import { EngagementApi, ReviewResponse } from '../../../core/api/engagement-api';
-import { asProblem } from '../../../core/api/problem';
-
-/** The server's limit on a review's text (`Review.MAX_BODY`). */
-export const MAX_REVIEW_LENGTH = 2000;
+import { EngagementApi, LIMITS, ReviewResponse } from '../../../core/api/engagement-api';
+import { asProblem, isNotFound } from '../../../core/api/problem';
 
 /**
  * The course page's reviews (Phase 11.5): the star distribution, the newest reviews with "Show
@@ -46,7 +42,7 @@ export class CourseReviews {
   readonly canReview = input(false);
 
   protected readonly stars = [1, 2, 3, 4, 5];
-  protected readonly maxLength = MAX_REVIEW_LENGTH;
+  protected readonly maxLength = LIMITS.reviewBody;
 
   protected readonly summary = rxResource({
     params: () => this.courseId(),
@@ -66,7 +62,6 @@ export class CourseReviews {
     const s = this.summaryValue();
     return [5, 4, 3, 2, 1].map((star) => ({
       star,
-      count: s?.stars[star - 1] ?? 0,
       percent: s && s.count > 0 ? Math.round((100 * s.stars[star - 1]) / s.count) : 0,
     }));
   });
@@ -81,11 +76,7 @@ export class CourseReviews {
     stream: ({ params: id }) =>
       this.api
         .myReview(id)
-        .pipe(
-          catchError((e: unknown) =>
-            e instanceof HttpErrorResponse && e.status === 404 ? of(null) : throwError(() => e),
-          ),
-        ),
+        .pipe(catchError((e: unknown) => (isNotFound(e) ? of(null) : throwError(() => e)))),
   });
 
   /** The saved review, or null (none yet, or it couldn't be loaded: the form starts empty). */

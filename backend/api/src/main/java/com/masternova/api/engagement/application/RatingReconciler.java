@@ -1,6 +1,7 @@
 package com.masternova.api.engagement.application;
 
 import com.masternova.api.catalog.CatalogApi;
+import com.masternova.api.catalog.RatingSummary;
 import com.masternova.api.engagement.domain.RatingTally;
 import com.masternova.api.engagement.domain.ReviewRepository;
 import com.masternova.api.engagement.domain.ReviewRepository.CourseTally;
@@ -42,82 +43,83 @@ public class RatingReconciler {
 
   public Repairs reconcile() {
     int tallies = 0;
-    for (UUID courseId : reviews.drifted()) { // a candidate list: re-checked under the lock
-      if (Boolean.TRUE.equals(tx.execute(s -> repairTally(courseId)))) {
+    for (UUID courseId : reviews.drifted()) { // candidates only: re-checked under the lock
+      if (repair(courseId).tally()) {
         tallies++;
       }
     }
-    return new Repairs(tallies, repairCatalog() + repairUntallied());
+    int catalogRepairs = pushTallies();
+    for (UUID courseId : untallied()) {
+      if (repair(courseId).catalog()) {
+        catalogRepairs++;
+      }
+    }
+    return new Repairs(tallies, catalogRepairs);
   }
 
-  private boolean repairTally(UUID courseId) {
-    RatingTally stored = reviews.lockTally(courseId);
-    RatingTally truth = reviews.recount(courseId); // ⭐ a new statement: sees what committed
-    if (truth.equals(stored)) {
-      return false; // drifted no more: a review write fixed it, or it was a false candidate
-    }
-    reviews.saveTally(courseId, truth);
-    catalog.updateRating(courseId, truth.count(), truth.average());
-    return true;
+  private record Repaired(boolean tally, boolean catalog) {}
+
+  /**
+   * ⭐ THE repair, for one course in one transaction: lock the tally (creating an empty one if there
+   * is none), recount — a new statement, so it sees what committed while we waited — save it if it
+   * differs, and set catalog's summary from it.
+   */
+  private Repaired repair(UUID courseId) {
+    return tx.execute(
+        s -> {
+          RatingTally stored = reviews.lockTally(courseId);
+          RatingTally truth = reviews.recount(courseId);
+          boolean tally = !truth.equals(stored);
+          if (tally) {
+            reviews.saveTally(courseId, truth);
+          }
+          return new Repaired(
+              tally, catalog.updateRating(courseId, truth.count(), truth.average()));
+        });
   }
 
   /**
-   * Catalog's columns agree with every tally: a page of locked tallies per transaction, pushed with
-   * {@code IS DISTINCT FROM} so only real differences count.
+   * Catalog's columns agree with every tally: a page of LOCKED tallies per transaction (a review
+   * can't change one between the read and the push), pushed in one statement.
    */
-  private int repairCatalog() {
+  private int pushTallies() {
     int repaired = 0;
     UUID after = null;
     while (true) {
       UUID from = after;
-      int[] changed = {0};
-      List<CourseTally> page =
-          tx.execute(
-              s -> {
-                List<CourseTally> rows = reviews.lockTallies(from, PAGE);
-                for (CourseTally row : rows) {
-                  RatingTally t = row.tally();
-                  if (catalog.updateRating(row.courseId(), t.count(), t.average())) {
-                    changed[0]++;
-                  }
-                }
-                return rows;
-              });
-      repaired += changed[0];
-      if (page == null || page.size() < PAGE) {
+      Page page = tx.execute(s -> push(reviews.lockTallies(from, PAGE)));
+      repaired += page.changed();
+      if (page.size() < PAGE) {
         return repaired;
       }
-      after = page.getLast().courseId();
+      after = page.last();
     }
+  }
+
+  private record Page(int size, int changed, UUID last) {}
+
+  private Page push(List<CourseTally> rows) {
+    int changed =
+        catalog.updateRatings(
+            rows.stream()
+                .map(r -> new RatingSummary(r.courseId(), r.tally().count(), r.tally().average()))
+                .toList());
+    return new Page(rows.size(), changed, rows.isEmpty() ? null : rows.getLast().courseId());
   }
 
   /**
-   * ⭐ Catalog says "4.7 (1,500)" but no tally exists: no review written through this module
-   * explains it. Each such course is set from a recount under the tally lock (normally empty, so 0
-   * ratings) — the same lock-then-recount as {@link #repairTally}, so a first review committing
-   * meanwhile is counted, not erased.
+   * Courses catalog shows a rating for, with no tally to explain it ("4.7 (1,500)", no reviews).
    */
-  private int repairUntallied() {
-    int repaired = 0;
+  private List<UUID> untallied() {
+    List<UUID> found = new java.util.ArrayList<>();
     UUID after = null;
     while (true) {
       List<UUID> rated = catalog.ratedCourses(after, PAGE);
-      for (UUID courseId : reviews.withoutTally(rated)) {
-        if (Boolean.TRUE.equals(tx.execute(s -> alignCatalog(courseId)))) {
-          repaired++;
-        }
-      }
+      found.addAll(reviews.withoutTally(rated));
       if (rated.size() < PAGE) {
-        return repaired;
+        return found;
       }
       after = rated.getLast();
     }
-  }
-
-  private boolean alignCatalog(UUID courseId) {
-    reviews.lockTally(courseId); // creates the (empty) row: from now on a tally explains it
-    RatingTally truth = reviews.recount(courseId);
-    reviews.saveTally(courseId, truth);
-    return catalog.updateRating(courseId, truth.count(), truth.average());
   }
 }

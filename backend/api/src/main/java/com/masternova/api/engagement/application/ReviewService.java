@@ -47,7 +47,7 @@ public class ReviewService {
    */
   @Transactional
   public Review write(CurrentUser me, UUID courseId, int rating, String body) {
-    participants.reviewer(me, courseId); // 404 unpublished · 403 OWN_COURSE / NOT_ENROLLED
+    participants.requireReviewer(me, courseId); // 404 draft · 403 OWN_COURSE / NOT_ENROLLED
     String author = identity.displayName(me.id()).orElse("A learner");
     Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS); // Postgres keeps microseconds
 
@@ -76,15 +76,13 @@ public class ReviewService {
       return; // ⭐ nothing to lock for: no tally can change
     }
     RatingTally tally = reviews.lockTally(courseId);
-    Optional<Review> review = reviews.find(courseId, me.id()); // again, now under the lock
-    if (review.isPresent()) {
-      reviews.delete(review.get().id());
-      publish(courseId, tally.remove(review.get().rating()));
-    }
+    reviews // ⭐ under the lock: the rating it really had, deleted and returned in one statement
+        .delete(courseId, me.id())
+        .ifPresent(rating -> publish(courseId, tally.remove(rating)));
   }
 
   /** The tally and catalog's columns move together (same transaction): exact, or neither. */
-  void publish(UUID courseId, RatingTally tally) {
+  private void publish(UUID courseId, RatingTally tally) {
     reviews.saveTally(courseId, tally);
     catalog.updateRating(courseId, tally.count(), tally.average());
   }

@@ -2,11 +2,10 @@ package com.masternova.api.catalog.application;
 
 import com.masternova.api.catalog.domain.Course;
 import com.masternova.api.catalog.domain.CourseSort;
+import com.masternova.api.platform.CursorTokens;
 import com.masternova.api.platform.ValidationException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -32,16 +31,12 @@ import org.springframework.data.domain.ScrollPosition;
  */
 record CourseCursor(CourseSort sort, Comparable<?> key, UUID id) {
 
-  private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
-  private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
-
   static CourseCursor after(CourseSort sort, Course last) {
     return new CourseCursor(sort, sort.keyOf(last), last.id());
   }
 
   String encode() {
-    String raw = sort.name() + "|" + format(key) + "|" + id;
-    return ENCODER.encodeToString(raw.getBytes(StandardCharsets.UTF_8));
+    return CursorTokens.encode(sort.name(), format(key), id.toString());
   }
 
   /**
@@ -49,14 +44,14 @@ record CourseCursor(CourseSort sort, Comparable<?> key, UUID id) {
    *     expected}: not base64, wrong shape, unparsable key, or a different sort
    */
   static CourseCursor decode(String token, CourseSort expected) {
+    String[] parts = CursorTokens.decode(token, 3);
+    if (!parts[0].equals(expected.name())) {
+      throw CursorTokens.invalid();
+    }
     try {
-      String[] parts = new String(DECODER.decode(token), StandardCharsets.UTF_8).split("\\|", -1);
-      if (parts.length != 3 || !parts[0].equals(expected.name())) {
-        throw invalid();
-      }
       return new CourseCursor(expected, parse(expected, parts[1]), UUID.fromString(parts[2]));
     } catch (IllegalArgumentException | java.time.format.DateTimeParseException e) {
-      throw invalid(); // ⭐ Base64, UUID, number and date parsers all throw these on garbage
+      throw CursorTokens.invalid(); // ⭐ UUID, number and date parsers all throw these on garbage
     }
   }
 
@@ -81,10 +76,5 @@ record CourseCursor(CourseSort sort, Comparable<?> key, UUID id) {
       case HIGHEST_RATED -> new BigDecimal(text);
       case PRICE_LOW, PRICE_HIGH -> Long.valueOf(text);
     };
-  }
-
-  private static ValidationException invalid() {
-    return ValidationException.of(
-        "cursor", "INVALID_CURSOR", "The cursor is not valid for this list; start again.");
   }
 }

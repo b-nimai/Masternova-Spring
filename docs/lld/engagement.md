@@ -45,7 +45,7 @@ an answer from the instructor or another learner, with replies to replies.
 | `course_rating` | row, one per reviewed course | the stored tally: the **serialisation point** of every review write for that course (§5) |
 | `Question` | row (`question`), on a lecture | title 1–150, body ≤ 5,000; `answer_count` = its answers; `course_id` copied from the lecture at creation (the list and the access check need it, and a lecture never changes course) |
 | `Answer` | row (`answer`), in a question | `depth` 1–3 (1 = answers the question, 2–3 = replies); a reply's parent is in the same question (composite FK) and `depth = parent.depth + 1` (checked on insert); **422 `REPLY_TOO_DEEP`** beyond 3 |
-| `Participant` | sealed result of the access check | `Learner` (enrolled), `Instructor` (teaches it), `Admin`; anything else is 403 `NOT_ENROLLED`. The course must be **open**: published or archived (an archived course keeps playing for those who hold it, so its Q&A and reviews stay theirs). A draft is 404. The public reads (the course page's list and summary) need it published, like the page. One small query per check (`CatalogApi.courseStanding`: teacher + availability, no curriculum) |
+| `Participants` → `CourseRef` | the access check, and the course it let the caller in to (with its teacher, to flag their posts) | an enrolled learner, the course's instructor or an admin; anything else is 403 `NOT_ENROLLED`. (A sealed `Learner / Instructor / Admin` result was built first and removed in the simplify pass: nothing ever told the three apart.) The course must be **open**: published or archived (an archived course keeps playing for those who hold it, so its Q&A and reviews stay theirs). A draft is 404. The public reads (the course page's list and summary) need it published, like the page. One small query per check (`CatalogApi.courseStanding`: teacher + availability, no curriculum) |
 
 **Why a depth cap of 3.** A deeper tree is unreadable on a phone and is how a thread turns into
 a chat. Udemy and Stack Overflow keep it at two levels. Three still allows "answer → follow-up
@@ -67,11 +67,11 @@ classDiagram
     class RatingReconciler { +reconcile() «nightly» }
     class QuestionService { +ask() +answer() }
     class QuestionQueries { +page() +thread() }
-    class Participants { +ofCourse() +ofLecture() }
+    class Participants { +ofLecture() CourseRef +requireReviewer() +requirePublished() }
   }
   namespace domain {
     class RatingTally { <<record>> +add() +remove() +replace() +average() }
-    class Participant { <<sealed>> Learner · Instructor · Admin }
+    class CourseRef { <<record>> courseId · instructorId }
     class ReviewRepository { <<interface>> }
     class QuestionRepository { <<interface>> }
   }
@@ -113,8 +113,8 @@ sequenceDiagram
   participant R as ReviewRepository
   participant K as CatalogApi
   C->>S: write(me, courseId, rating, body)
-  S->>P: ofCourse(me, courseId)
-  P-->>S: Learner (else 403 NOT_ENROLLED / OWN_COURSE, 404 not published)
+  S->>P: requireReviewer(me, courseId)
+  P-->>S: ok (else 403 NOT_ENROLLED / OWN_COURSE, 404 a draft)
   Note over S,K: one transaction
   S->>R: lockTally(courseId)
   Note right of R: INSERT … ON CONFLICT DO NOTHING<br/>then SELECT … FOR UPDATE:<br/>every writer of this course queues here

@@ -1,4 +1,3 @@
-import { HttpErrorResponse } from '@angular/common/http';
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
@@ -11,6 +10,7 @@ import { AccessResponse, EntitlementApi } from '../../../core/api/entitlement-ap
 import { LearningApi } from '../../../core/api/learning-api';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { CartItem } from '../../../core/commerce/cart-store';
+import { isNotFound } from '../../../core/api/problem';
 import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
 import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
@@ -149,7 +149,7 @@ export class CourseDetail {
   /** A 404 is "this course doesn't exist (for you)" — not an outage. */
   protected readonly notFound = computed(() => {
     const error = this.course.error();
-    return error instanceof HttpErrorResponse && error.status === 404;
+    return isNotFound(error);
   });
 
   protected readonly levelLabels = LEVEL_LABELS;

@@ -1,4 +1,5 @@
-import { CourseSummary, CursorPage } from '../app/core/api/catalog-api';
+import { CourseSummary } from '../app/core/api/catalog-api';
+import { CursorPage } from '../app/core/api/cursor-page';
 
 /** Shared catalog test data — a plain module, so specs can import it without re-running a spec. */
 export const K8S: CourseSummary = {

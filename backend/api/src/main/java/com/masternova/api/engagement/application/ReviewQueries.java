@@ -6,7 +6,6 @@ import com.masternova.api.engagement.domain.ReviewRepository;
 import com.masternova.api.identity.CurrentUser;
 import com.masternova.api.platform.CursorPage;
 import com.masternova.api.platform.NotFoundException;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,27 +25,18 @@ public class ReviewQueries {
 
   /** A published course's reviews, newest first: {@code limit} per page, keyset-paged. */
   public CursorPage<Review> page(UUID courseId, String cursor, int limit) {
-    participants.publishedCourse(courseId); // 404 for a draft: its reviews are invisible too
-    NewestFirstCursor after = NewestFirstCursor.decode(cursor);
-    // ⭐ one row more than asked: it only answers "is there a next page?"
-    List<Review> rows =
-        reviews.page(
-            courseId,
-            after == null ? null : after.at(),
-            after == null ? null : after.id(),
-            limit + 1);
-    if (rows.size() <= limit) {
-      return new CursorPage<>(rows, null);
-    }
-    List<Review> items = rows.subList(0, limit);
-    Review last = items.getLast();
-    return new CursorPage<>(
-        List.copyOf(items), new NewestFirstCursor(last.createdAt(), last.id()).encode());
+    participants.requirePublished(courseId); // 404 for a draft: its reviews are invisible too
+    return NewestFirstCursor.page(
+        cursor,
+        limit,
+        (at, id, n) -> reviews.page(courseId, at, id, n),
+        Review::createdAt,
+        Review::id);
   }
 
   /** The stars behind the course card's average: empty course → all zero. */
   public RatingTally summary(UUID courseId) {
-    participants.publishedCourse(courseId);
+    participants.requirePublished(courseId);
     return reviews.tally(courseId).orElseGet(RatingTally::empty);
   }
 

@@ -34,10 +34,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
       "masternova.search.embedding.index-enabled=false", // the test runs the sweep by hand
       "masternova.search.embedding.max-distance=0.95", // hashed words are far apart; Ollama's
       // aren't
-      "masternova.search.embedding.query-timeout=2s",
-      // ⭐ a test table is tiny, so the planner would scan it and sort: force the HNSW index, the
-      //    path production takes (and the one with the ef_search cap)
-      "spring.datasource.hikari.connection-init-sql=SET enable_seqscan = off; SET enable_sort = off"
+      "masternova.search.embedding.query-timeout=2s"
     })
 @Import({
   TestcontainersConfiguration.class,
@@ -56,6 +53,7 @@ class SemanticSearchIT {
   }
 
   @Autowired DataSource dataSource;
+  @Autowired org.springframework.transaction.support.TransactionTemplate tx;
   @Autowired CourseSearchService search;
   @Autowired HashingEmbeddingModel model;
   @Autowired com.masternova.api.catalog.infrastructure.search.TestIndexer indexer;
@@ -74,10 +72,10 @@ class SemanticSearchIT {
   void clean() {
     model.failing(false);
     new TestInstructors(dataSource).deleteAll(); // courses cascade to embeddings
-    // ⭐ what autovacuum does in production (V28 tunes it for this table): HNSW keeps deleted
-    //    entries in its graph until VACUUM, and the next test's few rows would be unreachable
-    //    through a graph of dead ones (docs/db/indexes.md §9)
-    jdbc.sql("VACUUM course_embedding").update();
+    // ⭐ test isolation: HNSW keeps deleted entries in its graph until VACUUM, and the next test's
+    //    few rows would be unreachable through a graph of dead ones (docs/db/indexes.md §9).
+    //    TRUNCATE starts the index empty.
+    jdbc.sql("TRUNCATE course_embedding").update();
   }
 
   @Test
@@ -133,9 +131,10 @@ class SemanticSearchIT {
     try {
       assertThat(indexer.run()).containsExactly(1, 0); // the batch failed, each alone: 1 of 2
       assertThat(embedded()).containsExactly(fine);
-      // only the refused text is left: alone it looks like an outage (the job logs it once)
-      assertThatThrownBy(indexer::run).isInstanceOf(IllegalStateException.class);
-      UUID later = courses.published("Gamma", null, "published after"); // … and isn't blocked
+      int calls = model.calls();
+      assertThat(indexer.run()).containsExactly(0, 0); // ⭐ remembered: not even tried again
+      assertThat(model.calls()).isEqualTo(calls);
+      UUID later = courses.published("Gamma", null, "published after"); // … and blocks nothing
       assertThat(indexer.run()).containsExactly(1, 0);
       assertThat(embedded()).containsExactlyInAnyOrder(fine, later);
     } finally {
@@ -156,7 +155,16 @@ class SemanticSearchIT {
     indexer.run(); // 32 per batch
     indexer.run();
 
-    assertThat(search.search("pods", SearchMode.SEMANTIC, 50).courses()).hasSize(50);
+    // ⭐ a 55-row table: the planner would scan and sort it. Force the HNSW path production takes
+    //    (the one with the cap), for this transaction only
+    List<Course> found =
+        tx.execute(
+            s -> {
+              jdbc.sql("SET LOCAL enable_seqscan = off").update();
+              jdbc.sql("SET LOCAL enable_sort = off").update();
+              return search.search("pods", SearchMode.SEMANTIC, 50).courses();
+            });
+    assertThat(found).hasSize(50);
   }
 
   @Test

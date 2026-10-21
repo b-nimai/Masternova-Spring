@@ -39,15 +39,24 @@ class JdbcReviewRepository implements ReviewRepository {
 
   @Override
   public RatingTally lockTally(UUID courseId) {
-    // ⭐ a first review has no row to lock: make one. DO NOTHING keeps a concurrent creator's row,
-    //    and both then queue on the SELECT … FOR UPDATE below
-    jdbc.sql("INSERT INTO course_rating (course_id) VALUES (:course) ON CONFLICT DO NOTHING")
-        .param("course", courseId)
-        .update();
+    return selectForUpdate(courseId)
+        .orElseGet(
+            () -> {
+              // ⭐ a first review has no row to lock: make one. DO NOTHING keeps a concurrent
+              //    creator's row, and both then queue on the SELECT … FOR UPDATE
+              jdbc.sql(
+                      "INSERT INTO course_rating (course_id) VALUES (:course) ON CONFLICT DO NOTHING")
+                  .param("course", courseId)
+                  .update();
+              return selectForUpdate(courseId).orElseThrow();
+            });
+  }
+
+  private Optional<RatingTally> selectForUpdate(UUID courseId) {
     return jdbc.sql("SELECT " + STARS + " FROM course_rating WHERE course_id = :course FOR UPDATE")
         .param("course", courseId)
         .query((rs, n) -> tally(rs))
-        .single();
+        .optional();
   }
 
   @Override
@@ -111,8 +120,13 @@ class JdbcReviewRepository implements ReviewRepository {
   }
 
   @Override
-  public void delete(UUID reviewId) {
-    jdbc.sql("DELETE FROM review WHERE id = :id").param("id", reviewId).update();
+  public Optional<Integer> delete(UUID courseId, UUID userId) {
+    return jdbc.sql(
+            "DELETE FROM review WHERE course_id = :course AND user_id = :user RETURNING rating")
+        .param("course", courseId)
+        .param("user", userId)
+        .query(Integer.class)
+        .optional();
   }
 
   /**

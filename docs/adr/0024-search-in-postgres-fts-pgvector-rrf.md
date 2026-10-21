@@ -52,8 +52,8 @@ cluster: CNPG `17-standard`, extension created at init).
   `spring-webflux` and `reactor-core`; it uses Jackson 3 like the rest of the app). Servlet MVC
   stays the web stack: Boot picks it when both are present.
 - Two pgvector behaviours shape the query (docs/db/indexes.md §9): `hnsw.ef_search` caps the rows
-  a scan returns (raised per query), and dead graph entries hide live rows until `VACUUM` (V28
-  vacuums the table early; `hnsw.iterative_scan` is on per query).
+  a scan returns (100 on every connection), and dead graph entries hide live rows until `VACUUM`
+  (V28 vacuums the table early; `hnsw.iterative_scan` is on for every connection).
 - The cluster has no Ollama, so its search is keyword-only. Deploying a model there (D6 or later)
   is a chart change, not a code change.
 - A new embedding model re-embeds the catalog at 32 courses per minute (10,000 courses ≈ 5 h);

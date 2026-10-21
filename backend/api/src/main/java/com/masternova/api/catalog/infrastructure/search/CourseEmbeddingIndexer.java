@@ -4,7 +4,9 @@ import java.sql.Timestamp;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -67,12 +69,28 @@ class CourseEmbeddingIndexer {
     this.clock = clock;
   }
 
+  int batchSize() {
+    return batchSize;
+  }
+
+  /**
+   * Texts the model refused, by course → the hash of the refused text. ⭐ Remembered so a refused
+   * text costs ONE try, not a failed batch plus 32 single calls every run; an edit changes the hash
+   * and the course is tried again. Per replica and in memory: a restart retries each once.
+   */
+  private final Map<UUID, String> refused = new ConcurrentHashMap<>();
+
   /**
    * One batch: remove the vectors of courses no longer published, then embed up to {@code
    * batchSize} stale courses in ONE model call — outside any transaction (a slow call must not hold
    * a pooled connection) — and upsert them in one short transaction.
    *
-   * @throws RuntimeException when the model fails: nothing is written, the next run retries
+   * <p>⭐ If the batch call fails, each text is tried ALONE, so one text the model refuses can't
+   * block the courses after it; a text refused alone is remembered ({@link #refused}) and skipped
+   * until it changes.
+   *
+   * @throws RuntimeException when the model is down (the batch and the first single tries all
+   *     fail): nothing is written, the next run retries
    */
   Run indexBatch() {
     int removed =
@@ -83,14 +101,19 @@ class CourseEmbeddingIndexer {
                 """)
             .update();
     List<Stale> stale =
-        jdbc.sql(STALE)
+        jdbc
+            .sql(STALE)
             .param("model", modelName)
-            .param("batch", batchSize)
+            .param("batch", batchSize + refused.size()) // room for the ones skipped below
             .query(
                 (rs, n) ->
                     new Stale(
                         rs.getObject("id", UUID.class), rs.getString("text"), rs.getString("hash")))
-            .list();
+            .list()
+            .stream()
+            .filter(c -> !c.hash().equals(refused.get(c.courseId())))
+            .limit(batchSize)
+            .toList();
     if (stale.isEmpty()) {
       return new Run(0, removed);
     }
@@ -99,15 +122,6 @@ class CourseEmbeddingIndexer {
     tx.executeWithoutResult(
         s -> {
           for (Embedded e : embedded) {
-            float[] vector = e.vector();
-            if (vector.length != DIMENSIONS) { // a model with another dimension needs a migration
-              throw new IllegalStateException(
-                  modelName
-                      + " returned "
-                      + vector.length
-                      + " dimensions, V28 stores "
-                      + DIMENSIONS);
-            }
             // ⭐ the hash of the text EMBEDDED: if the course changed meanwhile, the next run sees
             //    a mismatch and redoes it
             jdbc.sql(
@@ -123,7 +137,7 @@ class CourseEmbeddingIndexer {
                 .param("id", e.course().courseId())
                 .param("model", modelName)
                 .param("hash", e.course().hash())
-                .param("vector", Vectors.literal(vector))
+                .param("vector", Vectors.literal(e.vector()))
                 .param("at", now)
                 .update();
           }
@@ -131,33 +145,59 @@ class CourseEmbeddingIndexer {
     return new Run(embedded.size(), removed);
   }
 
-  private record Embedded(Stale course, float[] vector) {}
+  private record Embedded(Stale course, float[] vector) {
+    /** The model's output checked BEFORE anything is written: V28 stores {@code vector(768)}. */
+    Embedded {
+      if (vector.length != DIMENSIONS) { // a model with another dimension needs a migration
+        throw new IllegalStateException(
+            "the model returned " + vector.length + " dimensions, V28 stores " + DIMENSIONS);
+      }
+    }
+  }
 
   private List<Embedded> embed(List<Stale> stale) {
+    List<float[]> vectors;
     try {
-      List<float[]> vectors = model.embed(stale.stream().map(Stale::text).toList());
-      if (vectors.size() != stale.size()) {
-        throw new IllegalStateException(
-            "the model returned " + vectors.size() + " vectors for " + stale.size() + " texts");
-      }
-      List<Embedded> all = new ArrayList<>();
-      for (int i = 0; i < stale.size(); i++) {
-        all.add(new Embedded(stale.get(i), vectors.get(i)));
-      }
-      return all;
+      vectors = model.embed(stale.stream().map(Stale::text).toList());
     } catch (RuntimeException batchFailed) {
-      List<Embedded> alone = new ArrayList<>();
-      for (Stale course : stale) {
-        try {
-          alone.add(new Embedded(course, model.embed(course.text())));
-        } catch (RuntimeException e) {
-          log.warn("course {}: the model refused its text, skipped this run", course.courseId(), e);
+      return embedAlone(stale, batchFailed);
+    }
+    if (vectors.size() != stale.size()) {
+      throw new IllegalStateException(
+          "the model returned " + vectors.size() + " vectors for " + stale.size() + " texts");
+    }
+    List<Embedded> all = new ArrayList<>();
+    for (int i = 0; i < stale.size(); i++) {
+      all.add(new Embedded(stale.get(i), vectors.get(i)));
+    }
+    return all;
+  }
+
+  /**
+   * Each text alone, after a failed batch. ⭐ Two failures before any success is an OUTAGE, not bad
+   * texts: stop (a hanging model would otherwise cost 32 read timeouts) and remember nothing.
+   */
+  private List<Embedded> embedAlone(List<Stale> stale, RuntimeException batchFailed) {
+    List<Embedded> alone = new ArrayList<>();
+    List<Stale> failed = new ArrayList<>();
+    for (Stale course : stale) {
+      try {
+        alone.add(new Embedded(course, model.embed(course.text())));
+      } catch (RuntimeException e) {
+        failed.add(course);
+        if (alone.isEmpty() && failed.size() >= 2) {
+          throw batchFailed;
         }
       }
-      if (alone.isEmpty()) {
-        throw batchFailed; // every text failed: the model is down, not one text
-      }
-      return alone;
     }
+    if (alone.isEmpty()) {
+      throw batchFailed; // the only text failed: indistinguishable from an outage
+    }
+    for (Stale course : failed) { // the model answers others: these texts are refused
+      refused.put(course.courseId(), course.hash());
+      log.warn(
+          "course {}: the model refused its text, skipped until it changes", course.courseId());
+    }
+    return alone;
   }
 }

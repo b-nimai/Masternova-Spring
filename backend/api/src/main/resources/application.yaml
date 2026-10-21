@@ -14,6 +14,11 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/masternova}
     username: ${DATABASE_USER:masternova}
     password: ${DATABASE_PASSWORD:masternova}
+    hikari:
+      # ⭐ pgvector's HNSW scans, set once per connection (docs/db/indexes.md §9): ef_search caps the
+      #    rows a scan returns (default 40 < the hybrid's 100 candidates), and the iterative scan
+      #    keeps going past dead graph entries and rows the join filters out. Inert elsewhere.
+      connection-init-sql: SET hnsw.ef_search = 100; SET hnsw.iterative_scan = relaxed_order
   data:
     redis:
       host: ${REDIS_HOST:localhost}
