@@ -1,0 +1,137 @@
+<section class="lecture-qa" data-testid="qa">
+  <h2>Questions &amp; answers</h2>
+
+  <form class="ask" (ngSubmit)="ask()">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-label>Ask a question about this lecture</mat-label>
+      <input
+        matInput
+        name="title"
+        [maxlength]="limits.questionTitle"
+        data-testid="ask-title"
+        [ngModel]="askTitle()"
+        (ngModelChange)="askTitle.set($event)"
+      />
+    </mat-form-field>
+    @if (askTitle().trim()) {
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-label>Details (optional)</mat-label>
+        <textarea
+          matInput
+          rows="3"
+          name="body"
+          [maxlength]="limits.postBody"
+          [ngModel]="askBody()"
+          (ngModelChange)="askBody.set($event)"
+        ></textarea>
+      </mat-form-field>
+      <button mat-flat-button type="submit" data-testid="ask-submit" [disabled]="posting()">
+        Post question
+      </button>
+    }
+  </form>
+
+  @if (postError(); as error) {
+    <p class="form-error" data-testid="qa-error">{{ error }}</p>
+  }
+  @if (listError(); as error) {
+    <p data-testid="qa-list-error">{{ error }}</p>
+  } @else if (questions().length === 0) {
+    <p data-testid="no-questions">No questions yet. Be the first to ask.</p>
+  }
+
+  <ol class="questions">
+    @for (q of questions(); track q.id) {
+      <li>
+        <button
+          type="button"
+          class="question"
+          data-testid="question"
+          [attr.aria-expanded]="openId() === q.id"
+          (click)="open(q.id)"
+        >
+          <strong>{{ q.title }}</strong>
+          <span class="meta">
+            {{ q.authorName }}
+            @if (q.byInstructor) {
+              <span class="instructor">Instructor</span>
+            }
+            · {{ q.createdAt | date: 'mediumDate' }} · {{ q.answerCount }}
+            {{ q.answerCount === 1 ? 'answer' : 'answers' }}
+          </span>
+        </button>
+
+        @if (openId() === q.id) {
+          <div class="thread" data-testid="thread">
+            @if (thread.error()) {
+              <p data-testid="thread-error">
+                We couldn't load this thread.
+                <button mat-button type="button" (click)="thread.reload()">Retry</button>
+              </p>
+            } @else if (thread.hasValue() ? thread.value() : null; as t) {
+              @if (t.question.body) {
+                <p class="body">{{ t.question.body }}</p>
+              }
+              @for (a of t.answers; track a.id) {
+                <div
+                  class="answer"
+                  data-testid="answer"
+                  [style.margin-left.rem]="(a.depth - 1) * 1.5"
+                >
+                  <p class="meta">
+                    <strong>{{ a.authorName }}</strong>
+                    @if (a.byInstructor) {
+                      <span class="instructor">Instructor</span>
+                    }
+                    · {{ a.createdAt | date: 'short' }}
+                  </p>
+                  <p class="body">{{ a.body }}</p>
+                  @if (a.depth < limits.answerDepth) {
+                    <button mat-button type="button" (click)="startReply(a)">Reply</button>
+                  }
+                </div>
+              }
+              @if (t.truncated) {
+                <p class="meta">Only the first {{ limits.threadAnswers }} answers are shown.</p>
+              }
+              <form class="reply" (ngSubmit)="postReply()">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>{{ replyTo() ? 'Your reply' : 'Your answer' }}</mat-label>
+                  <textarea
+                    matInput
+                    rows="2"
+                    name="reply"
+                    [maxlength]="limits.postBody"
+                    data-testid="reply-body"
+                    [ngModel]="replyBody()"
+                    (ngModelChange)="replyBody.set($event)"
+                  ></textarea>
+                </mat-form-field>
+                <div class="actions">
+                  <button
+                    mat-flat-button
+                    type="submit"
+                    data-testid="reply-submit"
+                    [disabled]="posting() || !replyBody().trim()"
+                  >
+                    {{ replyTo() ? 'Post reply' : 'Post answer' }}
+                  </button>
+                  @if (replyTo()) {
+                    <button mat-button type="button" (click)="startReply(null)">
+                      Answer the question instead
+                    </button>
+                  }
+                </div>
+              </form>
+            }
+          </div>
+        }
+      </li>
+    }
+  </ol>
+  @if (nextCursor()) {
+    <button mat-button type="button" data-testid="more-questions" (click)="showMore()">
+      Show more questions
+    </button>
+  }
+</section>

@@ -1,0 +1,26 @@
+.search-results {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+}
+
+.degraded {
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.grid {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}

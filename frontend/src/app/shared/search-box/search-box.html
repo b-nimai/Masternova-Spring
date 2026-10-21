@@ -1,0 +1,23 @@
+<form class="search-box" role="search" (submit)="submit($event)">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-icon matPrefix aria-hidden="true">search</mat-icon>
+    <input
+      matInput
+      type="search"
+      placeholder="Search courses"
+      aria-label="Search courses"
+      data-testid="search-input"
+      [formControl]="query"
+      [matAutocomplete]="auto"
+    />
+    <mat-autocomplete
+      #auto="matAutocomplete"
+      [displayWith]="display"
+      (optionSelected)="open($event)"
+    >
+      @for (s of suggestions(); track s.slug) {
+        <mat-option [value]="s" data-testid="suggestion">{{ s.title }}</mat-option>
+      }
+    </mat-autocomplete>
+  </mat-form-field>
+</form>

@@ -13,6 +13,7 @@ import { map } from 'rxjs';
 import { AuthStore } from './core/auth/auth-store';
 import { CartStore } from './core/commerce/cart-store';
 import { NAV_ITEMS } from './core/layout/nav-items';
+import { SearchBox } from './shared/search-box/search-box';
 
 /**
  * The app shell: toolbar + responsive sidenav + routed page.
@@ -20,6 +21,7 @@ import { NAV_ITEMS } from './core/layout/nav-items';
  * ⭐ Responsive with a SIGNAL: BreakpointObserver emits whenever the viewport crosses a breakpoint;
  * toSignal turns that stream into state the template reads. Handset → the sidenav overlays the page
  * and closes after navigation; desktop → it sits beside the content, always open.
+ * Phase 11: the course search box sits in the toolbar on desktop, at the top of the drawer on phones.
  */
 @Component({
   selector: 'app-root',
@@ -34,6 +36,7 @@ import { NAV_ITEMS } from './core/layout/nav-items';
     MatButtonModule,
     MatMenuModule,
     MatBadgeModule,
+    SearchBox,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',

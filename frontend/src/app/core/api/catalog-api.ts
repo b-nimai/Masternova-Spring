@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { Observable } from 'rxjs';
+import { CursorPage } from './cursor-page';
 
 /** Mirrors the backend enums (catalog/domain). */
 export type CourseLevel = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'ALL_LEVELS';
@@ -21,12 +22,6 @@ export const COURSE_SORTS: readonly CourseSort[] = [
   'PRICE_LOW',
   'PRICE_HIGH',
 ];
-
-/** Mirrors `CursorPage<T>` — API conventions §2: no total, an opaque cursor or null. */
-export interface CursorPage<T> {
-  items: T[];
-  nextCursor: string | null;
-}
 
 /** Mirrors `CategoryRef`. */
 export interface CategoryRef {

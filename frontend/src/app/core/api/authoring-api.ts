@@ -5,10 +5,10 @@ import {
   CourseDetailResponse,
   CourseLevel,
   CourseSummary,
-  CursorPage,
   LectureKind,
   LectureResponse,
 } from './catalog-api';
+import { CursorPage } from './cursor-page';
 
 /** Mirrors `CreateCourseRequest`. */
 export interface CreateCourseRequest {

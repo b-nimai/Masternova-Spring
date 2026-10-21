@@ -1,6 +1,7 @@
 package com.masternova.api.catalog.domain;
 
 import jakarta.persistence.LockModeType;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -91,4 +92,74 @@ public interface CourseRepository
           "UPDATE course SET enrollment_count = GREATEST(enrollment_count + :delta, 0) WHERE id = :id",
       nativeQuery = true)
   int adjustEnrollmentCount(UUID id, int delta);
+
+  /**
+   * ⭐ Sets the rating summary engagement computed from its locked tally (ADR-0023): absolute
+   * values, joining the caller's transaction, never bumping {@code version} (a review is not an
+   * edit). {@code IS DISTINCT FROM}: a value already right matches nothing, so the reconciler can
+   * count what it really repaired.
+   */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE course SET rating_count = :count, rating_average = :average
+          WHERE id = :id AND (rating_count, rating_average) IS DISTINCT FROM (:count, :average)
+          """,
+      nativeQuery = true)
+  int updateRating(UUID id, int count, BigDecimal average);
+
+  /** Search results' cards: these courses with their category, in ONE statement (any order). */
+  @Query("select c from Course c join fetch c.category where c.id in :ids")
+  List<Course> findWithCategoryByIdIn(Collection<UUID> ids);
+
+  /** A typeahead suggestion: what the box shows and where it links. */
+  interface TitleSuggestion {
+    String getSlug();
+
+    String getTitle();
+  }
+
+  /**
+   * ⭐ Typeahead by TRIGRAM word similarity: {@code :text <% title} is true when the text is similar
+   * to some word run of the title, so a prefix ("kube") and a typo ("kubernets") both match. It is
+   * an operator {@code course_title_trgm_idx} (V8, {@code gin_trgm_ops}) can answer.
+   */
+  @Query(
+      value =
+          """
+          SELECT slug, title FROM course
+          WHERE status = 'PUBLISHED' AND lower(:text) <% lower(title)
+          ORDER BY word_similarity(lower(:text), lower(title)) DESC, enrollment_count DESC, id
+          LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<TitleSuggestion> suggestTitles(String text, int limit);
+
+  /** One row, no curriculum: what an access check needs ({@code CatalogApi.courseStanding}). */
+  @Query(
+      """
+      select new com.masternova.api.catalog.domain.CourseStandingRow(c.id, c.instructorId, c.status)
+      from Course c where c.id = :id
+      """)
+  Optional<CourseStandingRow> findStandingById(UUID id);
+
+  /** The same for the course of a lecture: one join, no aggregate. */
+  @Query(
+      """
+      select new com.masternova.api.catalog.domain.CourseStandingRow(c.id, c.instructorId, c.status)
+      from Lecture l join l.section s join s.course c where l.id = :lectureId
+      """)
+  Optional<CourseStandingRow> findStandingByLectureId(UUID lectureId);
+
+  /** The courses whose stored rating isn't empty, a page at a time in id order (Phase 11). */
+  @Query(
+      value =
+          """
+          SELECT id FROM course
+          WHERE rating_count > 0 AND (CAST(:after AS uuid) IS NULL OR id > CAST(:after AS uuid))
+          ORDER BY id LIMIT :limit
+          """,
+      nativeQuery = true)
+  List<UUID> findRatedIds(String after, int limit);
 }

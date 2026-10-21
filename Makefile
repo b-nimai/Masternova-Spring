@@ -9,10 +9,10 @@ up: ## Start infra (postgres, redis, mailpit, SeaweedFS S3 + its bucket/CORS ini
 	docker compose up -d --wait postgres redis mailpit seaweedfs media-init
 
 down: ## Stop everything (volumes kept)
-	docker compose --profile app --profile observability down
+	docker compose --profile app --profile observability --profile ai down
 
 nuke: ## Stop everything AND delete volumes (fresh database)
-	docker compose --profile app --profile observability down -v
+	docker compose --profile app --profile observability --profile ai down -v
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
@@ -23,6 +23,9 @@ secrets: ## Generate the local secret files the container stack mounts (gitignor
 
 stack: secrets ## Build images and run the whole app in containers (web on :8081)
 	docker compose --profile app up -d --build --wait postgres redis mailpit api worker web
+
+ai: ## Start Ollama + pull the embedding model for semantic search (profile ai, ~3.5 GB once)
+	docker compose --profile ai up -d --wait ollama && docker compose --profile ai run --rm ollama-init
 
 obs: ## Start observability: Grafana :3001, Prometheus :9091, Alertmanager :9094, Tempo, Loki + Alloy
 	docker compose --profile observability up -d --wait prometheus alertmanager tempo loki alloy grafana
@@ -42,7 +45,8 @@ obs-check: ## Validate observability config and unit-test the alert rules (promt
 	  rc=$$?; rm -rf $$tmp; exit $$rc
 
 api: ## Run the api from source (:8080)
-	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && PAYMENT_PROVIDER=$${PAYMENT_PROVIDER:-fake} ./mvnw -pl api spring-boot:run
+	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && PAYMENT_PROVIDER=$${PAYMENT_PROVIDER:-fake} \
+	  MASTERNOVA_SEARCH_EMBEDDING_ENABLED=$${MASTERNOVA_SEARCH_EMBEDDING_ENABLED:-true} ./mvnw -pl api spring-boot:run
 
 worker: ## Run the worker from source (:8090)
 	$(MVN) -q install -DskipTests -Djacoco.skip -Dspotless.check.skip && ./mvnw -pl worker spring-boot:run
@@ -205,4 +209,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-bump helm-check k8s-seed k8s-e2e release
+.PHONY: help up down nuke secrets stack ai obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-bump helm-check k8s-seed k8s-e2e release

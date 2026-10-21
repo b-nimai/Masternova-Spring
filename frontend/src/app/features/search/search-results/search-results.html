@@ -1,0 +1,44 @@
+<section class="search-results">
+  @if (!query()) {
+    <h1>Search courses</h1>
+    <p>Type what you want to learn in the search box above.</p>
+  } @else {
+    <header>
+      <h1 data-testid="search-title">Results for “{{ query() }}”</h1>
+      <mat-button-toggle-group
+        aria-label="Rank by"
+        [value]="selectedMode()"
+        (change)="changeMode($event.value)"
+      >
+        @for (m of modes; track m) {
+          <mat-button-toggle [value]="m">{{ modeLabels[m] }}</mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+    </header>
+
+    @if (results.isLoading()) {
+      <mat-spinner diameter="36" data-testid="loading" />
+    } @else if (results.error()) {
+      <p class="form-error" data-testid="error">
+        Search isn't answering right now.
+        <button type="button" (click)="results.reload()">Retry</button>
+      </p>
+    } @else if (results.value(); as r) {
+      @if (r.degraded) {
+        <p class="degraded" data-testid="degraded">
+          <mat-icon inline aria-hidden="true">info</mat-icon>
+          Showing keyword matches: search by meaning is unavailable right now.
+        </p>
+      }
+      @if (r.items.length === 0) {
+        <p data-testid="no-results">No courses match. Try other words, or browse the catalog.</p>
+      } @else {
+        <ol class="grid" data-testid="results">
+          @for (c of r.items; track c.id) {
+            <li><app-course-card [course]="c" /></li>
+          }
+        </ol>
+      }
+    }
+  }
+</section>

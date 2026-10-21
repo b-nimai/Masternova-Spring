@@ -160,3 +160,58 @@ SQL, so here they ship.
 - **OFFSET page 250 stays at 15.7 ms** whatever you index: the reason for keyset.
 - **Expression index + no `ANALYZE` = a wrong plan** (1.38 vs 0.68 ms): V8 analyzes.
 - Rejected with numbers: the category index (never chosen), the non-partial composite (bigger).
+
+## 9. Phase 11 — search indexes (2026-10-21)
+
+Same dataset (`make seed COURSES=10000`, Postgres 17 + pgvector 0.8.1 in `pgvector/pgvector:pg17`),
+migrations V1–V26 applied, then V27 timed on the seeded table. Warm cache, `EXPLAIN ANALYZE`,
+the exact SQL of `KeywordRanker` and `CourseRepository.suggestTitles`.
+
+| What | With index | Forced sequential scan |
+|---|---|---|
+| V27: `ADD COLUMN search_vector … GENERATED … STORED` (rewrites `course`, `ACCESS EXCLUSIVE`) | 212 ms | — |
+| V27: `CREATE INDEX course_search_idx USING gin` | 13 ms | — |
+| keyword "redis interview" (459 matches, top 60) | 2.2 ms (bitmap on `course_search_idx`) | 4.3 ms |
+| keyword "machine learning" (464 matches) | 1.5 ms | 3.5 ms |
+| keyword "zebra" (no match) | **0.015 ms** | 1.8 ms |
+| typeahead "kubernets" (typo, top 8) | 2.0 ms (bitmap on V8's `course_title_trgm_idx`) | — |
+
+- The GIN index matters most where a B-tree can't help at all: **rare and absent words** (120×).
+  For common words most of the cost is `ts_rank_cd` over every match, which an index can't skip;
+  at this catalog size a sequential scan is only ~2× slower. The seed's descriptions are one
+  sentence long; real descriptions make the sequential scan (which must detoast and test every
+  vector) slower and the index's lead wider.
+- The rewrite lock (212 ms for 11 MB) is acceptable once. The rule for a large table stays: plain
+  column + trigger + batched backfill.
+
+**Semantic search (V28).** 9,039 published courses with random 768-dimension vectors (the timing
+of a k-NN query doesn't depend on what the vectors mean), the exact SQL of `SemanticRanker`:
+
+| What | Result |
+|---|---|
+| `CREATE INDEX … USING hnsw (embedding vector_cosine_ops)` on 9,039 vectors | 8.4 s (`m = 16`, `ef_construction = 64`) |
+| 100 nearest, HNSW, `ef_search = 100` (warm) | **2.6 ms** |
+| 100 nearest, exact (index scans off: sequential scan + top-N sort) | 43 ms |
+| the sweep's stale-course query when nothing is stale (md5 over every published course's text) | 24 ms per run (once a minute) |
+| … after V29 (a generated `embedding_text_hash` compared instead; Phase 11 review) | **7 ms** (V29's rewrite of `course`: 294 ms) |
+
+Three findings, each now in code and in a test:
+
+1. **`hnsw.ef_search` caps the rows an HNSW scan returns.** Asking for `LIMIT 60` returned
+   **40 rows**: pgvector's default `ef_search` is 40, and the hybrid ranker asks for up to 100
+   candidates. First fixed per query (`set_config(…, true)` in a transaction around the search),
+   then, in the simplify pass, once per connection: Hikari's `connection-init-sql` sets
+   `hnsw.ef_search = 100` (the hybrid's maximum) and `hnsw.iterative_scan = relaxed_order`, so the
+   ranker is one auto-commit statement again. Iterative scan alone also returns all 100, but in
+   5.4 ms (it rescans) vs 2.2 ms with `ef_search = 100`.
+   `SemanticSearchIT.moreThanFortyNeighboursCanBeAskedFor` fails without it (40 rows), with
+   sequential scans and sorts disabled by `SET LOCAL` for that test only: on a 55-row test table
+   the planner never picks the index.
+2. **Dead entries starve an HNSW scan.** HNSW keeps deleted (or updated: every re-embedding)
+   rows in its graph until `VACUUM`. With 55 deleted entries and 2 live rows, the search found
+   **0 of 2** (1 of 2 on a rerun), even with pgvector 0.8's `hnsw.iterative_scan`, and 2 of 2
+   after `VACUUM`. So V28 vacuums the table at 2 % dead + 50 rows instead of 20 %, and every
+   connection turns on `iterative_scan = relaxed_order`, which helps with rows the join filters
+   out (unpublished since the last sweep).
+3. The distance cut-off sits in an **outer** query around `ORDER BY embedding <=> :q LIMIT n`:
+   inside, it would no longer be the index's ordering and the plan falls back to the exact scan.

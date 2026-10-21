@@ -33,6 +33,8 @@
 	<properties>
 		<java.version>25</java.version>
 		<spring-modulith.version>2.1.1</spring-modulith.version>
+		<!-- the embedding model client only (ADR-0024): no starter, no auto-configuration -->
+		<spring-ai.version>2.0.1</spring-ai.version>
 		<spotless.version>3.10.4</spotless.version>
 		<!-- 1.36+ adds a commonmark dependency Spotless 3.10 fails to load; bump when Spotless fixes it. -->
 		<google-java-format.version>1.35.0</google-java-format.version>
@@ -53,6 +55,13 @@
 
 	<dependencyManagement>
 		<dependencies>
+			<dependency>
+				<groupId>org.springframework.ai</groupId>
+				<artifactId>spring-ai-bom</artifactId>
+				<version>${spring-ai.version}</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 			<dependency>
 				<groupId>com.masternova</groupId>
 				<artifactId>kernel</artifactId>

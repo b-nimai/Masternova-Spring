@@ -19,6 +19,8 @@ class CatalogConfig {
         List.of(
             Endpoint.get("/api/v1/courses"),
             Endpoint.get("/api/v1/courses/*"),
-            Endpoint.get("/api/v1/categories"));
+            Endpoint.get("/api/v1/categories"),
+            Endpoint.get("/api/v1/search/courses"),
+            Endpoint.get("/api/v1/search/suggestions"));
   }
 }

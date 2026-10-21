@@ -3,7 +3,7 @@
 > **One-liner:** define a family of algorithms behind one interface, so the caller chooses one at
 > runtime and new ones are added without editing the caller.
 
-**Type:** Behavioral · **Status:** ✅ in real code (Phases 7.5, 8.2, 9.2, 9.4) · **Last updated:** 2026-10-14
+**Type:** Behavioral · **Status:** ✅ in real code (Phases 7.5, 8.2, 9.2, 9.4, 11.4) · **Last updated:** 2026-10-21
 **Real code:** `com.masternova.worker.pipeline.ffmpeg.LadderProfile` (Strategy) → `StandardLadder`, `FastLadder` (ConcreteStrategy), chosen by `masternova.pipeline.ladder` · `com.masternova.api.commerce.domain.Discount` (sealed: `PercentOff`, `AmountOff`) · `com.masternova.api.commerce.domain.PaymentGateway` → `RazorpayGateway`, `FakePaymentGateway`, chosen by `masternova.commerce.provider` · **Lab:** [`lab/.../strategy/`](../lab/src/main/java/com/masternova/patterns/strategy/) (payments) and [`strategy/ladder/`](../lab/src/main/java/com/masternova/patterns/strategy/ladder/Ladder.java) (the transcode ladder)
 
 **Trigger phrase:** "*support several providers/methods/algorithms, and more later*", or
@@ -184,6 +184,28 @@ provider (Razorpay for INR, Stripe for USD), which the single-currency catalog d
 
 Guard rails: the fake logs a WARN at startup, and choosing `RAZORPAY` without its three secrets
 fails startup (`FakePaymentGatewayTest.razorpayWithoutKeysRefusesToStart`).
+
+## 7f. Fifth use: search rankers, picked per request (Phase 11.4)
+
+`com.masternova.api.catalog.domain.search.CourseRanker` has three implementations:
+`KeywordRanker` (Postgres full-text, `ts_rank_cd`), `SemanticRanker` (pgvector cosine distance
+over embeddings) and `HybridRanker`, which **is built from the other two through the same
+interface** and fuses their lists with Reciprocal Rank Fusion. `CourseSearchService`, the Context,
+holds an `EnumMap<SearchMode, CourseRanker>` filled from every ranker bean (each says its
+`mode()`), so the request's `mode` picks the strategy and the service never branches on how
+ranking works.
+
+Two things this use adds to the earlier ones:
+
+- **Selection per request *and* a runtime substitute.** The payment provider is picked once per
+  deployment; the ladder once per profile. A ranker is picked by each request, and when the
+  semantic strategy's dependency (the embedding model) is down, it throws
+  `EmbeddingUnavailableException` and the Context substitutes the keyword strategy, answering
+  `degraded: true`. A mode with no ranker configured (semantic search off) degrades the same way.
+- **A strategy composed of strategies.** `HybridRanker` knows no SQL and no model, only two
+  `CourseRanker`s and a pure function (`RankFusion`). `HybridRankerTest` tests it with lambdas.
+
+Lab: [`strategy/ranking/`](../lab/src/main/java/com/masternova/patterns/strategy/ranking/Ranking.java).
 
 ## 8. Interview Q&A
 

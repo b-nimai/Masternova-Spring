@@ -30,4 +30,11 @@
       </section>
     }
   }
+
+  <!-- Phase 11: the lecture's Q&A, deferred (the video comes first). ⭐ OUTSIDE the player's state:
+       an article lecture, a video still processing or a playback failure keep their Q&A, and a
+       re-ticket or an error never destroys a question being typed -->
+  @defer (on idle) {
+    <app-lecture-qa [lectureId]="lectureId()" />
+  }
 </article>

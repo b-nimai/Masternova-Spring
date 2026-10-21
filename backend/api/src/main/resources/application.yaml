@@ -14,6 +14,11 @@ spring:
     url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/masternova}
     username: ${DATABASE_USER:masternova}
     password: ${DATABASE_PASSWORD:masternova}
+    hikari:
+      # ⭐ pgvector's HNSW scans, set once per connection (docs/db/indexes.md §9): ef_search caps the
+      #    rows a scan returns (default 40 < the hybrid's 100 candidates), and the iterative scan
+      #    keeps going past dead graph entries and rows the join filters out. Inert elsewhere.
+      connection-init-sql: SET hnsw.ef_search = 100; SET hnsw.iterative_scan = relaxed_order
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -92,6 +97,18 @@ masternova: # → MasternovaProperties (typed + validated at startup)
     # signs progress beacons (≥ 32 bytes). Dev-only default; the stack mounts a file secret.
     beacon-secret: ${PROGRESS_BEACON_SECRET:dev-only-progress-beacon-secret-0123456789abcdef}
     beacon-ttl: 2m
+  engagement:
+    reconcile-every: 24h # recounts every course's rating tally (RatingReconcileJob, ADR-0023)
+  search:
+    embedding: # → SearchProperties (ADR-0024, docs/lld/search.md). Off: keyword search only.
+      # ⭐ on in compose and `make api` (Ollama via `make ai`); off in the cluster and CI, where
+      #    semantic and hybrid requests answer from keywords with `degraded: true`
+      enabled: false
+      base-url: http://localhost:11434
+      model: nomic-embed-text # 768 dimensions = V28's vector(768)
+      query-timeout: 2s # a search waits at most this long for the model …
+      breaker-open-for: 30s # … and after a failure skips it this long
+      max-distance: 0.5 # cosine distance beyond which a course isn't "about" the query
   commerce: # → CommerceProperties (docs/lld/order-state-machine.md §6)
     # ⭐ Fails CLOSED: the default is razorpay, which refuses to start without its three secrets.
     #    The simulator (FAKE: no network, anyone signed in can "pay") must be asked for by name —

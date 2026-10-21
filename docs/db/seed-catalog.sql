@@ -116,6 +116,30 @@ SELECT s.id,
 FROM seed_course s
 JOIN app_user u ON u.id = s.instructor_id;
 
+-- Ratings (Phase 11): a TALLY per rated course, and the course's summary computed from it — the
+-- invariant engagement keeps (ADR-0023). A summary without a tally would be "repaired" to 0 by the
+-- nightly reconcile. Mostly 4–5 stars; 5★ takes the rest so the counts add up exactly.
+INSERT INTO course_rating (course_id, stars_1, stars_2, stars_3, stars_4, stars_5)
+SELECT id, s1, s2, s3, s4, rating_count - (s1 + s2 + s3 + s4)
+FROM (SELECT id, rating_count,
+             floor(rating_count * 0.04 * random())::int AS s1,
+             floor(rating_count * 0.06 * random())::int AS s2,
+             floor(rating_count * 0.15 * random())::int AS s3,
+             floor(rating_count * 0.40 * random())::int AS s4
+      FROM seed_course WHERE published AND rating_count > 0) t;
+
+UPDATE course c
+SET rating_count = r.stars_1 + r.stars_2 + r.stars_3 + r.stars_4 + r.stars_5,
+    rating_average = round((1 * r.stars_1 + 2 * r.stars_2 + 3 * r.stars_3 + 4 * r.stars_4
+                            + 5 * r.stars_5)::numeric
+                           / (r.stars_1 + r.stars_2 + r.stars_3 + r.stars_4 + r.stars_5), 2)
+FROM course_rating r JOIN seed_course s ON s.id = r.course_id
+WHERE c.id = r.course_id;
+
+UPDATE course c SET rating_count = 0, rating_average = 0 -- drafts and unrated: no tally, no rating
+FROM seed_course s
+WHERE c.id = s.id AND NOT EXISTS (SELECT 1 FROM course_rating r WHERE r.course_id = c.id);
+
 INSERT INTO section (id, course_id, title, position)
 SELECT gen_random_uuid(), s.id, (ARRAY['Getting started', 'Core concepts', 'Going further'])[p + 1], p
 FROM seed_course s, generate_series(0, 2) AS p;

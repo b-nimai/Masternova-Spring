@@ -4,7 +4,8 @@
  * ADR-0021); progress heartbeats go through a Redis write-back buffer flushed every 30 s
  * (ADR-0022). Design: docs/lld/progress.md.
  *
- * <p>No public API: a leaf module. It listens to entitlement's events and calls catalog's and
- * entitlement's APIs; nobody calls it.
+ * <p>Public API: {@link com.masternova.api.enrollment.EnrollmentApi} ("is this learner enrolled?"),
+ * since Phase 11 for engagement. It listens to entitlement's events and calls catalog's and
+ * entitlement's APIs.
  */
 package com.masternova.api.enrollment;
