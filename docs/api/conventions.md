@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-16 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6), §13 (Phase 3) and §15 (Phase 10) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-21 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6), §13 (Phase 3), §15 (Phase 10) and §16 + §17 (Phase 11) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -94,7 +94,8 @@ GET /api/v1/courses?sort=NEWEST&limit=20&cursor=<opaque>
 - The cursor is base64url of `SORT|key|id`. It's bound to its sort: reusing it with another
   `sort`, or sending anything we didn't issue, is 400 `VALIDATION_FAILED` with
   `errors[0] = {"field": "cursor", "code": "INVALID_CURSOR"}`. The client restarts from page 1.
-- The envelope is `CursorPage<T>`; it moves to `platform` when a second module pages a list.
+- The envelope is `CursorPage<T>`, in `platform` since Phase 11 (engagement's reviews and
+  questions page with a newest-first `(created_at, id)` cursor, `limit` 1–50).
 
 ## 3. Optimistic concurrency
 
@@ -342,3 +343,29 @@ Design: [`docs/lld/notification.md`](../lld/notification.md).
 
 Implemented by `enrollment.web.EnrollmentController`, `ProgressController` and
 `LearningController`. Design: [`docs/lld/progress.md`](../lld/progress.md).
+
+## 16. Reviews and Q&A
+
+| Endpoint | Auth | Body | Answer |
+|---|---|---|---|
+| `GET /courses/{courseId}/reviews?cursor&limit` | public | — | 200 `CursorPage<ReviewResponse>`, newest first (`limit` 1–50, default 10); 404 unless published |
+| `GET /courses/{courseId}/reviews/summary` | public | — | 200 `{average, count, stars: [1★ … 5★]}` |
+| `GET /me/reviews/{courseId}` | user | — | 200 `ReviewResponse`; 404 `Review` when you haven't reviewed it |
+| `PUT /me/reviews/{courseId}` | user | `{rating: 1–5, body?: ≤ 2000}` | 200 `ReviewResponse` (create or rewrite); 403 `NOT_ENROLLED` / `OWN_COURSE`; 404 unless published |
+| `DELETE /me/reviews/{courseId}` | user | — | 204, also when there was none |
+| `GET /lectures/{lectureId}/questions?cursor&limit` | participant | — | 200 `CursorPage<QuestionSummary>`, newest first |
+| `POST /lectures/{lectureId}/questions` | participant + `Idempotency-Key` | `{title: 1–150, body?: ≤ 5000}` | 201 `QuestionSummary`, `Location: /questions/{id}` |
+| `GET /questions/{questionId}` | participant | — | 200 `{question, answers[], truncated}` |
+| `POST /questions/{questionId}/answers` | participant + `Idempotency-Key` | `{parentAnswerId?, body}` | 201 `AnswerResponse`; 422 `REPLY_TOO_DEEP`; 404 for a parent from another thread |
+
+- **One review per learner per course**, so writing is a `PUT` on the pair: idempotent, no key.
+  Only an **actively enrolled** learner who doesn't teach the course may review it.
+- **A participant** is an enrolled learner, the course's instructor or an admin. Anyone else gets
+  403 `NOT_ENROLLED`; a lecture of an unpublished course is 404.
+- **A thread is a flat list in reading order** (each answer, then its replies, oldest first). Indent
+  by `depth` (1–3); `parentId` names the answer a reply belongs to. `byInstructor` marks the
+  course's teacher. At most 500 answers are returned (`truncated: true` beyond).
+- Names are snapshots (`authorName`), never user ids.
+
+Implemented by `engagement.web.ReviewController`, `MyReviewController` and `QuestionController`.
+Design: [`docs/lld/engagement.md`](../lld/engagement.md), ADR-0023.
