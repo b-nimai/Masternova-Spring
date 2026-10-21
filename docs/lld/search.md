@@ -217,6 +217,14 @@ until `VACUUM`, so V28 vacuums the table early and the ranker turns on `hnsw.ite
 - `SemanticSearchIT`: semantic and hybrid with a deterministic hashing `EmbeddingModel`; a model
   that throws → keywords, `degraded`.
 - `RankingTest` (pattern lab): the same Strategy without Spring.
+
+**Proved with the real model (2026-10-21, `make ai` + `make api`, 200 seeded courses).** The
+sweep embedded all 182 published courses through Ollama (`nomic-embed-text`, CPU on an M2) in
+batches of 32, ~1 s each. Queries that share no word with any title found nothing by keyword
+and the right subject by meaning: "relational databases" → *PostgreSQL Bootcamp*, "container
+orchestration" → *Docker in Production*, at ~50 ms end to end (the query embedding is most of
+it). With Ollama stopped, hybrid answered keyword results with `degraded: true` in 6–11 ms (the
+breaker skips the model); with Ollama started again, hybrid came back after the 30 s window.
 - `SemanticSearchIT` (the sweep): missing, stale (edited), wrong-model → re-embedded;
   unpublished → deleted; a failed batch leaves nothing written and the next run retries; more than
   40 neighbours (the `ef_search` cap, mutation-checked).
