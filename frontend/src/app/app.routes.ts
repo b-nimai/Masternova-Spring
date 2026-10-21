@@ -32,6 +32,12 @@ export const routes: Routes = [
       import('./features/learn/lecture-player/lecture-player').then((m) => m.LecturePlayer),
   },
   {
+    path: 'learning', // Phase 10: "My Learning", the learner's courses and progress
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/learn/my-learning/my-learning').then((m) => m.MyLearning),
+  },
+  {
     path: 'instructor', // Phase 6: an instructor's own courses (INSTRUCTOR or ADMIN)
     canMatch: [authGuard, roleGuard('INSTRUCTOR', 'ADMIN')],
     loadComponent: () =>

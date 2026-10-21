@@ -1,6 +1,7 @@
 # ADR-0019 — Grant course access in the same transaction that marks the order paid
 
 **Status:** accepted · **Date:** 2026-10-14 · **Deciders:** Nimai
+**Amended by:** [ADR-0021](0021-modulith-registry-for-in-process-module-listeners.md) (2026-10-15): §4's enrollment listens to `EntitlementGranted`/`EntitlementRevoked` in-process (durable through Modulith's registry), not to `OrderPaid` through the outbox.
 **Context links:** [`docs/lld/order-state-machine.md`](../lld/order-state-machine.md) §3, §5 · [ADR-0005](0005-hand-rolled-outbox-over-modulith-registry.md) (outbox) · [`entitlement-engine.md`](../lld/entitlement-engine.md)
 
 ## Context

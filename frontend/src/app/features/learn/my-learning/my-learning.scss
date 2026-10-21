@@ -1,0 +1,92 @@
+.my-learning {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+mat-button-toggle-group {
+  margin-bottom: 16px;
+}
+
+.courses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+}
+
+.course {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) auto;
+  gap: 24px;
+  align-items: center;
+  padding: 16px;
+
+  & + & {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+}
+
+.name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.title {
+  font: var(--mat-sys-title-medium);
+  color: var(--mat-sys-on-surface);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.instructor,
+.count {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font: var(--mat-sys-label-large);
+}
+
+.none {
+  padding: 16px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 16px;
+  text-align: center;
+
+  mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
+
+.form-error {
+  color: var(--mat-sys-error);
+}
+
+/* a phone: name, then progress, then the button, stacked */
+@media (max-width: 600px) {
+  .course {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+}

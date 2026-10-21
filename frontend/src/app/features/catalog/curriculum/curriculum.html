@@ -13,7 +13,13 @@
           <li [attr.data-testid]="'lecture-' + lecture.id">
             @if (a?.kind === 'ALLOWED' && lecture.kind === 'VIDEO') {
               <a class="title open" [routerLink]="['/courses', slug(), 'lectures', lecture.id]">
-                <mat-icon>play_circle</mat-icon>
+                @if (completed().has(lecture.id)) {
+                  <mat-icon class="done" aria-label="Completed" data-testid="completed"
+                    >check_circle</mat-icon
+                  >
+                } @else {
+                  <mat-icon>play_circle</mat-icon>
+                }
                 <span>{{ lecture.title }}</span>
               </a>
             } @else {

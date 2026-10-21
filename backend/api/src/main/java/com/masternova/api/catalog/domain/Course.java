@@ -128,7 +128,9 @@ public class Course {
   @Column(name = "rating_count", nullable = false)
   private int ratingCount;
 
-  @Column(name = "enrollment_count", nullable = false)
+  // ⭐ written only by CourseRepository.adjustEnrollmentCount (enrollment, Phase 10): never by a
+  //    save of this entity, which would write back the count it loaded minutes ago
+  @Column(name = "enrollment_count", nullable = false, updatable = false)
   private int enrollmentCount;
 
   @Column(name = "lecture_count", nullable = false)

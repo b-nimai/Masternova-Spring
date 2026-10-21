@@ -19,6 +19,13 @@ vi.mock('hls.js', () => ({
 }));
 
 const TICKET = '/api/v1/lectures/l1/playback';
+const RESUME = '/api/v1/me/progress/l1';
+const resumeAt = (positionSeconds: number) => ({
+  lectureId: 'l1',
+  positionSeconds,
+  maxPositionSeconds: positionSeconds,
+  completed: false,
+});
 
 describe('LecturePlayer', () => {
   let http: HttpTestingController;
@@ -37,6 +44,9 @@ describe('LecturePlayer', () => {
     fixture.detectChanges();
   });
 
+  /** Most tests start where nothing was watched yet. */
+  const fromTheStart = () => http.expectOne(RESUME).flush(resumeAt(0));
+
   afterEach(() => {
     http.verify();
     vi.useRealTimers();
@@ -50,6 +60,7 @@ describe('LecturePlayer', () => {
     });
 
   it('asks for a token and plays it', () => {
+    fromTheStart();
     issue('T1');
     fixture.detectChanges();
 
@@ -57,6 +68,7 @@ describe('LecturePlayer', () => {
   });
 
   it('re-tickets after an expired token and resumes at the same second', () => {
+    fromTheStart();
     issue('T1');
     fixture.detectChanges();
     vi.setSystemTime(Date.now() + 6 * 60_000); // the 5-minute token has expired
@@ -74,6 +86,7 @@ describe('LecturePlayer', () => {
   });
 
   it('shows a failure right after a fresh token instead of looping', () => {
+    fromTheStart();
     issue('T1');
     fixture.detectChanges();
     vi.setSystemTime(Date.now() + RETICKET_GRACE_MS - 1);
@@ -85,6 +98,7 @@ describe('LecturePlayer', () => {
   });
 
   it('does not re-ticket a failure that was not the token (a 404)', () => {
+    fromTheStart();
     issue('T1');
     fixture.detectChanges();
     vi.setSystemTime(Date.now() + 6 * 60_000);
@@ -96,6 +110,7 @@ describe('LecturePlayer', () => {
   });
 
   it('shows a real denial (a refund) with its reason', () => {
+    fromTheStart();
     http
       .expectOne(TICKET)
       .flush(
@@ -108,11 +123,44 @@ describe('LecturePlayer', () => {
   });
 
   it('explains a video that is still processing', () => {
+    fromTheStart();
     http
       .expectOne(TICKET)
       .flush({ status: 409, code: 'MEDIA_NOT_READY' }, { status: 409, statusText: 'Conflict' });
     fixture.detectChanges();
 
     expect(text(fixture, 'failed')).toContain('still processing');
+  });
+
+  it('opens where the learner stopped', () => {
+    http.expectOne(RESUME).flush(resumeAt(754));
+    issue('T1');
+    fixture.detectChanges();
+
+    expect(player().componentInstance.startAt()).toBe(754);
+  });
+
+  it('starts at 0 when the resume point cannot be read', () => {
+    http.expectOne(RESUME).flush(null, { status: 503, statusText: 'Unavailable' });
+    issue('T1');
+    fixture.detectChanges();
+
+    expect(player().componentInstance.startAt()).toBe(0);
+  });
+
+  it('reports a pause to the server at once', () => {
+    fromTheStart();
+    issue('T1');
+    fixture.detectChanges();
+
+    player().triggerEventHandler('playbackProgress', {
+      position: 61.7,
+      playing: false,
+      event: 'pause',
+    });
+
+    const beat = http.expectOne((r) => r.method === 'PUT' && r.url === RESUME);
+    expect(beat.request.body).toEqual({ positionSeconds: 61 });
+    beat.flush({ beaconToken: 'b', beaconExpiresAt: '2026-10-16T10:02:00Z' });
   });
 });

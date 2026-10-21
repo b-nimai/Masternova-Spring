@@ -16,7 +16,7 @@ nuke: ## Stop everything AND delete volumes (fresh database)
 
 secrets: ## Generate the local secret files the container stack mounts (gitignored, once per machine)
 	@mkdir -p secrets
-	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret db_password db_reader_password redis_password; do \
+	@for f in jwt_access_secret notification_token_secret playback_token_secret entitlement_playback_secret progress_beacon_secret db_password db_reader_password redis_password; do \
 	  [ -s secrets/$$f ] || { head -c 48 /dev/urandom | base64 | tr -d '\n' > secrets/$$f; \
 	    chmod 644 secrets/$$f; echo "created secrets/$$f"; }; \
 	done
@@ -129,6 +129,7 @@ k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files
 	  --from-file=NOTIFICATION_TOKEN_SECRET=secrets/notification_token_secret \
 	  --from-file=PLAYBACK_TOKEN_SECRET=secrets/playback_token_secret \
 	  --from-file=ENTITLEMENT_PLAYBACK_SECRET=secrets/entitlement_playback_secret \
+	  --from-file=PROGRESS_BEACON_SECRET=secrets/progress_beacon_secret \
 	  --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG)
 	kubectl -n masternova create secret generic masternova-db --type=kubernetes.io/basic-auth \
 	  --from-literal=username=masternova --from-file=password=secrets/db_password \

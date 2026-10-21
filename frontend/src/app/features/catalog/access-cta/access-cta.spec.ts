@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { AccessResponse } from '../../../core/api/entitlement-api';
+import { CourseProgressResponse } from '../../../core/api/learning-api';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { CART_MAX_ITEMS, CartStore } from '../../../core/commerce/cart-store';
 import { JAVA } from '../../../../testing/commerce-fixtures';
@@ -104,5 +105,63 @@ describe('AccessCta', () => {
       .click();
     expect(TestBed.inject(CartStore).has('c-java')).toBe(true);
     expect(navigate).toHaveBeenCalledWith(['/cart']);
+  });
+
+  describe("with the learner's progress (Phase 10)", () => {
+    const progress = (over: Partial<CourseProgressResponse>): CourseProgressResponse => ({
+      courseId: '1',
+      enrolled: true,
+      percentComplete: 0,
+      completedLectureIds: [],
+      continueLectureId: 'l1',
+      continuePositionSeconds: 0,
+      ...over,
+    });
+
+    beforeEach(() => (signedIn = true));
+
+    it('continues where the learner stopped', () => {
+      fixture.componentRef.setInput(
+        'progress',
+        progress({ percentComplete: 25, continueLectureId: 'l2', continuePositionSeconds: 30 }),
+      );
+      const el = show({ kind: 'ALLOWED', grant: 'ENTITLED' });
+
+      const watch = el.querySelector('[data-testid="watch"]')!;
+      expect(watch.textContent).toContain('Continue learning');
+      expect(watch.getAttribute('href')).toBe('/courses/k8s/lectures/l2');
+      expect(el.querySelector('[data-testid="progress"]')!.textContent).toContain('25% complete');
+    });
+
+    it('starts a course enrolled but not yet watched', () => {
+      fixture.componentRef.setInput('progress', progress({}));
+      expect(show({ kind: 'ALLOWED', grant: 'ENTITLED' }).textContent).toContain('Start learning');
+    });
+
+    it('offers a free enrollment to a signed-in visitor of a free course', () => {
+      fixture.componentRef.setInput('progress', progress({ enrolled: false }));
+      const clicks: void[] = [];
+      fixture.componentInstance.enroll.subscribe(() => clicks.push(undefined));
+      const el = show({ kind: 'ALLOWED', grant: 'FREE_COURSE' });
+
+      el.querySelector<HTMLButtonElement>('[data-testid="enroll"]')!.click();
+      expect(clicks).toHaveLength(1);
+
+      fixture.componentRef.setInput('enrolling', true);
+      fixture.detectChanges();
+      expect(el.querySelector<HTMLButtonElement>('[data-testid="enroll"]')!.disabled).toBe(true);
+    });
+
+    it('lets a finished course be reviewed', () => {
+      fixture.componentRef.setInput(
+        'progress',
+        progress({ percentComplete: 100, continueLectureId: null }),
+      );
+      const el = show({ kind: 'ALLOWED', grant: 'ENTITLED' });
+      expect(el.querySelector('[data-testid="review"]')!.getAttribute('href')).toBe(
+        '/courses/k8s/lectures/l1',
+      );
+      expect(el.querySelector('[data-testid="completed"]')).not.toBeNull();
+    });
   });
 });

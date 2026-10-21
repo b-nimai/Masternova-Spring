@@ -13,6 +13,7 @@ import { DurationPipe } from '../../../shared/duration-pipe';
  *
  * Phase 8: each lecture shows the entitlement engine's answer — an open video links to the player,
  * a locked one shows a lock. Until the answer arrives (`access` null), lectures are just listed.
+ * Phase 10: a lecture the learner has completed shows a tick.
  */
 @Component({
   imports: [MatExpansionModule, MatIconModule, DurationPipe, RouterLink],
@@ -25,6 +26,8 @@ export class Curriculum {
   readonly slug = input.required<string>();
   /** lectureId → may this viewer watch it; null while it loads (or if it failed). */
   readonly access = input<ReadonlyMap<string, AccessResponse> | null>(null);
+  /** Phase 10: the lectures this learner has completed (a tick instead of the play icon). */
+  readonly completed = input<ReadonlySet<string>>(new Set());
 
   protected sectionSeconds(section: SectionResponse): number {
     return section.lectures.reduce((sum, l) => sum + l.durationSeconds, 0);

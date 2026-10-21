@@ -12,6 +12,7 @@
         [src]="s.url"
         [startAt]="s.startAt"
         (failed)="onFailed($event)"
+        (playbackProgress)="onProgress($event)"
       />
     }
     @case ('denied') {
@@ -25,7 +26,7 @@
       <section class="notice" data-testid="failed">
         <mat-icon>error_outline</mat-icon>
         <p>{{ s.message }}</p>
-        <button mat-button type="button" (click)="retry()">Try again</button>
+        <button mat-button type="button" (click)="resume()">Try again</button>
       </section>
     }
   }

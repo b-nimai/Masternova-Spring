@@ -1,12 +1,15 @@
 package com.masternova.api.catalog.domain;
 
 import jakarta.persistence.LockModeType;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 /**
@@ -54,4 +57,38 @@ public interface CourseRepository
   /** Which course a lecture belongs to (entitlement asks by lecture). One indexed join. */
   @Query("select s.course.id from Lecture l join l.section s where l.id = :lectureId")
   Optional<UUID> findCourseIdByLectureId(UUID lectureId);
+
+  /** The lectures of these courses, in curriculum order, without loading any aggregate. */
+  @Query(
+      """
+      select new com.masternova.api.catalog.domain.LectureRow(
+          s.course.id, l.id, l.title, l.kind, l.duration)
+      from Lecture l join l.section s
+      where s.course.id in :courseIds
+      order by s.course.id, s.position, l.position
+      """)
+  List<LectureRow> findLectureRowsByCourseIds(Collection<UUID> courseIds);
+
+  /** These lectures with their course; unknown ids are absent. One statement. */
+  @Query(
+      """
+      select new com.masternova.api.catalog.domain.LectureRow(
+          s.course.id, l.id, l.title, l.kind, l.duration)
+      from Lecture l join l.section s
+      where l.id in :lectureIds
+      """)
+  List<LectureRow> findLectureRows(Collection<UUID> lectureIds);
+
+  /**
+   * ⭐ A relative update in SQL, never read-modify-write: concurrent enrollments can't lose a count,
+   * and it never bumps the course's {@code version} (a learner enrolling must not make the
+   * instructor's open editor stale). {@code Course.enrollmentCount} is {@code updatable = false},
+   * so an instructor's save can't write a stale count back either.
+   */
+  @Modifying
+  @Query(
+      value =
+          "UPDATE course SET enrollment_count = GREATEST(enrollment_count + :delta, 0) WHERE id = :id",
+      nativeQuery = true)
+  int adjustEnrollmentCount(UUID id, int delta);
 }

@@ -164,6 +164,8 @@ services:
         target: PLAYBACK_TOKEN_SECRET
       - source: entitlement_playback_secret # signs learners' IP-bound playback tokens (ADR-0017)
         target: ENTITLEMENT_PLAYBACK_SECRET
+      - source: progress_beacon_secret # signs the IP-bound progress beacon tokens (ADR-0022)
+        target: PROGRESS_BEACON_SECRET
     ports:
       # ⭐ loopback only: a direct client would reach Tomcat from Docker's 172.x gateway, which the
       #    RemoteIpValve trusts, and could forge X-Forwarded-For — the IP playback tokens are bound
@@ -383,3 +385,5 @@ secrets:
     file: ./secrets/playback_token_secret # the api's playback tickets
   entitlement_playback_secret:
     file: ./secrets/entitlement_playback_secret # learners' playback tokens (api only)
+  progress_beacon_secret:
+    file: ./secrets/progress_beacon_secret # progress beacons from closing pages (api only)

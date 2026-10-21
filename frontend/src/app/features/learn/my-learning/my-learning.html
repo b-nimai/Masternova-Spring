@@ -1,0 +1,66 @@
+<section class="my-learning">
+  <h1>My Learning</h1>
+
+  @if (courses.hasValue() ? courses.value() : null; as all) {
+    @if (all.length === 0) {
+      <div class="empty" data-testid="no-courses">
+        <mat-icon aria-hidden="true">school</mat-icon>
+        <p>You haven't enrolled in a course yet.</p>
+        <a mat-flat-button routerLink="/courses">Browse courses</a>
+      </div>
+    } @else {
+      <mat-button-toggle-group
+        aria-label="Show courses"
+        [value]="filter()"
+        (change)="filter.set($event.value)"
+      >
+        <mat-button-toggle value="ALL">All</mat-button-toggle>
+        <mat-button-toggle value="IN_PROGRESS">In progress</mat-button-toggle>
+        <mat-button-toggle value="COMPLETED">Completed</mat-button-toggle>
+      </mat-button-toggle-group>
+
+      <ul class="courses">
+        @for (c of shown(); track c.courseId) {
+          @let step = nextStep(c);
+          <li class="course" [attr.data-testid]="'course-' + c.courseId">
+            <div class="name">
+              <a class="title" [routerLink]="['/courses', c.slug]">{{ c.title }}</a>
+              <span class="instructor">{{ c.instructorName }}</span>
+            </div>
+            <div class="progress">
+              <span class="label" data-testid="percent">Progress {{ c.percentComplete }}%</span>
+              <mat-progress-bar
+                mode="determinate"
+                [value]="c.percentComplete"
+                [attr.aria-label]="c.title + ' progress'"
+              />
+              <span class="count">{{ c.completedLectures }} of {{ c.totalLectures }} lectures</span>
+            </div>
+            @if (c.continueLectureId; as lectureId) {
+              <a
+                mat-flat-button
+                data-testid="next-step"
+                [routerLink]="['/courses', c.slug, 'lectures', lectureId]"
+              >
+                <mat-icon>play_arrow</mat-icon> {{ labels[step] }}
+              </a>
+            } @else {
+              <a mat-stroked-button data-testid="next-step" [routerLink]="['/courses', c.slug]">
+                {{ labels[step] }}
+              </a>
+            }
+          </li>
+        } @empty {
+          <li class="none" data-testid="none-in-filter">Nothing here yet.</li>
+        }
+      </ul>
+    }
+  } @else if (courses.error()) {
+    <p class="form-error">
+      We couldn't load your courses.
+      <button mat-button type="button" (click)="courses.reload()">Retry</button>
+    </p>
+  } @else {
+    <mat-spinner diameter="36" />
+  }
+</section>

@@ -4,6 +4,7 @@ import { DeferBlockBehavior, DeferBlockState, TestBed } from '@angular/core/test
 import { provideRouter } from '@angular/router';
 import { CourseDetailResponse } from '../../../core/api/catalog-api';
 import { CourseAccessResponse } from '../../../core/api/entitlement-api';
+import { AuthStore } from '../../../core/auth/auth-store';
 import { K8S } from '../../../../testing/catalog-fixtures';
 import { text } from '../../../../testing/dom';
 import { CourseDetail } from './course-detail';
@@ -155,5 +156,57 @@ describe('CourseDetail', () => {
     await loadAccess(fixture);
 
     expect(text(fixture, 'locked-banner')).toBe('');
+  });
+
+  describe('signed in, allowed in (Phase 10)', () => {
+    const FREE: CourseAccessResponse = {
+      courseId: '1',
+      course: { kind: 'ALLOWED', grant: 'FREE_COURSE' },
+      lectures: [{ lectureId: 'l1', access: { kind: 'ALLOWED', grant: 'FREE_COURSE' } }],
+    };
+    const PROGRESS = '/api/v1/me/courses/1/progress';
+    const notEnrolled = {
+      courseId: '1',
+      enrolled: false,
+      percentComplete: 0,
+      completedLectureIds: [],
+      continueLectureId: null,
+      continuePositionSeconds: 0,
+    };
+
+    beforeEach(() => {
+      // the module is already built (the outer beforeEach injected): stub the real store's signal
+      vi.spyOn(TestBed.inject(AuthStore), 'isAuthenticated').mockReturnValue(true);
+    });
+
+    /** ⭐ setTimeout + tick, never whenStable, while a chained resource may still be pending. */
+    async function settle() {
+      await new Promise((resolve) => setTimeout(resolve));
+      TestBed.tick();
+    }
+
+    it('enrolls in a free course, then asks for the progress again', async () => {
+      const fixture = await open('k8s');
+      http.expectOne('/api/v1/courses/k8s').flush(DETAIL);
+      await settle();
+      http.expectOne('/api/v1/courses/1/access').flush(FREE);
+      await settle(); // the access lands → the progress resource's params appear
+      http.expectOne(PROGRESS).flush(notEnrolled);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      (fixture.nativeElement as HTMLElement)
+        .querySelector<HTMLButtonElement>('[data-testid="enroll"]')!
+        .click();
+      const put = http.expectOne('/api/v1/me/enrollments/1');
+      expect(put.request.method).toBe('PUT');
+      put.flush({ courseId: '1', status: 'ACTIVE', enrolledAt: '2026-10-16T10:00:00Z' });
+      await settle();
+
+      http.expectOne(PROGRESS).flush({ ...notEnrolled, enrolled: true, continueLectureId: 'l1' });
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(text(fixture, 'watch')).toContain('Start learning');
+    });
   });
 });

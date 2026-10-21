@@ -3,14 +3,16 @@
 > **One-liner:** wrap an object in another that has the **same interface**, holds the original,
 > and **adds behaviour** around its calls. Callers can't tell, and the wrapped object doesn't know.
 
-**Type:** Structural · **Status:** built (Phase 8.3) · **Last updated:** 2026-10-14
+**Type:** Structural · **Status:** built (Phases 8.3, 10.3) · **Last updated:** 2026-10-17
 **Real code:** `com.masternova.api.entitlement.infrastructure.CachedEntitlementRepository`
 (Decorator) wrapping `JdbcEntitlementRepository` (ConcreteComponent), both implementing
 `entitlement.domain.EntitlementRepository` (Component), wired in `EntitlementConfig`
 **Lab:** [`lab/.../patterns/decorator/`](../lab/src/main/java/com/masternova/patterns/decorator/)
 (an in-memory cache over an in-memory "database") · the Java-OOP version:
 [`java/06`](../java/06-oop-composition-over-inheritance.md) (notification channels)
-**Planned second use:** the progress write-back buffer (Phase 10)
+**Second use (10.3):** `com.masternova.api.enrollment.infrastructure.WriteBackProgressStore`
+(Decorator, write-back) wrapping `enrollment.application.ProgressWriter` (ConcreteComponent), both
+`enrollment.domain.ProgressStore`, wired in `EnrollmentConfig` (§3b); lab: `WriteBackPositionStore`
 
 **Trigger phrase:** "add caching / logging / metrics / retries **to** X without changing X",
 "sometimes with, sometimes without", "stackable".
@@ -107,6 +109,39 @@ working, on the cached path only**. Here Jackson maps `Instant` both ways, and
 `CachedEntitlementRepositoryTest.theCachedCopyKeepsItsInstantsSoExpiryStillWorks` reads twice so
 the second answer really comes from the cache.
 
+## 3b. Second use: the progress write-back buffer (Phase 10.3)
+
+The player sends a heartbeat every 15 s: about 67 a second per thousand viewers, for data whose
+loss costs a learner a few seconds of bookmark. The same shape, a different behaviour added:
+**write-back** instead of cache-aside (ADR-0022).
+
+| GoF role | Masternova | Responsibility |
+|---|---|---|
+| Component | `ProgressStore` | `record` · `recordAll` · `find` |
+| ConcreteComponent | `ProgressWriter` | validated write-through: one catalog query, one enrollment query, one upsert, one rollup recount per batch, one transaction |
+| Decorator | `WriteBackProgressStore` | `record` = one Lua merge into a Redis hash, no SQL; `flush()` every 30 s = `RENAME dirty → flushing`, `recordAll` the batch, release what was written (`HDEL` if unchanged); `find` merges the buffer into the rows |
+| Client | `ProgressService`, `LearningQueries` | inject `ProgressStore`, never know |
+
+```java
+@Bean
+WriteBackProgressStore progressStore(…) {
+  return new WriteBackProgressStore(new ProgressWriter(catalog, enrollments, progress, tx, meters), redis, meters);
+}   // ⭐ as in §3: only the wrapper is a bean
+```
+
+**What makes a write-back buffer safe here** is the merge, not a lock: `ProgressUpdate.merge`
+(max only goes up, last is the newest) is commutative, associative and idempotent. A flush that
+crashed after the `RENAME` leaves `flushing` behind, and the next flush writes it again: same
+rows. The merge exists three times (Java, Lua, SQL), and `WriteBackProgressStoreIT` runs the same
+random sequences through all three.
+
+**Failing open, again:** Redis down → `record` delegates straight to `ProgressWriter` (counted as
+`path=direct`), and `find` reads the rows. The decorator degrades to its component.
+
+**Cache-aside vs write-back:** §3 makes *reads* cheap and keeps the database the only truth;
+this one makes *writes* cheap and accepts that Redis holds up to 30 s of truth. That trade only
+works because the data is a bookmark: no money, no access, and an accepted ≤ 30 s loss.
+
 ## 4. Java features that make it nicer
 
 - **An interface + constructor injection:** the decorator takes `EntitlementRepository`, not
@@ -170,6 +205,7 @@ the second answer really comes from the cache.
 - **Roles:** Component (`EntitlementRepository`) · ConcreteComponent (`Jdbc…`) · Decorator (`Cached…`).
 - **In Masternova:** cache the **row** (not the decision), negatives too, **delete after commit**,
   **fail open**, TTL as backstop; wiring visible in one `@Bean`; two tests, one per concern.
+  Second use: a **write-back** progress buffer, crash-safe because its merge is idempotent.
 - **Pitfalls:** forgetting to delegate · writers that bypass the interface · self-invocation ·
   evicting before the commit · a cache that can fail the request.
 

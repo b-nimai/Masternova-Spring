@@ -1,4 +1,6 @@
 # Loaded ON TOP of the main application.yaml (classpath:/config/ wins over classpath:/).
 masternova:
+  enrollment:
+    reconcile-enabled: false # the safety net would "repair" rows tests insert on purpose
   commerce:
     provider: fake # the ITs use the network-free Razorpay double; production's default fails closed

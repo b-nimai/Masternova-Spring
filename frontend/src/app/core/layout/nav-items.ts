@@ -15,6 +15,7 @@ export interface NavItem {
 export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Home', icon: 'home', link: '/', roles: [] },
   { label: 'Courses', icon: 'school', link: '/courses', roles: [] },
+  { label: 'My Learning', icon: 'local_library', link: '/learning', roles: [], requiresAuth: true },
   { label: 'Playground', icon: 'science', link: '/playground', roles: [] },
   {
     label: 'Teach',

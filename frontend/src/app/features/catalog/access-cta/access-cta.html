@@ -2,16 +2,58 @@
 <div class="cta" [attr.data-testid]="'cta-' + a.kind">
   @switch (a.kind) {
     @case ('ALLOWED') {
-      @if (firstLectureId(); as lectureId) {
-        <a mat-flat-button [routerLink]="['/courses', slug(), 'lectures', lectureId]">
-          <mat-icon>play_arrow</mat-icon>
-          {{
-            a.grant === 'OWNER' || a.grant === 'ADMIN' ? 'Watch as instructor' : 'Start learning'
-          }}
-        </a>
+      @if (a.grant === 'OWNER' || a.grant === 'ADMIN') {
+        @if (firstLectureId(); as lectureId) {
+          <a mat-flat-button [routerLink]="['/courses', slug(), 'lectures', lectureId]">
+            <mat-icon>play_arrow</mat-icon> Watch as instructor
+          </a>
+        }
+      } @else {
+        @switch (step()) {
+          @case ('ENROLL') {
+            <button
+              mat-flat-button
+              type="button"
+              data-testid="enroll"
+              [disabled]="enrolling()"
+              (click)="enroll.emit()"
+            >
+              Enroll for free
+            </button>
+            <p class="hint">Free for everyone. Enroll to keep it in My Learning.</p>
+          }
+          @case ('REVIEW') {
+            @if (firstLectureId(); as lectureId) {
+              <a
+                mat-stroked-button
+                data-testid="review"
+                [routerLink]="['/courses', slug(), 'lectures', lectureId]"
+                >Review course</a
+              >
+            }
+            <p class="hint" data-testid="completed">You've completed this course.</p>
+          }
+          @default {
+            @if (lectureId(); as lectureId) {
+              <a
+                mat-flat-button
+                data-testid="watch"
+                [routerLink]="['/courses', slug(), 'lectures', lectureId]"
+              >
+                <mat-icon>play_arrow</mat-icon>
+                {{ step() === 'CONTINUE' ? 'Continue learning' : 'Start learning' }}
+              </a>
+            }
+            @if (a.grant === 'FREE_COURSE' && !progress()?.enrolled) {
+              <p class="hint">Free for everyone.</p>
+            }
+          }
+        }
       }
-      @if (a.grant === 'FREE_COURSE') {
-        <p class="hint">Free for everyone.</p>
+      @if (progress(); as p) {
+        @if (p.enrolled && p.percentComplete > 0) {
+          <p class="hint" data-testid="progress">{{ p.percentComplete }}% complete</p>
+        }
       }
     }
     @case ('DENIED') {

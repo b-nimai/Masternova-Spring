@@ -52,9 +52,9 @@ make k8s-bump TAG=sha-abc1234  # GitOps deploy: checks GHCR, commits the tag; th
 make helm-check k8s-e2e      # lint/validate charts · Playwright against the cluster
 ```
 
-The JDK is Homebrew's OpenJDK 26 (the build targets `release 25`; CI uses Temurin 25). A
+The JDK is Oracle JDK 25 (the build targets `release 25`; CI uses Temurin 25). A
 non-login shell may need
-`export JAVA_HOME=/opt/homebrew/opt/openjdk@26/libexec/openjdk.jdk/Contents/Home PATH=$JAVA_HOME/bin:$PATH`.
+`export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-25.jdk/Contents/Home PATH=$JAVA_HOME/bin:$PATH`.
 
 ## 3. Backend structure — package by module, layered inside
 
