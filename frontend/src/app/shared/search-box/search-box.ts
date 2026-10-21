@@ -76,8 +76,14 @@ export class SearchBox {
     this.searched.emit();
   }
 
-  /** Enter: the ranked results page for the text as typed. */
-  protected submit(): void {
+  /**
+   * Enter: the ranked results page for the text as typed.
+   *
+   * ⭐ The NATIVE submit event: `ngSubmit` comes from NgForm (FormsModule) or `[formGroup]`, and
+   *    this form has neither, so nothing prevented the browser's own submit, which reloaded the page.
+   */
+  protected submit(event: Event): void {
+    event.preventDefault();
     const value = this.query.value;
     const q = typeof value === 'string' ? value.trim() : value.title;
     if (q) {

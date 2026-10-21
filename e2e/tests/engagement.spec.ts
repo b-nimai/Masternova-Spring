@@ -18,7 +18,8 @@ test.describe("engagement + search", () => {
     const suggestion = page.getByTestId("suggestion").first();
     await expect(suggestion).toContainText("Kubernetes");
 
-    await box.press("Escape"); // close the panel: Enter now submits the text as typed
+    // Enter with no option highlighted submits the text as typed (no Escape: on a type="search"
+    // input, Chromium's Escape CLEARS the text)
     await box.press("Enter");
     await expect(page).toHaveURL(/\/search\?q=kuberne/);
     await expect(page.getByTestId("search-title")).toContainText("kuberne");
@@ -30,7 +31,9 @@ test.describe("engagement + search", () => {
   }) => {
     const email = uniqueEmail();
     await signUp(page, email, "E2E Reviewer");
+    await page.goto("/login");
     await logIn(page, email);
+    await expect(page.getByTestId("user-menu")).toBeVisible(); // logged in before navigating away
 
     await page.goto("/courses?price=FREE");
     await page.locator("app-course-card a.title").first().click();

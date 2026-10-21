@@ -101,6 +101,10 @@ Found by the phase's code review, each with a spec now:
   `Subscription` and unsubscribes when it starts over.
 - **Q&A inside the player's `@switch`.** Shown only while `playing`, so article lectures and
   playback failures had none, and an error destroyed a question being typed. It sits outside.
+- **`(ngSubmit)` on a bare `<form>` does nothing.** `ngSubmit` belongs to `NgForm` (FormsModule)
+  or `[formGroup]`; the search box has a lone `[formControl]`, so Enter did the browser's own
+  submit and reloaded the page. Unit specs never submitted; the e2e test caught it. It binds
+  `(submit)` and calls `preventDefault()`, and a spec checks `defaultPrevented`.
 - **Mutation-checking a spec:** after reverting a mutated file, `touch` it. The test builder
   served the mutated transpile once more.
 

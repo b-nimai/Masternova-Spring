@@ -1,7 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { SearchBox, SUGGEST_DEBOUNCE_MS } from './search-box';
 
 describe('SearchBox', () => {
@@ -105,5 +105,17 @@ describe('SearchBox', () => {
     type('kube');
     vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
     http.expectOne((r) => r.params.get('q') === 'kube').flush([]);
+  });
+
+  it('submits in the app, not with a page load', () => {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    type(' kubernetes ');
+    const submit = new Event('submit', { cancelable: true });
+    fixture.nativeElement.querySelector('form').dispatchEvent(submit);
+
+    expect(submit.defaultPrevented).toBe(true); // the browser's own submit reloaded the page
+    expect(navigate).toHaveBeenCalledWith(['/search'], { queryParams: { q: 'kubernetes' } });
+    vi.advanceTimersByTime(SUGGEST_DEBOUNCE_MS);
+    http.expectOne((r) => r.params.get('q') === 'kubernetes').flush([]);
   });
 });

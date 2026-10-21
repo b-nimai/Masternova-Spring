@@ -1,4 +1,4 @@
-<form class="search-box" role="search" (ngSubmit)="submit()">
+<form class="search-box" role="search" (submit)="submit($event)">
   <mat-form-field appearance="outline" subscriptSizing="dynamic">
     <mat-icon matPrefix aria-hidden="true">search</mat-icon>
     <input
