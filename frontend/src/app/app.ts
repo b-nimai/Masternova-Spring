@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { NavBar } from './core/layout/nav-bar/nav-bar';
+import { scrollToTopOnPageChange } from './core/layout/scroll-to-top';
 
 /**
  * The app shell: the navigation bar above the routed page. Pages sit inside one of two layout
@@ -13,4 +14,8 @@ import { NavBar } from './core/layout/nav-bar/nav-bar';
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
-export class App {}
+export class App {
+  constructor() {
+    scrollToTopOnPageChange();
+  }
+}

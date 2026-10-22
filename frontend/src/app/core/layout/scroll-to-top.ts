@@ -1,0 +1,38 @@
+import { ViewportScroller } from '@angular/common';
+import { DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, UrlTree } from '@angular/router';
+import { filter } from 'rxjs';
+
+/**
+ * Start a new PAGE at the top, but not every navigation. The router's own
+ * `scrollPositionRestoration: 'enabled'` scrolls on all of them, and the catalog's filters are
+ * query-param navigations: every chip clicked would jump the page. So: scroll only when the
+ * path changes, and leave a `#fragment` to the page that owns the anchor (the course page's
+ * `#reviews` exists only once its data has loaded).
+ *
+ * Call in an injection context (the root component's constructor).
+ */
+export function scrollToTopOnPageChange(): void {
+  const router = inject(Router);
+  const scroller = inject(ViewportScroller);
+  let lastPath: string | null = null;
+
+  router.events
+    .pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      takeUntilDestroyed(inject(DestroyRef)),
+    )
+    .subscribe((event) => {
+      const tree = router.parseUrl(event.urlAfterRedirects);
+      const path = pathOf(tree);
+      if (lastPath !== null && path !== lastPath && !tree.fragment) {
+        scroller.scrollToPosition([0, 0]);
+      }
+      lastPath = path;
+    });
+}
+
+function pathOf(tree: UrlTree): string {
+  return tree.root.children['primary']?.segments.map((s) => s.path).join('/') ?? '';
+}

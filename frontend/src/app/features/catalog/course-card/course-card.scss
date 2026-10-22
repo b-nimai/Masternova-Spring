@@ -1,5 +1,6 @@
 // Figma course card: a 201 px cover (8 px corners), then 20 px to the text.
-// ⚠️ The height is fixed (CARD_HEIGHT in catalog.ts): the virtual scroll measures rows by it.
+// ⚠️ The height must not vary: the catalog's virtual scroll measures rows by ROW_HEIGHT
+// (catalog.ts). The title is clamped to two lines, every other line to one.
 :host {
   display: block;
 }
@@ -54,6 +55,14 @@
 
 p {
   margin: 0;
+}
+
+.instructor,
+.unrated,
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .instructor,

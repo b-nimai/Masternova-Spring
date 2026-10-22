@@ -25,6 +25,15 @@ describe('LectureSidebar', () => {
   } as unknown as CourseDetailResponse;
   const allowed = { kind: 'ALLOWED', grant: 'PURCHASE' };
 
+  const progress = (done: string[]) => ({
+    courseId: 'c1',
+    enrolled: true,
+    percentComplete: 25,
+    completedLectureIds: done,
+    continueLectureId: 'l2',
+    continuePositionSeconds: 0,
+  });
+
   async function render() {
     TestBed.configureTestingModule({
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -34,14 +43,7 @@ describe('LectureSidebar', () => {
     fixture.componentRef.setInput('currentLectureId', 'l2');
     TestBed.tick();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('/api/v1/me/courses/c1/progress').flush({
-      courseId: 'c1',
-      enrolled: true,
-      percentComplete: 25,
-      completedLectureIds: ['l1'],
-      continueLectureId: 'l2',
-      continuePositionSeconds: 0,
-    });
+    http.expectOne('/api/v1/me/courses/c1/progress').flush(progress(['l1']));
     http.expectOne('/api/v1/courses/c1/access').flush({
       courseId: 'c1',
       course: allowed,
@@ -53,14 +55,14 @@ describe('LectureSidebar', () => {
       ],
     });
     await fixture.whenStable();
-    return fixture.nativeElement as HTMLElement;
+    return { fixture, http, el: fixture.nativeElement as HTMLElement };
   }
 
   const row = (el: HTMLElement, id: string) =>
     el.querySelector<HTMLElement>(`[data-testid="side-${id}"]`)!;
 
   it('ticks completed lectures, marks the current one and counts what is done', async () => {
-    const el = await render();
+    const { el } = await render();
 
     expect(row(el, 'l1').classList).toContain('done');
     expect(row(el, 'l2').classList).toContain('current');
@@ -69,8 +71,21 @@ describe('LectureSidebar', () => {
     expect(el.querySelector('a.review')?.getAttribute('href')).toBe('/courses/k8s#reviews');
   });
 
+  it('keeps its ticks while it re-reads the progress for the next lecture', async () => {
+    const { fixture, http, el } = await render();
+
+    fixture.componentRef.setInput('currentLectureId', 'l3');
+    TestBed.tick();
+    expect(row(el, 'l1').classList).toContain('done'); // no flicker while reloading
+    http.expectOne('/api/v1/me/courses/c1/progress').flush(progress(['l1', 'l2']));
+    await fixture.whenStable();
+
+    expect(row(el, 'l2').classList).toContain('done'); // the lecture just left
+    expect(el.querySelector('[data-testid="done-count"]')?.textContent?.trim()).toBe('2/4');
+  });
+
   it('links only the other videos this viewer may open', async () => {
-    const el = await render();
+    const { el } = await render();
 
     expect(row(el, 'l1').querySelector('a')?.getAttribute('href')).toBe('/courses/k8s/lectures/l1');
     expect(row(el, 'l2').querySelector('a')).toBeNull(); // the current one

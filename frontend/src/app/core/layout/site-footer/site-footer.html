@@ -8,7 +8,7 @@
       <p>Sell access to a video — and make sure only the people who paid can watch it.</p>
     </div>
 
-    @for (column of columns; track column.heading) {
+    @for (column of columns(); track column.heading) {
       <nav class="column" [attr.aria-label]="column.heading">
         <h2>{{ column.heading }}</h2>
         @for (item of column.links; track item.link) {

@@ -84,4 +84,5 @@
   </div>
 </section>
 
-<app-learner-reviews [course]="topCourses.value()?.[0]" />
+<!-- ⭐ hasValue() first: value() throws while the resource is in error -->
+<app-learner-reviews [course]="topCourses.hasValue() ? topCourses.value()[0] : undefined" />

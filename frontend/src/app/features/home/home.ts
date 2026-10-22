@@ -3,7 +3,7 @@ import { rxResource, toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
-import { map } from 'rxjs';
+import { catchError, map, of } from 'rxjs';
 import { CatalogApi } from '../../core/api/catalog-api';
 import { AuthStore } from '../../core/auth/auth-store';
 import { CodePanel, CodeToken } from './code-panel/code-panel';
@@ -39,7 +39,10 @@ export class Home {
   });
 
   protected readonly subjects = toSignal(
-    this.catalog.categories().pipe(map((categories) => categories.length)),
+    this.catalog.categories().pipe(
+      map((categories) => categories.length),
+      catchError(() => of(0)), // a decorative number: never break the page over it
+    ),
     { initialValue: 0 },
   );
 

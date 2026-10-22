@@ -84,6 +84,21 @@ describe('Home', () => {
     expect(el.querySelector('[data-testid="home-reviews"]')).toBeNull();
   });
 
+  it('still renders when the courses and categories requests fail', async () => {
+    const fixture = TestBed.createComponent(Home);
+    TestBed.tick();
+    http.expectOne('/api/v1/categories').flush(null, { status: 500, statusText: 'Down' });
+    http
+      .expectOne((r) => r.url === '/api/v1/courses')
+      .flush(null, { status: 500, statusText: 'Down' });
+    await fixture.whenStable();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('h1')?.textContent).toContain('Empower Your Future');
+    expect(el.querySelector('.stats strong')?.textContent).toBe('0');
+    expect(el.querySelector('[data-testid="home-reviews"]')).toBeNull();
+  });
+
   const teachHref = (el: HTMLElement) =>
     el.querySelector<HTMLAnchorElement>('.pill')?.getAttribute('href') ?? null;
   const signIn = (as: Role[]) => {

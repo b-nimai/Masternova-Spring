@@ -6,7 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { RouterLink, RouterLinkActive } from '@angular/router';
-import { map } from 'rxjs';
+import { catchError, map, of } from 'rxjs';
 import { CatalogApi } from '../../api/catalog-api';
 import { AuthStore } from '../../auth/auth-store';
 import { injectSignOut } from '../../auth/sign-out';
@@ -50,7 +50,13 @@ export class NavBar {
   );
 
   protected readonly links = computed(() => visibleTo(this.auth, SITE_LINKS));
-  protected readonly categories = toSignal(inject(CatalogApi).categories(), { initialValue: [] });
+  /** A failed request leaves the Catalog menu with "All courses" only (toSignal would rethrow). */
+  protected readonly categories = toSignal(
+    inject(CatalogApi)
+      .categories()
+      .pipe(catchError(() => of([]))),
+    { initialValue: [] },
+  );
   protected readonly searchOpen = signal(false);
 
   /** The avatar: the display name's initials (users have no picture). */

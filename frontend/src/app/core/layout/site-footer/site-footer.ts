@@ -1,12 +1,17 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
+import { catchError, of } from 'rxjs';
 import { CatalogApi } from '../../api/catalog-api';
+import { Role } from '../../auth/auth-api';
+import { AuthStore } from '../../auth/auth-store';
 
 /** One footer column. */
 interface FooterColumn {
   heading: string;
   links: readonly { label: string; link: string }[];
+  /** Shown only to these roles (the routes are role-guarded); left out = everyone. */
+  roles?: readonly Role[];
 }
 
 /**
@@ -20,7 +25,9 @@ interface FooterColumn {
   styleUrl: './site-footer.scss',
 })
 export class SiteFooter {
-  protected readonly columns: readonly FooterColumn[] = [
+  private readonly auth = inject(AuthStore);
+
+  private readonly allColumns: readonly FooterColumn[] = [
     {
       heading: 'Learn',
       links: [
@@ -31,6 +38,7 @@ export class SiteFooter {
     },
     {
       heading: 'Teach',
+      roles: ['INSTRUCTOR', 'ADMIN'],
       links: [
         { label: 'Your courses', link: '/instructor' },
         { label: 'Create a course', link: '/instructor/courses/new' },
@@ -46,6 +54,17 @@ export class SiteFooter {
     },
   ];
 
-  protected readonly categories = toSignal(inject(CatalogApi).categories(), { initialValue: [] });
+  /** ⭐ Role-based UI, as in the nav: a learner never sees links a guard would bounce. */
+  protected readonly columns = computed(() =>
+    this.allColumns.filter((c) => !c.roles || this.auth.hasAnyRole(c.roles)),
+  );
+
+  /** A failed request just leaves the Subjects column out (toSignal would rethrow). */
+  protected readonly categories = toSignal(
+    inject(CatalogApi)
+      .categories()
+      .pipe(catchError(() => of([]))),
+    { initialValue: [] },
+  );
   protected readonly year = new Date().getFullYear();
 }

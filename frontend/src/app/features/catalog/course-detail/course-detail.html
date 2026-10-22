@@ -42,7 +42,7 @@
           ><mat-icon aria-hidden="true">signal_cellular_alt</mat-icon
           >{{ levelLabels[c.level] }}</span
         >
-        <span><mat-icon aria-hidden="true">language</mat-icon>{{ language(c.language) }}</span>
+        <span><mat-icon aria-hidden="true">language</mat-icon>{{ languageName() }}</span>
         @if (c.publishedAt) {
           <span
             ><mat-icon aria-hidden="true">info</mat-icon>Published
@@ -92,7 +92,17 @@
           <li><mat-icon aria-hidden="true">devices</mat-icon> Resume on any device</li>
         </ul>
         <button mat-button type="button" class="share" data-testid="share" (click)="share()">
-          {{ shared() ? 'Link copied' : 'Share' }}
+          @switch (shareState()) {
+            @case ('copied') {
+              Link copied
+            }
+            @case ('failed') {
+              Couldn't copy the link
+            }
+            @default {
+              Share
+            }
+          }
         </button>
       </div>
     </aside>
