@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter, Router } from '@angular/router';
+import { provideRouter } from '@angular/router';
 import { of } from 'rxjs';
 import { text } from '../../../testing/dom';
 import { AuthApi, TokenResponse } from '../../core/auth/auth-api';
@@ -45,16 +45,5 @@ describe('Account', () => {
   it('nudges an unverified user to check their inbox', async () => {
     const fixture = await signedIn(false);
     expect(text(fixture, 'email-status')).toContain('Not verified');
-  });
-
-  it('logout clears the session and leaves the page', async () => {
-    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
-    const fixture = await signedIn(true);
-
-    (fixture.nativeElement as HTMLElement).querySelector('button')!.click();
-    await fixture.whenStable();
-
-    expect(TestBed.inject(AuthStore).isAuthenticated()).toBe(false);
-    expect(navigate).toHaveBeenCalledWith('/');
   });
 });

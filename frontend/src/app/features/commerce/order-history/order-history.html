@@ -1,5 +1,4 @@
 <section class="order-history">
-  <h1>Your orders</h1>
   @if (orders.hasValue() ? orders.value() : null; as list) {
     @if (list.length === 0) {
       <p data-testid="no-orders">No orders yet. <a routerLink="/courses">Browse courses</a></p>

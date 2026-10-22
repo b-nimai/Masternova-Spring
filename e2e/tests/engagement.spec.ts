@@ -12,6 +12,7 @@ test.describe("engagement + search", () => {
     page,
   }) => {
     await page.goto("/courses");
+    await page.getByTestId("search-toggle").click(); // the nav bar's search opens on demand
     const box = page.getByTestId("search-input");
     await box.fill("kuberne"); // a prefix: trigram word similarity
 

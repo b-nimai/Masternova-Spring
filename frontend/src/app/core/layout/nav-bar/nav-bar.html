@@ -1,0 +1,106 @@
+<nav class="bar" aria-label="Main">
+  <a routerLink="/" class="brand" aria-label="Masternova home">
+    <img src="logo.svg" alt="" width="32" height="32" />
+    <span>Masternova</span>
+  </a>
+
+  @if (isHandset()) {
+    <button
+      mat-icon-button
+      type="button"
+      class="menu-button"
+      aria-label="Open navigation"
+      [matMenuTriggerFor]="siteMenu"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+    <mat-menu #siteMenu="matMenu">
+      <a mat-menu-item routerLink="/">Home</a>
+      <a mat-menu-item routerLink="/courses">Catalog</a>
+      @for (link of links(); track link.link) {
+        <a mat-menu-item [routerLink]="link.link">{{ link.label }}</a>
+      }
+    </mat-menu>
+  } @else {
+    <div class="links">
+      <a
+        routerLink="/"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="link"
+        >Home</a
+      >
+      <button
+        type="button"
+        class="link"
+        [matMenuTriggerFor]="catalogMenu"
+        data-testid="catalog-menu"
+      >
+        Catalog <mat-icon aria-hidden="true">expand_more</mat-icon>
+      </button>
+      @for (link of links(); track link.link) {
+        <a [routerLink]="link.link" routerLinkActive="active" class="link">{{ link.label }}</a>
+      }
+    </div>
+  }
+  <mat-menu #catalogMenu="matMenu" class="catalog-menu">
+    <a mat-menu-item routerLink="/courses">All courses</a>
+    @for (category of categories(); track category.slug) {
+      <a mat-menu-item routerLink="/courses" [queryParams]="{ category: category.slug }">
+        {{ category.name }}
+      </a>
+    }
+  </mat-menu>
+
+  <div class="actions">
+    @defer (when searchOpen()) {
+      @if (searchOpen()) {
+        <app-search-box class="search" (searched)="searchOpen.set(false)" />
+      }
+    }
+    <button
+      mat-icon-button
+      type="button"
+      [attr.aria-label]="searchOpen() ? 'Close search' : 'Search courses'"
+      [attr.aria-expanded]="searchOpen()"
+      data-testid="search-toggle"
+      (click)="toggleSearch()"
+    >
+      <mat-icon>{{ searchOpen() ? 'close' : 'search' }}</mat-icon>
+    </button>
+    <a
+      mat-icon-button
+      routerLink="/cart"
+      aria-label="Cart"
+      data-testid="cart-link"
+      [matBadge]="cart.count()"
+      [matBadgeHidden]="cart.count() === 0"
+    >
+      <mat-icon>shopping_cart</mat-icon>
+    </a>
+    @if (auth.user(); as user) {
+      <button
+        type="button"
+        class="avatar"
+        [matMenuTriggerFor]="userMenu"
+        [attr.aria-label]="'Account menu for ' + user.displayName"
+        data-testid="user-menu"
+      >
+        <span aria-hidden="true">{{ initials() }}</span>
+        <span class="visually-hidden">{{ user.displayName }}</span>
+      </button>
+      <mat-menu #userMenu="matMenu" xPosition="before">
+        <a mat-menu-item routerLink="/account"><mat-icon>dashboard</mat-icon> Dashboard</a>
+        <a mat-menu-item routerLink="/account/orders"
+          ><mat-icon>receipt_long</mat-icon> My orders</a
+        >
+        <button mat-menu-item type="button" (click)="signOut()">
+          <mat-icon>logout</mat-icon> Log out
+        </button>
+      </mat-menu>
+    } @else {
+      <a mat-stroked-button routerLink="/login" class="auth">Log in</a>
+      <a mat-stroked-button routerLink="/signup" class="auth">Sign up</a>
+    }
+  </div>
+</nav>

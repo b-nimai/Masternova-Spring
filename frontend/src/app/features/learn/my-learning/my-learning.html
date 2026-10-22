@@ -1,6 +1,4 @@
 <section class="my-learning">
-  <h1>My Learning</h1>
-
   @if (courses.hasValue() ? courses.value() : null; as all) {
     @if (all.length === 0) {
       <div class="empty" data-testid="no-courses">

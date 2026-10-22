@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, shareReplay } from 'rxjs';
 import { CursorPage } from './cursor-page';
 
 /** Mirrors the backend enums (catalog/domain). */
@@ -128,7 +128,16 @@ export class CatalogApi {
     return this.http.get<CourseDetailResponse>(`/api/v1/courses/${encodeURIComponent(slug)}`);
   }
 
+  /**
+   * Categories are read-only (seeded by Flyway), and the nav bar, footer, catalog and forms all
+   * want them: fetched once per session. ⭐ `shareReplay` resubscribes after an error, so a failed
+   * fetch is not cached.
+   */
+  private readonly categories$ = this.http
+    .get<CategoryResponse[]>('/api/v1/categories')
+    .pipe(shareReplay(1));
+
   categories(): Observable<CategoryResponse[]> {
-    return this.http.get<CategoryResponse[]>('/api/v1/categories');
+    return this.categories$;
   }
 }
