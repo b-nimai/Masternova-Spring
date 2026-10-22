@@ -31,3 +31,6 @@ secrets/
 e2e/node_modules/
 e2e/test-results/
 e2e/playwright-report/
+
+# StudyNotion Figma exports (Phase UI reference material, not shipped)
+/design-export/

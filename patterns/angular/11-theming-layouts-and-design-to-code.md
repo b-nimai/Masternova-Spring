@@ -71,7 +71,15 @@ and the header inject the **same** instance.
 and the route's component inside its own outlet. `RouterTestingHarness.create()` renders the route
 the way the app does; `harness.routeNativeElement` is the layout with its child.
 
-## 6. Pitfalls met
+## 6. Reading the Figma when the MCP is out of calls ⭐
+
+The Figma MCP on a Starter plan ran out after ~15 reads. The REST API with a read-only token
+(`file_content:read`) gives more than the MCP's screenshots: `GET /v1/files/:key/nodes?ids=…`
+returns every layer's exact geometry, fills, opacity, blend mode and effects; `GET /v1/images`
+renders frames; `GET /v1/files/:key/images` lists the image fills. `design-export/` (git-ignored)
+holds the scripts and the downloads.
+
+## 7. Pitfalls met
 
 - **macOS `grep -Z`** means *decompress*, not "NUL-separate" — a `grep -lZ | xargs -0` silently did
   nothing.
@@ -85,10 +93,18 @@ the way the app does; `harness.routeNativeElement` is the layout with its child.
   `getByLabel(…, { exact: true })` compares the label's whole text, required `*` included. The e2e
   helper uses `getByRole('textbox', { name: 'Password', exact: true })` (the accessible name skips
   the `aria-hidden` asterisk).
+- **JPEG has no alpha.** The hero's "glow" was a transparent noise texture; converted to JPEG it
+  became a white sheet. Keep alpha images PNG (or WebP).
+- **A screenshot isn't the design.** The same texture is drawn at 20 % opacity in *soft light*;
+  the picture's "white block" is a hard drop shadow; the glows are blurred gradient ellipses.
+  None of that shows in a PNG export: the node JSON (`opacity`, `blendMode`, `effects`) does.
+- **Component style budget (8 kB).** The home page's one stylesheet broke it. Splitting the page
+  into section components (`CodePanel`, `CourseHighlights`, `SkillsSection`, `LearnerReviews`)
+  fixed it, and gave each a single job, instead of raising the budget.
 - **Reserved error space:** Material keeps a line under every field for `<mat-error>`; the Figma's
   20 px gaps need `subscriptSizing: 'dynamic'` (app-wide `MAT_FORM_FIELD_DEFAULT_OPTIONS`).
 
-## 7. Deviations from the StudyNotion Figma
+## 8. Deviations from the StudyNotion Figma
 
 | Screen | Figma | Masternova | Why |
 |---|---|---|---|
@@ -106,4 +122,12 @@ the way the app does; `harness.routeNativeElement` is the layout with its child.
 | Sign up | first + last name, phone number | one display name; no phone | the API's `SignupRequest` |
 | Log in | "Forgot password" | none | no password reset in the API |
 | Verify email | a 6-box OTP code + "Resend it" | the emailed link verifies on arrival; states shown in the same layout | link-based verification (identity LLD) |
-| Auth pages | the same photo at 4047 × 2698 (1.3 MB) | used as delivered | the asset is kept unedited; a resized copy is a follow-up |
+| Auth, Home | photos delivered at 3–4× their size (1.3–9 MB PNG/JPEG) | re-encoded JPEGs at 2× the displayed size (≈ 0.15–0.33 MB each; 22 MB → 0.9 MB for the home page) | identical at the size shown; a page shouldn't download 9 MB for one picture |
+| Home | "Learn More" / "Book a Demo" | "Browse Courses" / "Create Account" (signed in: "My Learning") | no demo booking; each button goes somewhere real |
+| Home | "Become an Instructor" for everyone | visitors → sign up; instructors → their courses; learners: no link, a hint | the instructor role is granted by an admin |
+| Home | HTML snippets in the code panels | an Angular and a Java snippet in the spirit of Masternova's code | it's a code-teaching site about this stack |
+| Home | three static course cards ("Learn HTML" …) | the three best-rated published courses | real data |
+| Home | timeline: Leadership, Responsibility, Flexibility, Solve the problem; banner "10 years · 250 courses" | Masternova's pillars (Material icons); banner: the real number of subjects, "24/7" | no invented numbers |
+| Home | "Your swiss knife for learning any language" (progress / compare / plan cards) | dropped | they advertise language-learning features we don't have |
+| Home | review cards with photos and e-mail addresses | the latest reviews of the best-rated course, initials, the course's title | the API has no site-wide feed or avatars; e-mails are private |
+| Home | — | the backend status card moved from the home page to the admin page | it was Phase 0's first screen |

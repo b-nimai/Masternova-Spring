@@ -13,6 +13,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { asProblem } from '../../core/api/problem';
 import { Role, User } from '../../core/auth/auth-api';
+import { ApiStatus } from '../../shared/api-status/api-status';
 import { AdminApi } from './admin-api';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,6 +36,7 @@ export const ALL_ROLES: readonly Role[] = ['LEARNER', 'INSTRUCTOR', 'ADMIN'];
 @Component({
   selector: 'app-admin',
   imports: [
+    ApiStatus,
     ReactiveFormsModule,
     MatCardModule,
     MatFormFieldModule,

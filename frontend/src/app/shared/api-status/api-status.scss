@@ -1,0 +1,22 @@
+:host {
+  display: block;
+}
+
+.status p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.up {
+  color: var(--mat-sys-tertiary);
+}
+
+.down {
+  color: var(--mat-sys-error);
+}
+
+.meta {
+  font: var(--mat-sys-body-small);
+  color: var(--mat-sys-on-surface-variant);
+}

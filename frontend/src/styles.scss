@@ -36,3 +36,10 @@ a {
     color: var(--mn-pink-200);
   }
 }
+
+// The Figma's highlighted phrase in a heading ("Coding Skills"): its Gradient/02, blue → mint.
+.mn-highlight {
+  background: linear-gradient(118deg, #1fa2ff 3.6%, #12d8fa 50.4%, #a6ffcb 104.5%);
+  background-clip: text;
+  color: transparent;
+}

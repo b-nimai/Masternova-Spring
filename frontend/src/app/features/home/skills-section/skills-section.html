@@ -1,0 +1,39 @@
+<section class="skills">
+  <div class="skills-head">
+    <h2>Get the skills you need for a <span class="mn-highlight">job that is in demand.</span></h2>
+    <div>
+      <p>
+        The modern Masternova sets its own terms. Today, being a competitive specialist takes more
+        than professional skills.
+      </p>
+      <a mat-flat-button routerLink="/courses">Learn More</a>
+    </div>
+  </div>
+  <div class="skills-body">
+    <ol class="timeline">
+      @for (pillar of pillars; track pillar.title) {
+        <li>
+          <span class="dot"
+            ><mat-icon aria-hidden="true">{{ pillar.icon }}</mat-icon></span
+          >
+          <div>
+            <h3>{{ pillar.title }}</h3>
+            <p>{{ pillar.text }}</p>
+          </div>
+        </li>
+      }
+    </ol>
+    <div class="skills-picture">
+      <img src="home/skills.jpg" alt="" width="714" height="545" loading="lazy" />
+      <div class="stats">
+        <p>
+          <strong>{{ subjects() }}</strong
+          ><span>Subjects to<br />choose from</span>
+        </p>
+        <p>
+          <strong>24/7</strong><span>Watch on<br />any device</span>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

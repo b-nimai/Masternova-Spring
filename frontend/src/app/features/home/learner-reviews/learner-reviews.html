@@ -1,0 +1,25 @@
+@if (reviews.hasValue() && reviews.value().length > 0) {
+  <section class="reviews">
+    <h2>Reviews from other learners</h2>
+    <div class="review-cards" data-testid="home-reviews">
+      @for (review of reviews.value(); track review.id) {
+        <article class="review">
+          <header>
+            <span class="avatar" aria-hidden="true">{{ review.authorName.charAt(0) }}</span>
+            <div>
+              <h3>{{ review.authorName }}</h3>
+              <p>{{ course()?.title }}</p>
+            </div>
+          </header>
+          <p class="body">{{ review.body }}</p>
+          <p class="rating" [attr.aria-label]="review.rating + ' out of 5 stars'">
+            <span>{{ review.rating }}.0</span>
+            @for (star of stars; track star) {
+              <mat-icon aria-hidden="true" [class.off]="star > review.rating">star</mat-icon>
+            }
+          </p>
+        </article>
+      }
+    </div>
+  </section>
+}
