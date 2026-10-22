@@ -113,6 +113,16 @@ holds the scripts and the downloads.
 - **Theme the component, not each page.** Five pages still used `mat-card`; `mat.card-overrides`
   (outlined: Rich Black 800, a 700 outline, 8 px) turned them all into the Figma's dashboard box,
   and `mat.table-overrides` did the same for the orders table.
+- **Stepper icons and lines.** A finished step shows Material's pencil ("edit") unless the stepper
+  overrides it with `<ng-template matStepperIcon="edit">`. With `labelPosition="bottom"` the
+  connector isn't `.mat-stepper-horizontal-line` but each header's `::before` / `::after`, under
+  `:not(:first-child)` selectors that beat a plain rule.
+- **Prettier changes the text you search for.** A scripted replace of `<mat-stepper … >` found
+  nothing once Prettier had wrapped the tag over lines; it failed silently. Match with a pattern,
+  or assert the replace happened.
+- **Fields on a card.** A Rich Black 800 field on a Rich Black 800 card disappears; the Figma lifts
+  it to 700. One custom property on the surface does it:
+  `.mat-mdc-card, .mn-on-surface { --mat-form-field-filled-container-color: … }`.
 - **Reserved error space:** Material keeps a line under every field for `<mat-error>`; the Figma's
   20 px gaps need `subscriptSizing: 'dynamic'` (app-wide `MAT_FORM_FIELD_DEFAULT_OPTIONS`).
 
@@ -160,3 +170,12 @@ holds the scripts and the downloads.
 | Cart | "My Wishlist" with rating and instructor per row | "Cart": cover, title, price, Remove; total with the struck subtotal when a coupon applies, the coupon form, "Buy Now" (= checkout) | the cart stores id, title and price only (note 08) |
 | Checkout | a page with name / email fields and "Pay" | none: "Buy Now" opens the payment provider's own checkout | Razorpay collects the payment details (ADR-0016) |
 | Purchase History | — (no frame) | a table in the Enrolled Courses style | follows the closest frame |
+| Instructor sidebar | an "Instructor" group (Dashboard with earnings, My Courses), "Earning", "Withdrawals" | "My Courses" in the one list, shown to instructors | no earnings or payouts in the API; one list keeps the sidebar short |
+| My Courses | "Created: date | time"; edit + delete per row | lecture count and the publish date; edit, and view for a published course | the summary has no creation time; deleting a course isn't in the API (archive is the admin's) |
+| My Courses | statuses Published / Drafted | Drafted / In review / Published / Archived, each with its colour | the course state machine has four states (note 05) |
+| Course wizard | 3 steps: Course Information, Course Builder, Publish | 4 steps: Details, Pricing, Curriculum, Review & submit | pricing is its own confirmation (PRICE_NOT_SET), and publishing goes through review |
+| Course wizard | thumbnail upload, tags, "Benefits", "Requirements" | title, subtitle, description, category, level, language | the API's course fields |
+| Course wizard | labels above fields | Material's floating labels kept in the editor | a dense form autosaving on every change; the auth pages carry the Figma's label style |
+| Course Upload Tips | StudyNotion's tips | the publish gate's real requirements (description length, price, sections, previews, ready videos) and the editor's shortcuts | tips that match what "Submit" checks |
+| Course Builder | an "Editing Lecture" dialog (video, title, HH:MM:SS, description) | lectures edited in their row: title, minutes, preview, "Upload video" with live progress | inline editing autosaves, and the upload widget follows the transcode (note 06); lectures have no description |
+

@@ -30,7 +30,7 @@
         }
       </ul>
 
-      <section class="summary" aria-label="Order summary">
+      <section class="summary mn-on-surface" aria-label="Order summary">
         <!-- ⭐ value() throws while the resource is in error: ask hasValue() first -->
         @if (quote.hasValue() ? quote.value() : null; as q) {
           <dl data-testid="totals">

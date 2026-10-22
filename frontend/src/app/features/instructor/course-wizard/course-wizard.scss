@@ -1,7 +1,25 @@
+// Figma "Course Information" / "Course Builder": a 665 px column (stepper + card), the tips box.
+:host {
+  display: block;
+
+  // Figma steps: a Rich Black 800 circle with a 700 ring; the current one Yellow 50 on Yellow 900;
+  // done ones filled Yellow 50 with a Rich Black 900 tick; a dashed Rich Black 600 connector.
+  --mat-stepper-container-color: transparent;
+  --mat-stepper-line-color: var(--mn-richblack-600);
+  --mat-stepper-header-icon-background-color: var(--mn-richblack-800);
+  --mat-stepper-header-icon-foreground-color: var(--mn-richblack-300);
+  --mat-stepper-header-selected-state-icon-background-color: var(--mn-yellow-900);
+  --mat-stepper-header-selected-state-icon-foreground-color: var(--mn-yellow-50);
+  --mat-stepper-header-done-state-icon-background-color: var(--mn-yellow-50);
+  --mat-stepper-header-done-state-icon-foreground-color: var(--mn-richblack-900);
+  --mat-stepper-header-edit-state-icon-background-color: var(--mn-yellow-50);
+  --mat-stepper-header-edit-state-icon-foreground-color: var(--mn-richblack-900);
+  --mat-stepper-header-label-text-color: var(--mn-richblack-500);
+  --mat-stepper-header-selected-state-label-text-color: var(--mn-richblack-5);
+}
+
 .wizard {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 16px;
+  padding: 24px 0;
 }
 
 .top {
@@ -9,28 +27,68 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  margin-bottom: 16px;
+
+  .back {
+    display: inline-flex;
+    align-items: center;
+    width: 100%;
+    color: var(--mn-richblack-300);
+    font: 400 0.875rem / 1.375rem var(--mn-font);
+    text-decoration: none;
+  }
 
   h1 {
     margin: 0;
-    font: var(--mat-sys-title-large);
+    color: var(--mn-richblack-5);
+    font: 500 1.875rem / 2.375rem var(--mn-font);
   }
 
   .status {
     padding: 2px 8px;
-    border-radius: 8px;
-    background: var(--mat-sys-secondary-container);
-    font: var(--mat-sys-label-medium);
+    border-radius: 200px;
+    background: var(--mn-richblack-700);
+    color: var(--mn-yellow-100);
+    font: 500 0.75rem / 1.25rem var(--mn-font);
   }
 
   .save-state {
     margin-left: auto;
-    color: var(--mat-sys-on-surface-variant);
+    color: var(--mn-richblack-300);
   }
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 384px;
+  gap: 24px;
+  align-items: start;
+}
+
+// Each step in the Figma's card: Rich Black 800, a 700 border, 24 px in
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--mn-richblack-700);
+  border-radius: 8px;
+  background: var(--mn-richblack-800);
+
+  > button {
+    align-self: flex-start;
+  }
+}
+
+.step-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .details {
   display: flex;
   flex-direction: column;
+  gap: 16px;
 
   .row {
     display: flex;
@@ -44,15 +102,17 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
 
   .current {
     width: 100%;
+    margin: 0;
+    color: var(--mn-richblack-200);
   }
 }
 
 .checklist {
   list-style: none;
+  margin: 0;
   padding: 0;
 
   li {
@@ -60,10 +120,51 @@
     align-items: center;
     gap: 8px;
     padding: 4px 0;
-    color: var(--mat-sys-on-surface-variant);
+    color: var(--mn-richblack-300);
 
     &.ok {
-      color: var(--mat-sys-on-surface);
+      color: var(--mn-richblack-5);
+
+      mat-icon {
+        color: var(--mn-green-100);
+      }
     }
+  }
+}
+
+// "Course Upload Tips": Rich Black 800, 24 px in, Rich Black 5 text
+.tips {
+  position: sticky;
+  top: 89px;
+  padding: 24px;
+  border: 1px solid var(--mn-richblack-700);
+  border-radius: 8px;
+  background: var(--mn-richblack-800);
+  color: var(--mn-richblack-5);
+
+  h2 {
+    margin: 0 0 20px;
+    font: 600 1.125rem / 1.625rem var(--mn-font);
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 20px;
+    font: 500 0.75rem / 1.25rem var(--mn-font);
+  }
+
+  li + li {
+    margin-top: 11px;
+  }
+}
+
+@media (max-width: 1099px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tips {
+    position: static;
+    order: -1;
   }
 }

@@ -119,9 +119,29 @@
   );
 }
 
-// What no token carries: the buttons' inset edge, the Secondary button's fill, and the field's
-// bottom corners (M3 rounds only the top of a filled field; the Figma rounds all four).
+// What no token carries: the buttons' inset edge, the Secondary button's fill, the steps' rings,
+// and the field's bottom corners (M3 rounds only the top of a filled field; the Figma all four).
 @mixin component-surfaces {
+  // The Figma's step circles carry a ring, and the connector between them is dashed.
+  .mat-step-icon {
+    box-shadow: 0 0 0 1px var(--mn-richblack-700);
+  }
+
+  .mat-step-icon-selected {
+    box-shadow: 0 0 0 1px var(--mn-yellow-50);
+  }
+
+  // (labels below the steps: the line is drawn by each header's ::before / ::after)
+  // Material's own rules use :not(:first-child) / :not(:last-child) and load after this sheet,
+  // so these repeat them under one more class to win.
+  .mat-stepper-horizontal .mat-stepper-horizontal-line,
+  .mat-stepper-horizontal.mat-stepper-label-position-bottom
+    .mat-horizontal-stepper-header:not(:first-child)::before,
+  .mat-stepper-horizontal.mat-stepper-label-position-bottom
+    .mat-horizontal-stepper-header:not(:last-child)::after {
+    border-top-style: dashed;
+  }
+
   .mat-mdc-form-field .mdc-text-field--filled {
     border-radius: var(--mn-radius);
     overflow: hidden; // clips the active indicator to the corners

@@ -146,5 +146,7 @@
     <mat-label>New section</mat-label>
     <input matInput name="newSection" [(ngModel)]="newSectionTitle" data-testid="new-section" />
   </mat-form-field>
-  <button mat-flat-button type="submit" data-testid="add-section">Add section</button>
+  <button mat-stroked-button type="submit" data-testid="add-section">
+    <mat-icon>add_circle</mat-icon> Create Section
+  </button>
 </form>

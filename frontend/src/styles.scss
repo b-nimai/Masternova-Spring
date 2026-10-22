@@ -43,3 +43,9 @@ a {
   background-clip: text;
   color: transparent;
 }
+
+// A field on a Rich Black 800 surface (a card, a panel) is one step lighter, as in the Figma.
+.mat-mdc-card,
+.mn-on-surface {
+  --mat-form-field-filled-container-color: var(--mn-richblack-700);
+}
