@@ -44,8 +44,9 @@ test.describe("engagement + search", () => {
     await page.getByTestId("enroll").click();
     await expect(page.getByTestId("enroll")).toHaveCount(0); // enrolled: the CTA moved on
 
+    // @defer (on viewport): scroll the always-present wrapper in, then the reviews load
+    await page.locator("#reviews").scrollIntoViewIfNeeded();
     const reviews = page.getByTestId("reviews");
-    await reviews.scrollIntoViewIfNeeded(); // @defer (on viewport)
     await page.getByTestId("star-4").click();
     await page.getByTestId("review-body").fill("Clear and practical.");
     await page.getByTestId("save-review").click();
