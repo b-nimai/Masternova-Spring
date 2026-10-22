@@ -1,0 +1,24 @@
+// Shared by the home page's picture sections (home, skills-section): `@use` it, then `@extend`.
+
+// A picture with the Figma's hard drop shadow (an offset block, no blur): `--offset` sets it.
+%offset-picture {
+  position: relative;
+  isolation: isolate; // the glows (z-index -1) stay inside the picture's stacking context
+  max-width: 100%;
+
+  img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    object-fit: cover;
+    box-shadow: var(--offset);
+  }
+}
+
+// A blurred gradient ellipse behind a picture (the Figma's "Ellipse" layers).
+%glow {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  border-radius: 50%;
+}

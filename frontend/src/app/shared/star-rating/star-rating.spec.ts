@@ -23,9 +23,11 @@ describe('StarRating', () => {
   });
 
   it('reads as one sentence, with the count when given', async () => {
-    expect((await render(4.5, 12)).el.querySelector('.sr-only')?.textContent).toBe(
+    expect((await render(4.5, 12)).el.querySelector('.mn-sr-only')?.textContent).toBe(
       'Rated 4.5 out of 5 by 12 learners',
     );
-    expect((await render(3)).el.querySelector('.sr-only')?.textContent).toBe('Rated 3.0 out of 5');
+    expect((await render(3)).el.querySelector('.mn-sr-only')?.textContent).toBe(
+      'Rated 3.0 out of 5',
+    );
   });
 });

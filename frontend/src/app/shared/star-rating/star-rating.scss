@@ -32,12 +32,3 @@ mat-icon {
   color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
   font-weight: 400;
 }
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}

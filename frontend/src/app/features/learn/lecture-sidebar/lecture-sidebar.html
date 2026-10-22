@@ -42,7 +42,7 @@
                 <span [attr.aria-current]="current ? 'page' : null">{{ lecture.title }}</span>
               }
               @if (done) {
-                <span class="sr-only">(completed)</span>
+                <span class="mn-sr-only">(completed)</span>
               }
               <mat-icon class="kind" aria-hidden="true">{{
                 lecture.kind === 'VIDEO' ? 'desktop_windows' : 'article'

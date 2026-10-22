@@ -96,7 +96,7 @@ li {
   }
 
   &.done > a,
-  &.done > span:not(.sr-only) {
+  &.done > span:not(.mn-sr-only) {
     color: var(--mn-richblack-300);
     text-decoration: line-through;
   }
@@ -109,13 +109,4 @@ li {
       font-variation-settings: 'FILL' 1;
     }
   }
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }

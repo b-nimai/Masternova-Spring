@@ -87,7 +87,7 @@
         data-testid="user-menu"
       >
         <span aria-hidden="true">{{ initials() }}</span>
-        <span class="visually-hidden">{{ user.displayName }}</span>
+        <span class="mn-sr-only">{{ user.displayName }}</span>
       </button>
       <mat-menu #userMenu="matMenu" xPosition="before">
         <a mat-menu-item routerLink="/account"><mat-icon>dashboard</mat-icon> Dashboard</a>

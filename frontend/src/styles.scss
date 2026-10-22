@@ -26,6 +26,16 @@ a {
 
 // A field's label above the field (the Figma's "_lable text"), with a Pink 200 required mark.
 // Material's floating label stays out: the Figma's fields carry a placeholder instead.
+// Read by screen readers, not shown (a star rating's sentence, a menu's name).
+.mn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .mn-label {
   display: block;
   margin-bottom: 6px;
