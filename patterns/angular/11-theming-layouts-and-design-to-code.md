@@ -1,0 +1,109 @@
+# 11 — One theme for every screen, layout routes, and building from a Figma
+
+> **One-liner:** restyle a working app to a design without touching its features: put the design's
+> tokens into Material's *system* roles so every component follows, move the page chrome into
+> layout routes, and take each screen's spacing and assets from its Figma frame.
+
+**Last updated:** 2026-10-22 · **Roadmap:** UI.1–UI.9
+**Code:**
+- `src/styles/_tokens.scss`, `src/styles/_theme.scss`, `src/styles.scss`: tokens, the M3 theme, global bits;
+- `core/layout/`: `NavBar`, `SiteFooter`, `PublicLayout`, `DashboardLayout`, `PageTitle`, `nav-items.ts`;
+- `features/auth/auth-shell/`: the auth pages' split layout.
+
+## 1. Theme at the system level, not per component ⭐⭐⭐
+
+Material 3 components never hard-code a colour: they read **system roles** (`--mat-sys-primary`,
+`--mat-sys-surface-container`, …). Our own SCSS did the same since Phase 3. So restyling the app
+to the Figma was one file:
+
+```scss
+@include mat.theme((color: (theme-type: dark, primary: mat.$yellow-palette), typography: (plain-family: Inter, …)));
+@include mat.theme-overrides((primary: #ffd60a, on-primary: #000814, surface: #000814,
+  surface-container: #161d29, on-surface-variant: #afb2bf, outline-variant: #2c333f, …));
+```
+
+`mat.theme` generates a tonal palette from a seed; `theme-overrides` then **pins** each role to
+the exact Figma colour (a generated yellow is close, not `#FFD60A`). Component tokens
+(`mat.button-overrides`, `mat.form-field-overrides`) are kept for where the Figma differs from
+M3's *component* spec, not its colours: 8 px buttons instead of pills, a 48 px field.
+
+**Rule of thumb:** a colour belongs to a role → override the role. A shape or size of one
+component → its component tokens. Neither expresses it (an inset edge, a filled *outlined*
+button) → a short global rule, written down as such (`component-surfaces`).
+
+The Figma palette is also emitted as `--mn-<scale>-<step>` custom properties from one SCSS map,
+for the places a role doesn't fit (the nav bar is Rich Black 800, which is no role's colour).
+
+## 2. Layout routes ⭐⭐⭐
+
+```ts
+{ path: '', component: PublicLayout, children: [ /* home, catalog, auth … */ ] },
+{ path: 'courses/:slug/lectures/:lectureId', … },          // no layout: full-screen player
+{ path: '', component: DashboardLayout, children: [ /* account, cart, instructor … */ ] },
+```
+
+A parent route with a component and `children` renders that component, whose `<router-outlet>`
+takes the child. Pages stop including the chrome. Two `''` parents work: if no child of the first
+matches the URL, the router **backtracks** and tries the second.
+
+⚠️ Keep the guards on the children. `canMatch: [authGuard]` on the dashboard parent would also run
+for a URL *no* child matches (`/nope`), and send a signed-out visitor to log in instead of to the
+`**` redirect.
+
+## 3. The page's name lives on the route ⭐⭐
+
+`title: 'Cart'` on a route + a custom `TitleStrategy` (`PageTitle`) = the browser tab
+("Cart · Masternova") **and** a signal the dashboard header renders as its `<h1>` and the last
+breadcrumb step. A page with its own heading opts out with `data: { pageHeader: false }`.
+Registering it: `{ provide: TitleStrategy, useExisting: PageTitle }`; `useExisting` so the router
+and the header inject the **same** instance.
+
+## 4. Deferring what most visitors never use ⭐⭐
+
+- The nav bar's search box: `@defer (when searchOpen())`: the autocomplete code downloads the first
+  time someone opens search.
+- The footer: `@defer (on viewport)` with a 1 px `@placeholder` (viewport triggers need an element
+  to watch): its code and its category request wait until someone scrolls down.
+
+## 5. Testing layouts ⭐⭐
+
+`TestBed.createComponent(DashboardLayout)` + navigating renders the layout **twice**: the fixture
+and the route's component inside its own outlet. `RouterTestingHarness.create()` renders the route
+the way the app does; `harness.routeNativeElement` is the layout with its child.
+
+## 6. Pitfalls met
+
+- **macOS `grep -Z`** means *decompress*, not "NUL-separate" — a `grep -lZ | xargs -0` silently did
+  nothing.
+- **Sass colour names as map keys:** `yellow: (…)` is the *colour* yellow; `--mn-#{$scale}` then
+  printed a colour. Quote the keys.
+- **A filled field rounds only its top corners** in M3, and MDC's own rule beats a plain class:
+  `.mat-mdc-form-field .mdc-text-field--filled { border-radius; overflow: hidden }`.
+- **A grid of form fields overflows** with `1fr 1fr`: `1fr` is `minmax(auto, 1fr)`, and a field's
+  auto minimum is its intrinsic width. `minmax(0, 1fr)`.
+- **`getByLabel('Password')`** also matches a button whose `aria-label` is "Show password", and
+  `getByLabel(…, { exact: true })` compares the label's whole text, required `*` included. The e2e
+  helper uses `getByRole('textbox', { name: 'Password', exact: true })` (the accessible name skips
+  the `aria-hidden` asterisk).
+- **Reserved error space:** Material keeps a line under every field for `<mat-error>`; the Figma's
+  20 px gaps need `subscriptSizing: 'dynamic'` (app-wide `MAT_FORM_FIELD_DEFAULT_OPTIONS`).
+
+## 7. Deviations from the StudyNotion Figma
+
+| Screen | Figma | Masternova | Why |
+|---|---|---|---|
+| All | StudyNotion logo | an "M" mark (`public/logo.svg`) + "Masternova" | branding |
+| All | Flaticon UIcons | Material Symbols | the icon font Material already loads |
+| Nav bar | About us, Contact us | My Learning (signed in) | no such pages; the learner's courses are one click away |
+| Nav bar | a search icon | the icon opens our typeahead in the bar | search is a real feature here |
+| Nav bar | signed-out: one "Sign up" | "Log in" + "Sign up" | both are common entry points |
+| Nav bar | a photo avatar | initials | users have no picture |
+| Footer | StudyNotion's marketing columns | Learn / Teach / Account + the real categories as Subjects; no social icons or legal links | link only to what exists |
+| Dashboard sidebar | Wishlist; "Courses" | no wishlist; Cart, My Courses (instructors), Admin (admins) | our features; role-based entries |
+| Dashboard sidebar | Settings = profile + password | Settings = email preferences | the API has no profile edit or password change |
+| Auth pages | announcement bar ("PI DAY SALE") | none | no promotions |
+| Auth pages | Student / Instructor tabs | none | roles are granted by an admin, not chosen at signup |
+| Sign up | first + last name, phone number | one display name; no phone | the API's `SignupRequest` |
+| Log in | "Forgot password" | none | no password reset in the API |
+| Verify email | a 6-box OTP code + "Resend it" | the emailed link verifies on arrival; states shown in the same layout | link-based verification (identity LLD) |
+| Auth pages | the same photo at 4047 × 2698 (1.3 MB) | used as delivered | the asset is kept unedited; a resized copy is a follow-up |

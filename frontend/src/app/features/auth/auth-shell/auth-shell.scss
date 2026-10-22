@@ -1,0 +1,94 @@
+// Figma 11167:20157: a 508 px form column (32 px padding) and the 585 × 531 picture.
+.shell {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 48px;
+  max-width: var(--mn-content-width);
+  margin: 0 auto;
+  padding: 72px 16px;
+  box-sizing: border-box;
+
+  &.single {
+    justify-content: center;
+  }
+}
+
+.form-column {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  width: min(508px, 100%);
+  padding: 32px;
+  box-sizing: border-box;
+}
+
+h1 {
+  margin: 0 0 12px;
+  color: var(--mn-richblack-5);
+  font: 600 1.875rem / 2.375rem var(--mn-font);
+}
+
+.tagline {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  color: var(--mn-richblack-100);
+  font: 400 1.125rem / 1.625rem var(--mn-font);
+}
+
+.accent {
+  align-self: flex-start;
+  padding-bottom: 6px;
+  background: url('/auth/underline.svg') left bottom / 72px 9px no-repeat;
+  color: var(--mn-blue-100);
+  font: 700 1rem / 1.5rem var(--mn-font-hand);
+}
+
+.photo {
+  position: relative;
+  flex: none;
+  width: 585px;
+  height: 531px;
+}
+
+.backdrop {
+  position: absolute;
+  left: 27px;
+  top: 27px;
+  width: 558px;
+  height: 504px;
+  overflow: hidden;
+  background: var(--mn-richblack-800);
+
+  img {
+    position: absolute;
+    transform: rotate(90deg);
+  }
+}
+
+.picture {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 558px;
+  height: 504px;
+  object-fit: cover;
+}
+
+// Below the two-column width the picture goes; the form stays.
+@media (max-width: 1099px) {
+  .shell {
+    justify-content: center;
+    padding-block: 24px;
+  }
+
+  .photo {
+    display: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .form-column {
+    padding: 16px 0;
+  }
+}

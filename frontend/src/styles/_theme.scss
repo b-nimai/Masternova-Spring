@@ -85,6 +85,9 @@
   // M3's *fill* appearance (the default, so templates set no `appearance`).
   @include mat.form-field-overrides(
     (
+      container-height: 48px,
+      // the Figma's field: 12 px padding around a 24 px line
+      container-vertical-padding: 12px,
       filled-container-color: t.color('richblack', 800),
       filled-container-shape: var(--mn-radius),
       filled-active-indicator-color: rgb(255 255 255 / 18%),

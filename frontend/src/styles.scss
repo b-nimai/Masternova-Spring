@@ -23,3 +23,16 @@ body {
 a {
   color: var(--mn-blue-100);
 }
+
+// A field's label above the field (the Figma's "_lable text"), with a Pink 200 required mark.
+// Material's floating label stays out: the Figma's fields carry a placeholder instead.
+.mn-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--mn-richblack-5);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+
+  .req {
+    color: var(--mn-pink-200);
+  }
+}

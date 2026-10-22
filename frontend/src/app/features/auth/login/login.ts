@@ -1,12 +1,13 @@
 import { Component, inject, input, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { Router, RouterLink } from '@angular/router';
 import { asProblem } from '../../../core/api/problem';
 import { AuthStore } from '../../../core/auth/auth-store';
+import { AuthShell } from '../auth-shell/auth-shell';
 import { safeReturnUrl } from '../form-utils';
 
 @Component({
@@ -14,10 +15,11 @@ import { safeReturnUrl } from '../form-utils';
   imports: [
     ReactiveFormsModule,
     RouterLink,
-    MatCardModule,
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    MatIconModule,
+    AuthShell,
   ],
   templateUrl: './login.html',
   styleUrl: './login.scss',
@@ -37,6 +39,7 @@ export class Login {
   });
   protected readonly error = signal<string | null>(null);
   protected readonly submitting = signal(false);
+  protected readonly showPassword = signal(false);
 
   protected submit(): void {
     if (this.form.invalid) {
