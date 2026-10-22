@@ -2,7 +2,6 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -12,6 +11,7 @@ import { Router, RouterLink } from '@angular/router';
 import { CommerceApi } from '../../../core/api/commerce-api';
 import { asProblem, Problem } from '../../../core/api/problem';
 import { CartStore } from '../../../core/commerce/cart-store';
+import { coverFor } from '../../../shared/course-cover';
 import { MoneyPipe } from '../../../shared/money-pipe';
 import { CheckoutFlow } from '../checkout-flow';
 import { COMMERCE_PROBLEMS, isCouponProblem } from '../commerce-messages';
@@ -30,7 +30,6 @@ import { COMMERCE_PROBLEMS, isCouponProblem } from '../commerce-messages';
     ReactiveFormsModule,
     RouterLink,
     MatButtonModule,
-    MatCardModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -42,6 +41,7 @@ import { COMMERCE_PROBLEMS, isCouponProblem } from '../commerce-messages';
   templateUrl: './cart.html',
 })
 export class Cart {
+  protected readonly cover = coverFor;
   protected readonly cart = inject(CartStore);
   private readonly api = inject(CommerceApi);
   private readonly flow = inject(CheckoutFlow);

@@ -97,6 +97,26 @@
       filled-label-text-color: t.color('richblack', 200),
     )
   );
+
+  // Cards (outlined): the Figma's dashboard box, Rich Black 800 with a 700 border and 8 px corners.
+  @include mat.card-overrides(
+    (
+      outlined-container-color: t.color('richblack', 800),
+      outlined-outline-color: t.color('richblack', 700),
+      outlined-container-shape: var(--mn-radius),
+      subtitle-text-color: t.color('richblack', 300),
+    )
+  );
+
+  // Tables: the Figma's "Enrolled Courses" table, a Rich Black 700 header row.
+  @include mat.table-overrides(
+    (
+      background-color: transparent,
+      header-headline-color: t.color('richblack', 50),
+      row-item-label-text-color: t.color('richblack', 5),
+      row-item-outline-color: t.color('richblack', 700),
+    )
+  );
 }
 
 // What no token carries: the buttons' inset edge, the Secondary button's fill, and the field's

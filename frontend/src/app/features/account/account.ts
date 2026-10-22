@@ -1,10 +1,11 @@
-import { Component, inject } from '@angular/core';
+import { Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
+import { Role } from '../../core/auth/auth-api';
 import { AuthStore } from '../../core/auth/auth-store';
+import { initialsOf } from '../../shared/initials';
 
 /**
  * The signed-in user's own page. The route is behind authGuard, so `user()` is never null here.
@@ -12,10 +13,18 @@ import { AuthStore } from '../../core/auth/auth-store';
  */
 @Component({
   selector: 'app-account',
-  imports: [RouterLink, MatCardModule, MatButtonModule, MatChipsModule, MatIconModule],
+  imports: [RouterLink, MatButtonModule, MatChipsModule, MatIconModule],
   templateUrl: './account.html',
   styleUrl: './account.scss',
 })
 export class Account {
   protected readonly auth = inject(AuthStore);
+
+  protected readonly initials = computed(() => initialsOf(this.auth.user()?.displayName ?? ''));
+
+  protected readonly roleLabels: Record<Role, string> = {
+    LEARNER: 'Learner',
+    INSTRUCTOR: 'Instructor',
+    ADMIN: 'Admin',
+  };
 }

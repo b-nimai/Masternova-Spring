@@ -8,7 +8,9 @@
       </div>
     } @else {
       <mat-button-toggle-group
+        class="pills"
         aria-label="Show courses"
+        hideSingleSelectionIndicator
         [value]="filter()"
         (change)="filter.set($event.value)"
       >
@@ -17,18 +19,29 @@
         <mat-button-toggle value="COMPLETED">Completed</mat-button-toggle>
       </mat-button-toggle-group>
 
+      <!-- Figma "Enrolled Courses" 11167:19927: a table with a Rich Black 700 header row -->
       <ul class="courses">
+        <li class="head" aria-hidden="true">
+          <span>Course Name</span><span>Lectures</span><span>Progress</span><span></span>
+        </li>
         @for (c of shown(); track c.courseId) {
           @let step = nextStep(c);
           <li class="course" [attr.data-testid]="'course-' + c.courseId">
             <div class="name">
-              <a class="title" [routerLink]="['/courses', c.slug]">{{ c.title }}</a>
-              <span class="instructor">{{ c.instructorName }}</span>
+              <img [src]="cover(c.courseId)" alt="" width="52" height="52" loading="lazy" />
+              <div>
+                <a class="title" [routerLink]="['/courses', c.slug]">{{ c.title }}</a>
+                <span class="instructor">{{ c.instructorName }}</span>
+              </div>
             </div>
+            <span class="lectures">{{ c.totalLectures }} lectures</span>
             <div class="progress">
-              <span class="label" data-testid="percent">Progress {{ c.percentComplete }}%</span>
+              <span class="label" data-testid="percent">{{
+                c.percentComplete === 100 ? 'Completed' : 'Progress ' + c.percentComplete + '%'
+              }}</span>
               <mat-progress-bar
                 mode="determinate"
+                [class.done]="c.percentComplete === 100"
                 [value]="c.percentComplete"
                 [attr.aria-label]="c.title + ' progress'"
               />

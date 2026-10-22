@@ -110,6 +110,9 @@ holds the scripts and the downloads.
 - **Virtual scroll and a grid:** the CDK viewport measures *items* of one fixed size. A grid becomes
   a list of rows (`rows = chunk(items, columns())`), with the row height fixed and the column count
   from `BreakpointObserver`; "near the end" is counted in rows.
+- **Theme the component, not each page.** Five pages still used `mat-card`; `mat.card-overrides`
+  (outlined: Rich Black 800, a 700 outline, 8 px) turned them all into the Figma's dashboard box,
+  and `mat.table-overrides` did the same for the orders table.
 - **Reserved error space:** Material keeps a line under every field for `<mat-error>`; the Figma's
   20 px gaps need `subscriptSizing: 'dynamic'` (app-wide `MAT_FORM_FIELD_DEFAULT_OPTIONS`).
 
@@ -151,3 +154,9 @@ holds the scripts and the downloads.
 | Course detail | the author's photo and bio | initials and name | the API has neither |
 | Course detail | lecture rows expand to a description | no expansion | lectures have no description |
 | Course detail | "Add to Cart" primary, "Buy now" secondary | same, plus every other state the access engine can answer (start, continue, enroll for free, renew, sign in to buy …) | the call to action is the entitlement engine's (note 07) |
+| My Profile | a photo, first / last name, phone; "Edit" buttons | initials, display name, email, verification status, roles; "Settings" and "My orders" | the API has no profile edit; what it knows is shown |
+| Settings | profile form, password change, delete account | email preferences (the toggles) | the only settings the API has |
+| Enrolled Courses | tabs All / Pending / Completed; "Durations"; a ⋮ menu (Mark as Completed, Remove) | All / In progress / Completed; "Lectures"; the next-step button (Start / Continue / Review) | the dashboard has no duration; completion is earned by watching; an enrollment is removed only by revoking it |
+| Cart | "My Wishlist" with rating and instructor per row | "Cart": cover, title, price, Remove; total with the struck subtotal when a coupon applies, the coupon form, "Buy Now" (= checkout) | the cart stores id, title and price only (note 08) |
+| Checkout | a page with name / email fields and "Pay" | none: "Buy Now" opens the payment provider's own checkout | Razorpay collects the payment details (ADR-0016) |
+| Purchase History | — (no frame) | a table in the Enrolled Courses style | follows the closest frame |

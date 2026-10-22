@@ -4,7 +4,6 @@ import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import {
   CATEGORY_COPY,
@@ -23,13 +22,7 @@ type LoadState = 'loading' | 'ready' | 'error';
  * change that almost always succeeds.
  */
 @Component({
-  imports: [
-    RouterLink,
-    MatCardModule,
-    MatButtonModule,
-    MatSlideToggleModule,
-    MatProgressSpinnerModule,
-  ],
+  imports: [MatCardModule, MatButtonModule, MatSlideToggleModule, MatProgressSpinnerModule],
   selector: 'app-notifications',
   styleUrl: './notifications.scss',
   templateUrl: './notifications.html',

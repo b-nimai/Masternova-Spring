@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
+import { coverFor } from '../../../shared/course-cover';
 import { LearningApi, LearningCourseResponse } from '../../../core/api/learning-api';
 
 /** The dashboard's tabs (the Figma's "All / Pending / Completed"). */
@@ -63,6 +64,7 @@ export class MyLearning {
   });
 
   protected readonly nextStep = nextStep;
+  protected readonly cover = coverFor;
   protected readonly labels: Record<NextStep, string> = {
     START: 'Start',
     CONTINUE: 'Continue',

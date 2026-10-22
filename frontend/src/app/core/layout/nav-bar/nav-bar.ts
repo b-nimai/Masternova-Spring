@@ -13,6 +13,7 @@ import { injectSignOut } from '../../auth/sign-out';
 import { CartStore } from '../../commerce/cart-store';
 import { SearchBox } from '../../../shared/search-box/search-box';
 import { SITE_LINKS, visibleTo } from '../nav-items';
+import { initialsOf } from '../../../shared/initials';
 
 /**
  * The top navigation bar (Figma "Navigation Bar"): logo, links + a Catalog menu of the
@@ -53,14 +54,7 @@ export class NavBar {
   protected readonly searchOpen = signal(false);
 
   /** The avatar: the display name's initials (users have no picture). */
-  protected readonly initials = computed(() =>
-    (this.auth.user()?.displayName ?? '')
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0].toUpperCase())
-      .join(''),
-  );
+  protected readonly initials = computed(() => initialsOf(this.auth.user()?.displayName ?? ''));
 
   protected toggleSearch(): void {
     this.searchOpen.update((open) => !open);

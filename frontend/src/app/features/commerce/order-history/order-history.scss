@@ -1,12 +1,22 @@
 .order-history {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 24px 16px;
+  padding-top: 16px;
 }
 
+// the Figma's dashboard table: a 700 border around it, a 700 header row
 table {
   width: 100%;
-  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid var(--mn-richblack-700);
+  border-radius: 8px;
+}
+
+tr.mat-mdc-header-row {
+  background: var(--mn-richblack-700);
+}
+
+a {
+  color: var(--mn-richblack-5);
+  font-weight: 500;
 }
 
 .status {
@@ -16,8 +26,8 @@ table {
   background: var(--mat-sys-surface-container-high);
 
   &[data-status='PAID'] {
-    background: var(--mat-sys-primary-container);
-    color: var(--mat-sys-on-primary-container);
+    background: var(--mn-green-800);
+    color: var(--mn-green-50);
   }
 
   &[data-status='FAILED'] {
