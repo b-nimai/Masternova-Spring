@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-22 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22) · Phase D3 ✅ · Phase 8 ✅ (PR #26) · Phase 9 ✅ (PR #28) · Phase D4 ✅ (PR #30) · Phase 10 ✅ (PR #40) · Phase 11 ✅ (PR #43) · Phase UI 🔨.
+**Created:** 2026-10-02 · **Last updated:** 2026-10-22 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22) · Phase D3 ✅ · Phase 8 ✅ (PR #26) · Phase 9 ✅ (PR #28) · Phase D4 ✅ (PR #30) · Phase 10 ✅ (PR #40) · Phase 11 ✅ (PR #43) · Phase UI ✅.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -128,10 +128,10 @@ Phases are listed **in the order you do them**.
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 8 | 20 h | ~22 h | ✅ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 6 | 14 h | ~15 h | ✅ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 5 | 20 h | ~21 h | ✅ |
-| 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 9 | 8 | 30 h | ~21 h | 🔨 |
+| 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 9 | 9 | 30 h | ~23 h | ✅ |
 | 18 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 19 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **146** | **133** | **~356 h** | ~283 h | |
+| | **Total** | **146** | **134** | **~356 h** | ~283 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -469,7 +469,7 @@ changes how it looks and is laid out, not what it does. Frames are named by thei
 | UI.6 | Learner dashboard: My Profile, Settings (profile + notification preferences), Enrolled Courses (progress bars, tabs), Cart + Checkout, Orders | `Account Details` 11167:19862, `Settings` 11167:20053, `Enrolled Courses` 11167:19927, `Shopping Cart` 11167:19615, `Checkout Page` 11167:19741 | card / table / progress-bar / button-toggle tokens, one theme for many pages | 4 h | ✅ | 2026-10-22 |
 | UI.7 | Instructor: My Courses table, the wizard restyled (Course Information → Course Builder → Publish, keeping our upload progress and undo/redo), Edit Video | `My Course` 11167:20944, `Course Information` 11167:21324, `Course Builder` 11167:21428 / 11167:21507, `Additional Data` 11167:21664, `Edit Video` 11167:21753 | `MatStepper` tokens + `matStepperIcon`, field colour per surface, CDK drag-drop rows | 4 h | ✅ | 2026-10-22 |
 | UI.8 | Lecture player: section sidebar with ticks and progress, video, description, Q&A below | `Video Detail` 11167:21922 / 11167:22246 / 11167:22571 | a sidebar component with its own resources (progress re-read per lecture), anchor scrolling | 2 h | ✅ | 2026-10-22 |
-| UI.9 | Responsive (390 px) + accessibility pass (axe in Playwright on every page, contrast of the dark theme), e2e selectors updated, Angular note 11, review + simplify | `Home Page Responsive` 11167:23413 | `BreakpointObserver`, `@axe-core/playwright` | 2 h | ☐ | |
+| UI.9 | Responsive (390 px) + accessibility pass (axe in Playwright on every page, contrast of the dark theme), e2e selectors updated, Angular note 11, review + simplify | `Home Page Responsive` 11167:23413 | `@axe-core/playwright` (WCAG 2.1 AA in e2e), contrast fixes, overflow checks at 390 px | 2 h | ✅ | 2026-10-22 |
 
 **Not built (no backend):** About us, Contact us, Forgot / reset password, Verify phone number.
 The Figma is read through its REST API once the MCP's Starter-plan calls run out (note 11 §6).

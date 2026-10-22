@@ -23,7 +23,7 @@
 
 // the review form's stars: Yellow when chosen, filled either way (Material Symbols' FILL axis)
 .rating mat-icon {
-  color: var(--mn-richblack-400);
+  color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
   font-variation-settings: 'FILL' 1;
 
   &.on {

@@ -4,11 +4,14 @@
 > tokens into Material's *system* roles so every component follows, move the page chrome into
 > layout routes, and take each screen's spacing and assets from its Figma frame.
 
-**Last updated:** 2026-10-22 · **Roadmap:** UI.1–UI.9
+**Last updated:** 2026-10-22 · **Roadmap:** UI.1–UI.9 (Phase UI)
 **Code:**
 - `src/styles/_tokens.scss`, `src/styles/_theme.scss`, `src/styles.scss`: tokens, the M3 theme, global bits;
 - `core/layout/`: `NavBar`, `SiteFooter`, `PublicLayout`, `DashboardLayout`, `PageTitle`, `nav-items.ts`;
-- `features/auth/auth-shell/`: the auth pages' split layout.
+- `features/auth/auth-shell/`: the auth pages' split layout;
+- `features/home/` (section components), `features/catalog/`, `features/learn/lecture-sidebar/`;
+- `shared/star-rating/`, `shared/course-cover.ts`, `shared/initials.ts`;
+- `e2e/tests/a11y.spec.ts`: axe-core on every main page.
 
 ## 1. Theme at the system level, not per component ⭐⭐⭐
 
@@ -126,7 +129,25 @@ holds the scripts and the downloads.
 - **Reserved error space:** Material keeps a line under every field for `<mat-error>`; the Figma's
   20 px gaps need `subscriptSizing: 'dynamic'` (app-wide `MAT_FORM_FIELD_DEFAULT_OPTIONS`).
 
-## 8. Deviations from the StudyNotion Figma
+## 8. The design vs WCAG: test the contrast ⭐⭐
+
+A dark design's secondary text is where contrast fails, and a token change breaks it without a
+single unit test noticing. `e2e/tests/a11y.spec.ts` runs axe-core (WCAG 2.1 A + AA) on every main
+page, public, learner and instructor; serious and critical findings fail the build.
+
+Its first run failed on the Figma's own colours:
+
+| Text on | needs at least (4.5:1) | the Figma used |
+|---|---|---|
+| Rich Black 900 | Rich Black 300 (5.7:1) | 400 (4.2:1) for card meta, cart count |
+| Rich Black 800 | Rich Black 300 (4.8:1) | 400 / 500 / 600 for footer links, card text, labels (2.0–3.5:1) |
+| Rich Black 700 | Rich Black 200 (4.7:1) | — |
+| white on Pink | Pink 300 (4.5:1) | Pink 100 for the badge (2.8:1) → Pink 400 |
+
+Each change carries a one-line comment at the rule (`// WCAG AA: …`). Breadcrumb separators stay
+dark: they're `aria-hidden` decoration.
+
+## 9. Deviations from the StudyNotion Figma
 
 | Screen | Figma | Masternova | Why |
 |---|---|---|---|
@@ -182,3 +203,16 @@ holds the scripts and the downloads.
 | Video Detail | the lecture's description and date under the video | the lecture's title and the course's | lectures have no description |
 | Video Detail | "Add Review" opens a dialog | "Add Review" (enrolled learners) goes to the course page's review form (`#reviews`) | one review form, where the reviews are |
 | Video Detail | the footer below the page | no footer | the player is a full-height page outside the public layout |
+| All | secondary greys Rich Black 400–600, a Pink 100 badge | Rich Black 300 (200 on 700) and Pink 400 | WCAG AA contrast, checked by axe in e2e (§8) |
+
+## 10. 30-second recall
+
+- Restyle at the **system** level: `mat.theme` + `theme-overrides` pins every M3 role to the
+  design; component tokens only for shape and size; a written-down global rule for the rest.
+- **Layout routes** (a component + `children`) own the chrome; two `''` parents backtrack; keep
+  guards on the children.
+- A **`TitleStrategy`** names the tab and feeds the header from each route's `title`.
+- Read the design's **node JSON**, not just its picture: opacity, blend mode, effects, exact
+  spacing. A screenshot hides how a glow or an offset block is made.
+- **Contrast is a test**, not a review comment: axe in the e2e suite.
+- Every departure from the design is a row in a table with its reason.

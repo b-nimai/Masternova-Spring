@@ -50,7 +50,7 @@
   }
 
   li::marker {
-    color: var(--mn-richblack-400);
+    color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
   }
 
   li:first-child,

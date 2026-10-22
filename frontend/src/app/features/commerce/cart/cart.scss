@@ -26,7 +26,7 @@
   margin: 0 0 24px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--mn-richblack-400);
-  color: var(--mn-richblack-400);
+  color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
   font: 600 1rem / 1.5rem var(--mn-font);
 }
 

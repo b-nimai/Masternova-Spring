@@ -28,7 +28,7 @@ header {
   }
 
   .count {
-    color: var(--mn-richblack-500);
+    color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
     font: 500 0.875rem / 1.375rem var(--mn-font);
   }
 }

@@ -15,7 +15,7 @@
 
 .about p {
   max-width: 16rem;
-  color: var(--mn-richblack-400);
+  color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
 }
 
 .brand {
@@ -45,7 +45,7 @@
 }
 
 a {
-  color: var(--mn-richblack-400);
+  color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
   text-decoration: none;
 
   &:hover {
