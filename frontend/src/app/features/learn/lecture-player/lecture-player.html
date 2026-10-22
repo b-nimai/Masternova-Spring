@@ -1,40 +1,56 @@
-<article class="lecture-player">
-  <a mat-button [routerLink]="['/courses', slug()]"><mat-icon>arrow_back</mat-icon> Course</a>
-
-  @let s = state();
-  @switch (s.kind) {
-    @case ('loading') {
-      <mat-spinner diameter="36" data-testid="loading" />
-    }
-    @case ('playing') {
-      <app-hls-player
-        data-testid="player"
-        [src]="s.url"
-        [startAt]="s.startAt"
-        (failed)="onFailed($event)"
-        (playbackProgress)="onProgress($event)"
-      />
-    }
-    @case ('denied') {
-      <section class="notice" data-testid="denied">
-        <mat-icon>lock</mat-icon>
-        <p>{{ denialMessages[s.reason] }}</p>
-        <a mat-flat-button [routerLink]="['/courses', slug()]">See the course</a>
-      </section>
-    }
-    @case ('failed') {
-      <section class="notice" data-testid="failed">
-        <mat-icon>error_outline</mat-icon>
-        <p>{{ s.message }}</p>
-        <button mat-button type="button" (click)="resume()">Try again</button>
-      </section>
-    }
+<!-- Figma "Video Detail" 11167:21922: the course's sections on the left, the lecture on the right -->
+<div class="layout">
+  @if (course.value(); as c) {
+    <app-lecture-sidebar class="side" [course]="c" [currentLectureId]="lectureId()" />
   }
 
-  <!-- Phase 11: the lecture's Q&A, deferred (the video comes first). ⭐ OUTSIDE the player's state:
-       an article lecture, a video still processing or a playback failure keep their Q&A, and a
-       re-ticket or an error never destroys a question being typed -->
-  @defer (on idle) {
-    <app-lecture-qa [lectureId]="lectureId()" />
-  }
-</article>
+  <article class="lecture-player">
+    @if (!course.value()) {
+      <a mat-button [routerLink]="['/courses', slug()]"><mat-icon>arrow_back</mat-icon> Course</a>
+    }
+
+    @let s = state();
+    @switch (s.kind) {
+      @case ('loading') {
+        <mat-spinner diameter="36" data-testid="loading" />
+      }
+      @case ('playing') {
+        <app-hls-player
+          data-testid="player"
+          [src]="s.url"
+          [startAt]="s.startAt"
+          (failed)="onFailed($event)"
+          (playbackProgress)="onProgress($event)"
+        />
+      }
+      @case ('denied') {
+        <section class="notice" data-testid="denied">
+          <mat-icon>lock</mat-icon>
+          <p>{{ denialMessages[s.reason] }}</p>
+          <a mat-flat-button [routerLink]="['/courses', slug()]">See the course</a>
+        </section>
+      }
+      @case ('failed') {
+        <section class="notice" data-testid="failed">
+          <mat-icon>error_outline</mat-icon>
+          <p>{{ s.message }}</p>
+          <button mat-button type="button" (click)="resume()">Try again</button>
+        </section>
+      }
+    }
+
+    @if (lecture(); as l) {
+      <header class="about">
+        <h1 data-testid="lecture-title">{{ l.title }}</h1>
+        <p>{{ course.value()?.title }}</p>
+      </header>
+    }
+
+    <!-- Phase 11: the lecture's Q&A, deferred (the video comes first). ⭐ OUTSIDE the player's state:
+         an article lecture, a video still processing or a playback failure keep their Q&A, and a
+         re-ticket or an error never destroys a question being typed -->
+    @defer (on idle) {
+      <app-lecture-qa [lectureId]="lectureId()" />
+    }
+  </article>
+</div>

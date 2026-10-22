@@ -128,10 +128,10 @@ Phases are listed **in the order you do them**.
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 8 | 20 h | ~22 h | ✅ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 6 | 14 h | ~15 h | ✅ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 5 | 20 h | ~21 h | ✅ |
-| 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 9 | 7 | 30 h | ~19 h | 🔨 |
+| 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 9 | 8 | 30 h | ~21 h | 🔨 |
 | 18 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 19 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **146** | **132** | **~356 h** | ~283 h | |
+| | **Total** | **146** | **133** | **~356 h** | ~283 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -468,7 +468,7 @@ changes how it looks and is laid out, not what it does. Frames are named by thei
 | UI.5 | Catalog (category header, sections, course cards) + course detail (hero, sticky buy box, "What you'll learn", curriculum accordion, instructor, reviews) | `Course` 11167:18844, `Course Detail` 11167:19083 | virtual scroll over rows of a grid, a full-bleed band, `position: sticky`, expansion-panel tokens, the Symbols FILL axis | 4 h | ✅ | 2026-10-22 |
 | UI.6 | Learner dashboard: My Profile, Settings (profile + notification preferences), Enrolled Courses (progress bars, tabs), Cart + Checkout, Orders | `Account Details` 11167:19862, `Settings` 11167:20053, `Enrolled Courses` 11167:19927, `Shopping Cart` 11167:19615, `Checkout Page` 11167:19741 | card / table / progress-bar / button-toggle tokens, one theme for many pages | 4 h | ✅ | 2026-10-22 |
 | UI.7 | Instructor: My Courses table, the wizard restyled (Course Information → Course Builder → Publish, keeping our upload progress and undo/redo), Edit Video | `My Course` 11167:20944, `Course Information` 11167:21324, `Course Builder` 11167:21428 / 11167:21507, `Additional Data` 11167:21664, `Edit Video` 11167:21753 | `MatStepper` tokens + `matStepperIcon`, field colour per surface, CDK drag-drop rows | 4 h | ✅ | 2026-10-22 |
-| UI.8 | Lecture player: section sidebar with ticks and progress, video, description, Q&A below | `Video Detail` 11167:21922 / 11167:22246 / 11167:22571 | full-height layout outside the dashboard shell | 2 h | ☐ | |
+| UI.8 | Lecture player: section sidebar with ticks and progress, video, description, Q&A below | `Video Detail` 11167:21922 / 11167:22246 / 11167:22571 | a sidebar component with its own resources (progress re-read per lecture), anchor scrolling | 2 h | ✅ | 2026-10-22 |
 | UI.9 | Responsive (390 px) + accessibility pass (axe in Playwright on every page, contrast of the dark theme), e2e selectors updated, Angular note 11, review + simplify | `Home Page Responsive` 11167:23413 | `BreakpointObserver`, `@axe-core/playwright` | 2 h | ☐ | |
 
 **Not built (no backend):** About us, Contact us, Forgot / reset password, Verify phone number.

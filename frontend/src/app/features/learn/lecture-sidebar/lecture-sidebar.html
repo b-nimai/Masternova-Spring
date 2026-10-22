@@ -1,0 +1,56 @@
+@let c = course();
+<nav class="sidebar" aria-label="Course content">
+  <header>
+    <a class="back" [routerLink]="['/courses', c.slug]"
+      ><mat-icon>chevron_left</mat-icon> Back to the course</a
+    >
+    <h2>
+      {{ c.title }}
+      <span class="count" data-testid="done-count">{{ completed().size }}/{{ total() }}</span>
+    </h2>
+    @if (canReview()) {
+      <a mat-flat-button class="review" [routerLink]="['/courses', c.slug]" fragment="reviews"
+        >Add Review</a
+      >
+    }
+  </header>
+
+  <mat-accordion multi displayMode="flat">
+    @for (section of c.sections; track section.id) {
+      <mat-expansion-panel [expanded]="contains(section, currentLectureId())">
+        <mat-expansion-panel-header>
+          <mat-panel-title>{{ section.title }}</mat-panel-title>
+          <mat-panel-description>{{ sectionSeconds(section) | duration }}</mat-panel-description>
+        </mat-expansion-panel-header>
+        <ul>
+          @for (lecture of section.lectures; track lecture.id) {
+            @let current = lecture.id === currentLectureId();
+            @let done = completed().has(lecture.id);
+            <li
+              [class.current]="current"
+              [class.done]="done"
+              [attr.data-testid]="'side-' + lecture.id"
+            >
+              <mat-icon aria-hidden="true">{{
+                current ? 'play_arrow' : done ? 'check_box' : 'check_box_outline_blank'
+              }}</mat-icon>
+              @if (!current && playable().has(lecture.id)) {
+                <a [routerLink]="['/courses', c.slug, 'lectures', lecture.id]">{{
+                  lecture.title
+                }}</a>
+              } @else {
+                <span [attr.aria-current]="current ? 'page' : null">{{ lecture.title }}</span>
+              }
+              @if (done) {
+                <span class="sr-only">(completed)</span>
+              }
+              <mat-icon class="kind" aria-hidden="true">{{
+                lecture.kind === 'VIDEO' ? 'desktop_windows' : 'article'
+              }}</mat-icon>
+            </li>
+          }
+        </ul>
+      </mat-expansion-panel>
+    }
+  </mat-accordion>
+</nav>

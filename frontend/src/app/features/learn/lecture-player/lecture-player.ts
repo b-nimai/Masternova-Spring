@@ -1,9 +1,20 @@
-import { Component, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
+import { rxResource } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { catchError, forkJoin, map, Observable, of, Subscription } from 'rxjs';
+import { CatalogApi } from '../../../core/api/catalog-api';
 import { DenialReason, EntitlementApi } from '../../../core/api/entitlement-api';
 import { LearningApi } from '../../../core/api/learning-api';
 import { asProblem } from '../../../core/api/problem';
@@ -14,6 +25,7 @@ import {
   PlaybackProgress,
 } from '../../../shared/hls-player/hls-player';
 import { LectureQa } from '../lecture-qa/lecture-qa';
+import { LectureSidebar } from '../lecture-sidebar/lecture-sidebar';
 import { ProgressTracker } from '../progress-tracker';
 
 /** What the page shows — a discriminated union, switched on in the template. */
@@ -47,6 +59,7 @@ const FAILURES: Record<string, string> = {
   imports: [
     HlsPlayer,
     LectureQa,
+    LectureSidebar,
     MatButtonModule,
     MatIconModule,
     MatProgressSpinnerModule,
@@ -61,11 +74,24 @@ export class LecturePlayer {
   private readonly api = inject(EntitlementApi);
   private readonly learning = inject(LearningApi);
   private readonly tracker = inject(ProgressTracker);
+  private readonly catalog = inject(CatalogApi);
 
   readonly slug = input.required<string>();
   readonly lectureId = input.required<string>();
 
   protected readonly state = signal<PlayerState>({ kind: 'loading' });
+
+  /** Phase UI: the course, for the sidebar and the lecture's title (failing open: no sidebar). */
+  protected readonly course = rxResource({
+    params: () => this.slug(),
+    stream: ({ params: slug }) => this.catalog.course(slug).pipe(catchError(() => of(null))),
+  });
+  protected readonly lecture = computed(() =>
+    this.course
+      .value()
+      ?.sections.flatMap((s) => s.lectures)
+      .find((l) => l.id === this.lectureId()),
+  );
   protected readonly denialMessages = DENIAL_MESSAGES;
   private ticketedAt = 0;
   private request: Subscription | null = null;

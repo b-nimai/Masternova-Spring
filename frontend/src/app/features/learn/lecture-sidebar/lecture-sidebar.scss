@@ -1,0 +1,121 @@
+// Figma "Video Detail": a Rich Black 800 column; section bars Rich Black 700; lectures with a
+// checkbox (completed: ticked and struck through), the current one in Blue 100.
+:host {
+  display: block;
+  --mat-expansion-container-background-color: var(--mn-richblack-800);
+  --mat-expansion-container-shape: 0;
+  --mat-expansion-container-elevation-shadow: none;
+  --mat-expansion-header-text-color: var(--mn-richblack-5);
+  --mat-expansion-header-description-color: var(--mn-richblack-25);
+  --mat-expansion-header-hover-state-layer-color: var(--mn-richblack-600);
+  --mat-expansion-header-focus-state-layer-color: var(--mn-richblack-600);
+}
+
+.sidebar {
+  min-height: 100%;
+  background: var(--mn-richblack-800);
+  border-right: 1px solid var(--mn-richblack-700);
+}
+
+header {
+  padding: 24px 24px 20px;
+  border-bottom: 1px solid var(--mn-richblack-600);
+
+  h2 {
+    margin: 12px 0 0;
+    color: var(--mn-richblack-25);
+    font: 700 1.125rem / 1.625rem var(--mn-font);
+  }
+
+  .count {
+    color: var(--mn-richblack-500);
+    font: 500 0.875rem / 1.375rem var(--mn-font);
+  }
+}
+
+.review {
+  --mat-button-filled-container-height: 40px;
+  margin-top: 16px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  color: var(--mn-richblack-300);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+  text-decoration: none;
+}
+
+mat-expansion-panel {
+  border-bottom: 1px solid var(--mn-richblack-600);
+}
+
+mat-expansion-panel-header {
+  background: var(--mn-richblack-700);
+}
+
+mat-panel-description {
+  flex: none;
+}
+
+ul {
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+}
+
+li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  color: var(--mn-richblack-5);
+  font: 500 0.875rem / 1.375rem var(--mn-font);
+
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+
+  mat-icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+    color: var(--mn-richblack-200);
+  }
+
+  .kind {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
+
+  &.done > a,
+  &.done > span:not(.sr-only) {
+    color: var(--mn-richblack-300);
+    text-decoration: line-through;
+  }
+
+  &.current {
+    color: var(--mn-blue-100);
+
+    mat-icon {
+      color: var(--mn-blue-100);
+      font-variation-settings: 'FILL' 1;
+    }
+  }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

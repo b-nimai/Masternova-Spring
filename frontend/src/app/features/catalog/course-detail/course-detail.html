@@ -134,7 +134,7 @@
 
     @if (c.status === 'PUBLISHED') {
       <!-- Phase 11: deferred like the curriculum; the form only for an enrolled learner -->
-      <div class="reviews">
+      <div class="reviews" id="reviews">
         @defer (on viewport) {
           <app-course-reviews
             [courseId]="c.id"

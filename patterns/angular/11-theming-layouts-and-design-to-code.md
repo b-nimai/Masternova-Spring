@@ -178,4 +178,7 @@ holds the scripts and the downloads.
 | Course wizard | labels above fields | Material's floating labels kept in the editor | a dense form autosaving on every change; the auth pages carry the Figma's label style |
 | Course Upload Tips | StudyNotion's tips | the publish gate's real requirements (description length, price, sections, previews, ready videos) and the editor's shortcuts | tips that match what "Submit" checks |
 | Course Builder | an "Editing Lecture" dialog (video, title, HH:MM:SS, description) | lectures edited in their row: title, minutes, preview, "Upload video" with live progress | inline editing autosaves, and the upload widget follows the transcode (note 06); lectures have no description |
-
+| Video Detail | its own player skin (±10 s, volume, settings) | the browser's video controls (hls.js) | a custom skin is a project of its own; the native controls are accessible as they are |
+| Video Detail | the lecture's description and date under the video | the lecture's title and the course's | lectures have no description |
+| Video Detail | "Add Review" opens a dialog | "Add Review" (enrolled learners) goes to the course page's review form (`#reviews`) | one review form, where the reviews are |
+| Video Detail | the footer below the page | no footer | the player is a full-height page outside the public layout |
