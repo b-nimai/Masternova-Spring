@@ -1,3 +1,4 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { CdkVirtualScrollViewport, ScrollingModule } from '@angular/cdk/scrolling';
 import { Component, computed, effect, inject, input, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -10,7 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
-import { ActivatedRoute, Params, Router } from '@angular/router';
+import { ActivatedRoute, Params, Router, RouterLink } from '@angular/router';
 import {
   catchError,
   debounceTime,
@@ -54,8 +55,17 @@ type PageEvent =
   | { kind: 'page'; items: CourseSummary[]; nextCursor: string | null }
   | { kind: 'error' };
 
-/** Card height in px — CdkVirtualScrollViewport's fixed-size strategy needs it exactly. */
-export const CARD_HEIGHT = 148;
+/**
+ * A row of cards in px, gap included — CdkVirtualScrollViewport's fixed-size strategy needs it
+ * exactly (the card's own height is fixed in course-card.scss: 399 px).
+ */
+export const ROW_HEIGHT = 432;
+
+/** Cards per row by viewport width: the Figma's three columns, fewer on narrow screens. */
+const COLUMNS: readonly [query: string, columns: number][] = [
+  ['(min-width: 1100px)', 3],
+  ['(min-width: 600px)', 2],
+];
 
 /**
  * /courses — the public catalog. Study note: patterns/angular/04-url-state-and-infinite-scroll.md.
@@ -71,6 +81,7 @@ export const CARD_HEIGHT = 148;
 @Component({
   imports: [
     ReactiveFormsModule,
+    RouterLink,
     ScrollingModule,
     MatButtonModule,
     MatButtonToggleModule,
@@ -103,7 +114,7 @@ export class Catalog {
   protected readonly levelLabels = LEVEL_LABELS;
   protected readonly sorts = COURSE_SORTS;
   protected readonly sortLabels = SORT_LABELS;
-  protected readonly cardHeight = CARD_HEIGHT;
+  protected readonly rowHeight = ROW_HEIGHT;
 
   /** The URL's filters, validated: a hand-edited `?level=EXPERT` is ignored, not sent. */
   protected readonly query = computed<CourseQuery>(() => {
@@ -134,6 +145,31 @@ export class Catalog {
   );
 
   private readonly viewport = viewChild(CdkVirtualScrollViewport);
+
+  protected readonly columns = toSignal(
+    inject(BreakpointObserver)
+      .observe(COLUMNS.map(([query]) => query))
+      .pipe(map((state) => COLUMNS.find(([query]) => state.breakpoints[query])?.[1] ?? 1)),
+    { initialValue: 1 },
+  );
+
+  /** ⭐ The virtual scroll's items are ROWS: the loaded courses cut into rows of `columns()`. */
+  protected readonly rows = computed(() => {
+    const { items } = this.list();
+    const size = this.columns();
+    return Array.from({ length: Math.ceil(items.length / size) }, (_, i) =>
+      items.slice(i * size, i * size + size),
+    );
+  });
+
+  /** The category the URL filters on (a root or a child), for the header band. */
+  protected readonly activeCategory = computed(() => {
+    const slug = this.query().category;
+    return this.categories()
+      .flatMap((root) => [root, ...root.children])
+      .find((c) => c.slug === slug);
+  });
+  protected readonly heading = computed(() => this.activeCategory()?.name ?? 'All courses');
 
   constructor() {
     // ⭐ a new query (any filter changed) → start over from page 1. switchMap CANCELS the old
@@ -214,7 +250,7 @@ export class Catalog {
   /** Called as rows scroll into view: near the end of what's loaded, ask for the next page. */
   protected onScrolled(): void {
     const viewport = this.viewport();
-    if (viewport && viewport.getRenderedRange().end >= this.list().items.length - 3) {
+    if (viewport && viewport.getRenderedRange().end >= this.rows().length - 1) {
       this.loadMore();
     }
   }
@@ -260,7 +296,8 @@ export class Catalog {
     });
   }
 
-  protected trackById(_: number, course: CourseSummary): string {
-    return course.id;
+  /** A row is known by its first course: rows keep their first item as pages are appended. */
+  protected trackByFirst(_: number, row: CourseSummary[]): string {
+    return row[0].id;
   }
 }

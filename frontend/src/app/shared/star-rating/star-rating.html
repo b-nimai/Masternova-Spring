@@ -1,0 +1,10 @@
+<span class="sr-only">{{ label() }}</span>
+<span class="row" aria-hidden="true">
+  <span class="value">{{ value() | number: '1.1-1' }}</span>
+  @for (star of stars(); track $index) {
+    <mat-icon [class.empty]="star === 'empty'">{{ star === 'empty' ? 'star' : star }}</mat-icon>
+  }
+  @if (count() !== undefined) {
+    <span class="count">({{ count() }})</span>
+  }
+</span>

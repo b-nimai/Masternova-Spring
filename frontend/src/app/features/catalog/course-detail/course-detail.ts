@@ -1,4 +1,4 @@
-import { DecimalPipe } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -11,9 +11,11 @@ import { LearningApi } from '../../../core/api/learning-api';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { CartItem } from '../../../core/commerce/cart-store';
 import { isNotFound } from '../../../core/api/problem';
+import { coverFor } from '../../../shared/course-cover';
 import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
 import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
+import { StarRating } from '../../../shared/star-rating/star-rating';
 import { AccessCta } from '../access-cta/access-cta';
 import { LEVEL_LABELS } from '../catalog-labels';
 import { CourseReviews } from '../course-reviews/course-reviews';
@@ -38,7 +40,7 @@ import { Curriculum } from '../curriculum/curriculum';
  */
 @Component({
   imports: [
-    DecimalPipe,
+    DatePipe,
     RouterLink,
     MatButtonModule,
     MatIconModule,
@@ -48,6 +50,7 @@ import { Curriculum } from '../curriculum/curriculum';
     Curriculum,
     AccessCta,
     CourseReviews,
+    StarRating,
   ],
   selector: 'app-course-detail',
   styleUrl: './course-detail.scss',
@@ -153,4 +156,18 @@ export class CourseDetail {
   });
 
   protected readonly levelLabels = LEVEL_LABELS;
+
+  protected readonly cover = computed(() => coverFor(this.course.value()?.id ?? ''));
+
+  /** "en" → "English", in the viewer's own language. */
+  protected language(code: string): string {
+    return new Intl.DisplayNames(undefined, { type: 'language' }).of(code) ?? code;
+  }
+
+  protected readonly shared = signal(false);
+
+  /** The Figma's "Share": copies the page's address. */
+  protected share(): void {
+    void navigator.clipboard?.writeText(location.href).then(() => this.shared.set(true));
+  }
 }

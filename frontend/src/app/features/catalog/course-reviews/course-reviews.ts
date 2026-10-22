@@ -1,4 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
+import { StarRating } from '../../../shared/star-rating/star-rating';
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -23,6 +24,7 @@ import { asProblem, isNotFound } from '../../../core/api/problem';
 @Component({
   selector: 'app-course-reviews',
   imports: [
+    StarRating,
     DatePipe,
     DecimalPipe,
     FormsModule,

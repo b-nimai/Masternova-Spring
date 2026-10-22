@@ -1,9 +1,9 @@
 import { Component, inject, input } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
-import { MatIconModule } from '@angular/material/icon';
 import { map } from 'rxjs';
 import { CourseSummary } from '../../../core/api/catalog-api';
 import { EngagementApi } from '../../../core/api/engagement-api';
+import { StarRating } from '../../../shared/star-rating/star-rating';
 
 /**
  * "Reviews from other learners" (Figma frame 46): the latest reviews of one course. The API has
@@ -14,7 +14,7 @@ import { EngagementApi } from '../../../core/api/engagement-api';
  */
 @Component({
   selector: 'app-learner-reviews',
-  imports: [MatIconModule],
+  imports: [StarRating],
   templateUrl: './learner-reviews.html',
   styleUrl: './learner-reviews.scss',
 })
@@ -30,6 +30,4 @@ export class LearnerReviews {
     stream: ({ params: courseId }) =>
       this.api.reviews(courseId, null, 4).pipe(map((page) => page.items)),
   });
-
-  protected readonly stars = [1, 2, 3, 4, 5];
 }

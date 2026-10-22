@@ -42,9 +42,10 @@ describe('Curriculum', () => {
     const fixture = await render();
 
     const el = fixture.nativeElement as HTMLElement;
-    expect(el.querySelector('[data-testid="section-1"]')?.textContent).toContain(
-      '2 lectures · 10m',
-    );
+    expect(
+      el.querySelector('[data-testid="section-1"] mat-panel-description')?.textContent,
+    ).toMatch(/2 lectures\s+10m/);
+    expect(el.querySelector('.summary')?.textContent).toContain('sections');
     expect(el.querySelectorAll('[data-testid="preview"]')).toHaveLength(1);
     expect(el.textContent).toContain('1:30'); // Welcome, as a clock
   });

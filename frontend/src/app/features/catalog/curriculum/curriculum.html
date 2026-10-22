@@ -1,10 +1,20 @@
-<mat-accordion multi>
+<div class="summary">
+  <span
+    >{{ sections().length }} sections • {{ lectureCount() }} lectures •
+    {{ totalSeconds() | duration }} total length</span
+  >
+  @if (sections().length > 0) {
+    <button type="button" class="collapse" (click)="collapseAll()">Collapse all sections</button>
+  }
+</div>
+<mat-accordion multi displayMode="flat">
   @for (section of sections(); track section.id; let first = $first) {
     <mat-expansion-panel [expanded]="first" [attr.data-testid]="'section-' + $index">
       <mat-expansion-panel-header>
         <mat-panel-title>{{ section.title }}</mat-panel-title>
         <mat-panel-description>
-          {{ section.lectures.length }} lectures · {{ sectionSeconds(section) | duration }}
+          <span class="count">{{ section.lectures.length }} lectures</span>
+          {{ sectionSeconds(section) | duration }}
         </mat-panel-description>
       </mat-expansion-panel-header>
       <ul class="lectures">

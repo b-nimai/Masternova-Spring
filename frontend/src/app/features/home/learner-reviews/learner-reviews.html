@@ -12,12 +12,7 @@
             </div>
           </header>
           <p class="body">{{ review.body }}</p>
-          <p class="rating" [attr.aria-label]="review.rating + ' out of 5 stars'">
-            <span>{{ review.rating }}.0</span>
-            @for (star of stars; track star) {
-              <mat-icon aria-hidden="true" [class.off]="star > review.rating">star</mat-icon>
-            }
-          </p>
+          <app-star-rating class="rating" [value]="review.rating" />
         </article>
       }
     </div>
