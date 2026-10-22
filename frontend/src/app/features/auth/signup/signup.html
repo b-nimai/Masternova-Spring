@@ -18,7 +18,7 @@
     </mat-card-header>
     <mat-card-content>
       <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        <mat-form-field appearance="outline">
+        <mat-form-field>
           <mat-label>Email</mat-label>
           <input matInput formControlName="email" type="email" autocomplete="email" />
           @if (form.controls.email.hasError('server')) {
@@ -32,7 +32,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field>
           <mat-label>Display name</mat-label>
           <input matInput formControlName="displayName" autocomplete="name" />
           @if (form.controls.displayName.hasError('required')) {
@@ -40,7 +40,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field>
           <mat-label>Password</mat-label>
           <input matInput formControlName="password" type="password" autocomplete="new-password" />
           <mat-hint>8–72 characters</mat-hint>
@@ -53,7 +53,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline">
+        <mat-form-field>
           <mat-label>Confirm password</mat-label>
           <input
             matInput

@@ -32,7 +32,7 @@
   @for (section of sections(); track section.id; let i = $index, first = $first, last = $last) {
     <section class="section" [attr.data-testid]="'section-' + i">
       <header>
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="section-title">
+        <mat-form-field subscriptSizing="dynamic" class="section-title">
           <mat-label>Section {{ i + 1 }}</mat-label>
           <input
             #title
@@ -112,7 +112,7 @@
 
       @let d = draft(section.id);
       <form class="add-lecture" (ngSubmit)="addLecture(section)">
-        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+        <mat-form-field subscriptSizing="dynamic">
           <mat-label>New lecture</mat-label>
           <input
             matInput
@@ -121,14 +121,14 @@
             [attr.data-testid]="'new-lecture-' + i"
           />
         </mat-form-field>
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+        <mat-form-field subscriptSizing="dynamic" class="narrow">
           <mat-label>Type</mat-label>
           <mat-select name="kind" [(ngModel)]="d.kind" [attr.data-testid]="'lecture-kind-' + i">
             <mat-option value="VIDEO">Video</mat-option>
             <mat-option value="ARTICLE">Article</mat-option>
           </mat-select>
         </mat-form-field>
-        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+        <mat-form-field subscriptSizing="dynamic" class="narrow">
           <mat-label>Minutes</mat-label>
           <input matInput type="number" min="0" name="minutes" [(ngModel)]="d.minutes" />
         </mat-form-field>
@@ -142,7 +142,7 @@
 </div>
 
 <form class="add-section" (ngSubmit)="addSection()">
-  <mat-form-field appearance="outline" subscriptSizing="dynamic">
+  <mat-form-field subscriptSizing="dynamic">
     <mat-label>New section</mat-label>
     <input matInput name="newSection" [(ngModel)]="newSectionTitle" data-testid="new-section" />
   </mat-form-field>

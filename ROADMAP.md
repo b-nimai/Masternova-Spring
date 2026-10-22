@@ -3,7 +3,7 @@
 > The file you open at the start of every session to decide what to do next.
 > Rules: [`CLAUDE.md`](./CLAUDE.md) · Patterns: [`patterns/README.md`](./patterns/README.md) · Architecture: [`docs/hld/01-architecture.md`](./docs/hld/01-architecture.md) · API rules: [`docs/api/conventions.md`](./docs/api/conventions.md)
 
-**Created:** 2026-10-02 · **Last updated:** 2026-10-21 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22) · Phase D3 ✅ · Phase 8 ✅ (PR #26) · Phase 9 ✅ (PR #28) · Phase D4 ✅ (PR #30) · Phase 10 ✅ (PR #40) · Phase 11 ✅ (PR #43).
+**Created:** 2026-10-02 · **Last updated:** 2026-10-22 · **Status:** Phase 1 ✅ (PR #10) · Phase 2 ✅ (PR #11) · Phase 3 ✅ (PR #15; 3.6 Google sign-in ⏸ deferred) · Phase D1 ✅ (PR #16) · Phase D2 ✅ (PR #17) · Phase 4 ✅ (PR #18) · Phase 5 ✅ (PR #19) · Phase 6 ✅ (PR #20) · Phase 7 ✅ (PR #22) · Phase D3 ✅ · Phase 8 ✅ (PR #26) · Phase 9 ✅ (PR #28) · Phase D4 ✅ (PR #30) · Phase 10 ✅ (PR #40) · Phase 11 ✅ (PR #43) · Phase UI 🔨.
 
 **Why this project exists:** to rebuild the NestJS Masternova in **Java 25 + Spring Boot 4 + Angular**.
 The goals:
@@ -128,9 +128,10 @@ Phases are listed **in the order you do them**.
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 8 | 20 h | ~22 h | ✅ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 6 | 14 h | ~15 h | ✅ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 5 | 20 h | ~21 h | ✅ |
-| 17 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
-| 18 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **137** | **125** | **~326 h** | ~283 h | |
+| 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 9 | 1 | 30 h | ~2 h | 🔨 |
+| 18 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
+| 19 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
+| | **Total** | **146** | **126** | **~356 h** | ~283 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -448,6 +449,30 @@ without hammering the database.
 | 11.3 | Postgres FTS: a **generated `STORED` `tsvector`** (title A, subtitle B, description C; `english` for `en`, `simple` otherwise) + partial GIN (V27; the rewrite measured: 212 ms on 10,000 courses); `websearch_to_tsquery` english OR simple, `ts_rank_cd`; typeahead by trigram `word_similarity` (`<%`) on V8's index (prefix + typo); `GET /search/courses`, `/search/suggestions` (not under `/courses`: a slug "search"). Measured: 1.5–2.2 ms vs 3.5–4.3 ms seq scan for common words, 0.015 vs 1.8 ms for a rare one (docs/db/indexes.md §9) | native queries | — | — | 3 h | ✅ | 2026-10-21 |
 | 11.4 | Semantic search: `spring-ai-ollama` 2.0.1 (the model client only, no starter; `nomic-embed-text`, 768 d, `make ai` profile), `course_embedding` + HNSW (V28); kept fresh by a **sweeper** (60 s, ShedLock, md5 of the text in SQL, model name; batch of 32 outside any transaction); `KeywordRanker` / `SemanticRanker` / `HybridRanker` (**RRF**, k = 60, built from the other two) behind `CourseRanker`, picked per request; **fail open**: 2 s budget + 30 s breaker, keyword results `degraded: true`. Found by EXPLAIN: `hnsw.ef_search` (40) **caps** a scan's rows → raised per query (mutation-checked); dead HNSW entries hid live rows (0 of 2) until VACUUM → `iterative_scan` + V28 autovacuum at 2 %. 2.6 ms for 100 neighbours vs 43 ms exact. Proved with Ollama: "relational databases" → PostgreSQL Bootcamp (~50 ms), Ollama stopped → degraded in 6–11 ms, back after 30 s | Spring AI, vectors | — | **Strategy** (rankers) | 5 h | ✅ | 2026-10-21 |
 | 11.5 | Angular: toolbar search box (`debounceTime` → `distinctUntilChanged` → **`switchMap`**, inner `catchError`; `@defer (on idle)` keeps +134 kB out of the first load), `/search?q=&mode=` (URL = state, degraded banner), course reviews (summary bars, "Show more", own review form), lecture Q&A (flat thread indented by depth, Idempotency-Key kept for a retry, renewed after success or a 4xx); e2e `engagement.spec.ts` (note 10) | — | `switchMap` cancellation, `MatAutocomplete` | — | 5 h | ✅ | 2026-10-21 |
+
+---
+
+## Phase UI — StudyNotion design pass
+
+**Est 30 h** · Goal: every screen built to the
+[StudyNotion Figma](https://www.figma.com/design/Mikd0FjHKAofUlWQSi70nf/StudyNotion_shared?node-id=1-5)
+(page ✅ Approved), with Masternova's name and features. Every feature already works; this phase
+changes how it looks and is laid out, not what it does. Frames are named by their Figma node id.
+
+| # | Task | Figma frames | Angular concept | Est | Status | Date |
+|---|---|---|---|---|---|---|
+| UI.1 | Design tokens → theme: Rich Black / Yellow / Blue / Caribbean Green / Pink / Brown scales and the Inter + Edu SA Beginner type scale as CSS custom properties; a dark Material 3 theme built from them (system variables overridden, no per-component hacks); `mn-button` variants (Primary yellow, Secondary dark) as global styles on `mat-flat-button`/`mat-stroked-button` | 🎨 Colors, 📝 Typography, `Primary Button` / `Secondary Button` | M3 theming: `mat.theme`, `mat.theme-overrides`, system tokens vs component tokens | 3 h | ✅ | 2026-10-22 |
+| UI.2 | App shell: top navigation bar (logo, Home / Catalog ▾ categories / search / cart / avatar menu) replacing the toolbar + sidenav; footer; a **dashboard layout** (222 px sidebar, breadcrumb + title header) shared by account, learning, cart, orders, instructor and admin through a parent route | `Navigation Bar`, `Footer`, `Frame 3273` / `Frame 3198` (dashboard sidebar + header) | layout routes (componentless parent + `children`), `routerLinkActive`, `MatMenu` | 4 h | ☐ | |
+| UI.3 | Auth: login, signup (role tabs: Learner / Instructor if the API allows, else dropped), verify email: split layout with the frame image | `Log In Page` 11167:20157, `Sign up` 11167:20280, `Verify email` 11167:20616 | static assets in `public/`, `NgOptimizedImage` | 3 h | ☐ | |
+| UI.4 | Home page: hero + CTAs, code blocks, "Unlock the Power of Code" fed by real published courses, skills / instructor sections, footer. The backend status card moves to the admin page | `Log In Page` 11167:17977 (the home page) | `@defer (on viewport)` for below-the-fold sections | 4 h | ☐ | |
+| UI.5 | Catalog (category header, sections, course cards) + course detail (hero, sticky buy box, "What you'll learn", curriculum accordion, instructor, reviews) | `Course` 11167:18844, `Course Detail` 11167:19083 | `position: sticky` in a Material layout, `MatExpansionPanel` | 4 h | ☐ | |
+| UI.6 | Learner dashboard: My Profile, Settings (profile + notification preferences), Enrolled Courses (progress bars, tabs), Cart + Checkout, Orders | `Account Details` 11167:19862, `Settings` 11167:20053, `Enrolled Courses` 11167:19927, `Shopping Cart` 11167:19615, `Checkout Page` 11167:19741 | `MatTabs`, `MatProgressBar`, tables with `MatTable` | 4 h | ☐ | |
+| UI.7 | Instructor: My Courses table, the wizard restyled (Course Information → Course Builder → Publish, keeping our upload progress and undo/redo), Edit Video | `My Course` 11167:20944, `Course Information` 11167:21324, `Course Builder` 11167:21428 / 11167:21507, `Additional Data` 11167:21664, `Edit Video` 11167:21753 | `MatStepper` custom header, CDK drag-drop preview styling | 4 h | ☐ | |
+| UI.8 | Lecture player: section sidebar with ticks and progress, video, description, Q&A below | `Video Detail` 11167:21922 / 11167:22246 / 11167:22571 | full-height layout outside the dashboard shell | 2 h | ☐ | |
+| UI.9 | Responsive (390 px) + accessibility pass (axe in Playwright on every page, contrast of the dark theme), e2e selectors updated, Angular note 11, review + simplify | `Home Page Responsive` 11167:23413 | `BreakpointObserver`, `@axe-core/playwright` | 2 h | ☐ | |
+
+**Not built (no backend):** About us, Contact us, Forgot / reset password, Verify phone number.
+Each screen's deviations from its frame are listed in Angular note 11.
 
 ---
 

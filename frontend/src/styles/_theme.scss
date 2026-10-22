@@ -1,0 +1,115 @@
+// The Material 3 theme, dark, built from the Figma's tokens. ⭐ The design is applied at the
+// *system* level: Material's components (and our own SCSS) read `--mat-sys-*` roles, so overriding
+// the roles restyles every screen at once. Component tokens (`mat.button-overrides`) are used only
+// where the Figma differs from M3's component spec (8 px buttons instead of pills).
+@use '@angular/material' as mat;
+@use 'tokens' as t;
+
+@mixin theme {
+  @include mat.theme(
+    (
+      color: (
+        theme-type: dark,
+        primary: mat.$yellow-palette,
+        tertiary: mat.$spring-green-palette,
+      ),
+      typography: (
+        plain-family: Inter,
+        brand-family: Inter,
+        regular-weight: 400,
+        medium-weight: 500,
+        bold-weight: 600,
+      ),
+      density: 0,
+    )
+  );
+
+  // The generated palettes are close, not exact: pin every role the Figma names.
+  @include mat.theme-overrides(
+    (
+      primary: t.color('yellow', 50),
+      on-primary: t.color('richblack', 900),
+      primary-container: t.color('yellow', 800),
+      on-primary-container: t.color('yellow', 25),
+      inverse-primary: t.color('yellow', 600),
+      secondary: t.color('blue', 100),
+      on-secondary: t.color('richblack', 900),
+      secondary-container: t.color('richblack', 700),
+      on-secondary-container: t.color('richblack', 5),
+      tertiary: t.color('green', 100),
+      on-tertiary: t.color('richblack', 900),
+      tertiary-container: t.color('green', 800),
+      on-tertiary-container: t.color('green', 25),
+      error: t.color('pink', 200),
+      on-error: t.color('richblack', 900),
+      error-container: t.color('pink', 800),
+      on-error-container: t.color('pink', 25),
+      background: t.color('richblack', 900),
+      on-background: t.color('richblack', 5),
+      surface: t.color('richblack', 900),
+      surface-dim: t.color('richblack', 900),
+      surface-bright: t.color('richblack', 700),
+      surface-container-lowest: t.color('richblack', 900),
+      surface-container-low: t.color('richblack', 800),
+      surface-container: t.color('richblack', 800),
+      surface-container-high: t.color('richblack', 700),
+      surface-container-highest: t.color('richblack', 600),
+      surface-variant: t.color('richblack', 700),
+      on-surface: t.color('richblack', 5),
+      on-surface-variant: t.color('richblack', 100),
+      inverse-surface: t.color('richblack', 5),
+      inverse-on-surface: t.color('richblack', 900),
+      outline: t.color('richblack', 600),
+      outline-variant: t.color('richblack', 700),
+    )
+  );
+
+  // Buttons: Primary = flat (yellow), Secondary = stroked (Rich Black 800, no outline). Both keep
+  // the Figma's 8 px corner and 48 px height.
+  @include mat.button-overrides(
+    (
+      filled-container-shape: var(--mn-radius),
+      filled-container-height: 48px,
+      filled-horizontal-padding: 24px,
+      outlined-container-shape: var(--mn-radius),
+      outlined-container-height: 48px,
+      outlined-horizontal-padding: 24px,
+      outlined-outline-color: transparent,
+      outlined-label-text-color: t.color('richblack', 5),
+      text-container-shape: var(--mn-radius),
+      protected-container-shape: var(--mn-radius),
+    )
+  );
+
+  // Inputs: the Figma's field is a filled Rich Black 800 box with a faint bottom edge, which is
+  // M3's *fill* appearance (the default, so templates set no `appearance`).
+  @include mat.form-field-overrides(
+    (
+      filled-container-color: t.color('richblack', 800),
+      filled-container-shape: var(--mn-radius),
+      filled-active-indicator-color: rgb(255 255 255 / 18%),
+      filled-hover-active-indicator-color: t.color('richblack', 400),
+      filled-input-text-color: t.color('richblack', 5),
+      filled-input-text-placeholder-color: t.color('richblack', 200),
+      filled-label-text-color: t.color('richblack', 200),
+    )
+  );
+}
+
+// What no token carries: the buttons' inset edge, the Secondary button's fill, and the field's
+// bottom corners (M3 rounds only the top of a filled field; the Figma rounds all four).
+@mixin component-surfaces {
+  .mat-mdc-form-field .mdc-text-field--filled {
+    border-radius: var(--mn-radius);
+    overflow: hidden; // clips the active indicator to the corners
+  }
+
+  .mat-mdc-unelevated-button:not(:disabled) {
+    box-shadow: var(--mn-button-edge);
+  }
+
+  .mat-mdc-outlined-button:not(:disabled) {
+    background-color: var(--mn-richblack-800);
+    box-shadow: var(--mn-button-edge-dark);
+  }
+}

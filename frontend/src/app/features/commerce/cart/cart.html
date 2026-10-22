@@ -58,7 +58,7 @@
             </p>
           } @else {
             <form class="coupon" [formGroup]="couponForm" (ngSubmit)="applyCoupon()">
-              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-form-field subscriptSizing="dynamic">
                 <mat-label>Coupon code</mat-label>
                 <input matInput formControlName="code" data-testid="coupon-input" />
                 @if (couponError(); as error) {

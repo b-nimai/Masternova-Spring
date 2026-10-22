@@ -1,12 +1,12 @@
 <section class="catalog">
   <header class="filters" aria-label="Filter courses">
-    <mat-form-field appearance="outline" class="search" subscriptSizing="dynamic">
+    <mat-form-field class="search" subscriptSizing="dynamic">
       <mat-label>Search courses</mat-label>
       <mat-icon matPrefix>search</mat-icon>
       <input matInput data-testid="search" [formControl]="searchControl" autocomplete="off" />
     </mat-form-field>
 
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-form-field subscriptSizing="dynamic">
       <mat-label>Category</mat-label>
       <mat-select
         data-testid="category"
@@ -25,7 +25,7 @@
       </mat-select>
     </mat-form-field>
 
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-form-field subscriptSizing="dynamic">
       <mat-label>Sort by</mat-label>
       <mat-select
         data-testid="sort"

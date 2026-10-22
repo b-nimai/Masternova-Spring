@@ -4,7 +4,7 @@
   </mat-card-header>
   <mat-card-content>
     <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
-      <mat-form-field appearance="outline">
+      <mat-form-field>
         <mat-label>Email</mat-label>
         <input matInput formControlName="email" type="email" autocomplete="email" />
         @if (form.controls.email.hasError('required')) {
@@ -14,7 +14,7 @@
         }
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field>
         <mat-label>Password</mat-label>
         <input
           matInput

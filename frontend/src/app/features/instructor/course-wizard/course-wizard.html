@@ -30,18 +30,18 @@
     <mat-stepper #stepper (selectionChange)="onStep($event)">
       <mat-step label="Details">
         <form [formGroup]="details" class="details">
-          <mat-form-field appearance="outline">
+          <mat-form-field>
             <mat-label>Title</mat-label>
             <input matInput formControlName="title" data-testid="title" />
             @if (details.controls.title.hasError('required')) {
               <mat-error>A title is required.</mat-error>
             }
           </mat-form-field>
-          <mat-form-field appearance="outline">
+          <mat-form-field>
             <mat-label>Subtitle</mat-label>
             <input matInput formControlName="subtitle" />
           </mat-form-field>
-          <mat-form-field appearance="outline">
+          <mat-form-field>
             <mat-label>Description</mat-label>
             <textarea
               matInput
@@ -55,7 +55,7 @@
             >
           </mat-form-field>
           <div class="row">
-            <mat-form-field appearance="outline">
+            <mat-form-field>
               <mat-label>Category</mat-label>
               <mat-select formControlName="categorySlug">
                 @for (root of categories(); track root.slug) {
@@ -67,7 +67,7 @@
                 }
               </mat-select>
             </mat-form-field>
-            <mat-form-field appearance="outline">
+            <mat-form-field>
               <mat-label>Level</mat-label>
               <mat-select formControlName="level">
                 @for (l of levels; track l) {
@@ -75,7 +75,7 @@
                 }
               </mat-select>
             </mat-form-field>
-            <mat-form-field appearance="outline">
+            <mat-form-field>
               <mat-label>Language</mat-label>
               <input matInput formControlName="language" maxlength="2" />
             </mat-form-field>
@@ -91,7 +91,7 @@
             <mat-button-toggle [value]="false" data-testid="paid">Paid</mat-button-toggle>
           </mat-button-toggle-group>
           @if (!pricing.controls.free.value) {
-            <mat-form-field appearance="outline">
+            <mat-form-field>
               <mat-label>Price (₹)</mat-label>
               <input matInput type="number" min="0" formControlName="rupees" data-testid="rupees" />
             </mat-form-field>
