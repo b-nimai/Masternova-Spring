@@ -7,16 +7,15 @@ import { Service } from '@angular/core';
  */
 @Service()
 export class ScrollReveals {
-  private readonly waiting = new Map<Element, () => void>();
   private observer?: IntersectionObserver;
 
-  /** Calls `reveal` once, the first time any part of the element is on screen. */
-  watch(element: Element, reveal: () => void): void {
+  /** Adds `mn-revealed` (styles/_motion.scss) the first time any part of it is on screen. */
+  watch(element: Element): void {
     this.observer ??= new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            this.waiting.get(entry.target)?.();
+            entry.target.classList.add('mn-revealed');
             this.forget(entry.target);
           }
         }
@@ -25,12 +24,10 @@ export class ScrollReveals {
       // a section taller than ten screens never shows 10 % of itself and would stay hidden
       { threshold: 0, rootMargin: '0px 0px -5% 0px' },
     );
-    this.waiting.set(element, reveal);
     this.observer.observe(element);
   }
 
   forget(element: Element): void {
-    this.waiting.delete(element);
     this.observer?.unobserve(element);
   }
 }

@@ -84,7 +84,8 @@ export class NavBar {
             [{ transform: 'scale(1)' }, { transform: 'scale(1.45)' }, { transform: 'scale(1)' }],
             {
               duration: 420,
-              easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+              // the --mn-ease-out token (styles/_motion.scss): Web Animations can't read var()
+              easing: getComputedStyle(document.documentElement).getPropertyValue('--mn-ease-out'),
             },
           );
       }

@@ -13,11 +13,6 @@ import { SkillsSection } from './skills-section/skills-section';
 import { PointerGlow } from '../../shared/motion/pointer-glow';
 import { Reveal } from '../../shared/motion/reveal';
 
-/**
- * The landing page (Figma "Log In Page" 11167:17977, which is the home page): marketing sections
- * around real data: the three best-rated courses (CourseHighlights), the latest reviews of the best
- * of them (LearnerReviews), the number of subjects.
- */
 /** Where "Become an instructor" leads: a path plus an optional query or #fragment. */
 interface TeachLink {
   path: string;
@@ -25,6 +20,11 @@ interface TeachLink {
   fragment?: string;
 }
 
+/**
+ * The landing page (Figma "Log In Page" 11167:17977, which is the home page): marketing sections
+ * around real data: the three best-rated courses (CourseHighlights), the latest reviews of the best
+ * of them (LearnerReviews), the number of subjects.
+ */
 @Component({
   selector: 'app-home',
   imports: [

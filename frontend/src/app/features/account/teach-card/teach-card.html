@@ -12,33 +12,34 @@
 } @else if (application.error()) {
   <p class="lead">Couldn't load your application. Try again later.</p>
 } @else {
-  @let current = application.value();
-  @if (current?.status === 'PENDING') {
-    <p class="lead" data-testid="teach-pending">
-      <mat-icon inline>hourglass_top</mat-icon> Your application from
-      {{ current!.appliedAt | date: 'mediumDate' }} is waiting for an admin.
-    </p>
-  } @else if (current?.status === 'APPROVED' && roleCheck() !== 'done') {
-    <p class="lead" data-testid="teach-approved">Approved! Setting up your instructor access…</p>
-  } @else {
-    <!-- never applied, rejected, or approved and the role since taken away: apply (again) -->
-    @switch (current?.status) {
-      @case ('REJECTED') {
-        <p class="lead" data-testid="teach-rejected">
-          Your last application wasn't approved. Tell us more and apply again.
-        </p>
-      }
-      @case ('APPROVED') {
-        <p class="lead" data-testid="teach-removed">
-          You no longer have instructor access. Apply again to teach.
-        </p>
-      }
-      @default {
-        <p class="lead" data-testid="teach-none">
-          Share what you know. An admin reviews each application, usually within a day.
-        </p>
-      }
+  @switch (view()) {
+    @case ('pending') {
+      <p class="lead" data-testid="teach-pending">
+        <mat-icon inline>hourglass_top</mat-icon> Your application from
+        {{ application.value()!.appliedAt | date: 'mediumDate' }} is waiting for an admin.
+      </p>
     }
+    @case ('activating') {
+      <p class="lead" data-testid="teach-approved">Approved! Setting up your instructor access…</p>
+    }
+    @case ('rejected') {
+      <p class="lead" data-testid="teach-rejected">
+        Your last application wasn't approved. Tell us more and apply again.
+      </p>
+    }
+    @case ('removed') {
+      <p class="lead" data-testid="teach-removed">
+        You no longer have instructor access. Apply again to teach.
+      </p>
+    }
+    @default {
+      <p class="lead" data-testid="teach-none">
+        Share what you know. An admin reviews each application, usually within a day.
+      </p>
+    }
+  }
+  <!-- never applied, rejected, or approved and the role since taken away: apply (again) -->
+  @if (view() !== 'pending' && view() !== 'activating') {
     <form (ngSubmit)="apply()">
       <label class="mn-label" for="teach-pitch">What would you like to teach? (optional)</label>
       <mat-form-field class="mn-on-surface">
@@ -47,12 +48,12 @@
           id="teach-pitch"
           name="pitch"
           rows="3"
-          maxlength="500"
+          [maxlength]="pitchMax"
           data-testid="teach-pitch"
           [ngModel]="pitch()"
           (ngModelChange)="pitch.set($event)"
         ></textarea>
-        <mat-hint align="end">{{ pitch().length }} / 500</mat-hint>
+        <mat-hint align="end">{{ pitch().length }} / {{ pitchMax }}</mat-hint>
       </mat-form-field>
       @if (error(); as message) {
         <p class="error" role="alert">{{ message }}</p>

@@ -7,9 +7,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { catchError, of, Subscription, throwError } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { EngagementApi, LIMITS, ReviewResponse } from '../../../core/api/engagement-api';
-import { asProblem, isNotFound } from '../../../core/api/problem';
+import { asProblem, nullIfNotFound } from '../../../core/api/problem';
 import { Haptics } from '../../../core/haptics';
 
 /**
@@ -77,10 +77,7 @@ export class CourseReviews {
   /** The learner's own review: null = none yet (a 404 is an answer, not an error). */
   protected readonly mine = rxResource({
     params: () => (this.canReview() ? this.courseId() : undefined),
-    stream: ({ params: id }) =>
-      this.api
-        .myReview(id)
-        .pipe(catchError((e: unknown) => (isNotFound(e) ? of(null) : throwError(() => e)))),
+    stream: ({ params: id }) => this.api.myReview(id).pipe(nullIfNotFound()),
   });
 
   /** The saved review, or null (none yet, or it couldn't be loaded: the form starts empty). */

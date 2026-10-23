@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.masternova.api.identity.domain.InstructorApplication.Status;
+import com.masternova.api.platform.ConflictException;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -44,10 +45,8 @@ class InstructorApplicationTest {
     InstructorApplication rejected = InstructorApplication.submit(APPLICANT, null, NOW);
     rejected.reject(ADMIN, NOW);
 
-    assertThatThrownBy(() -> approved.reject(ADMIN, LATER))
-        .isInstanceOf(IllegalStateException.class);
-    assertThatThrownBy(() -> rejected.approve(ADMIN, LATER))
-        .isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> approved.reject(ADMIN, LATER)).isInstanceOf(ConflictException.class);
+    assertThatThrownBy(() -> rejected.approve(ADMIN, LATER)).isInstanceOf(ConflictException.class);
   }
 
   @Test
@@ -59,6 +58,6 @@ class InstructorApplicationTest {
     assertThat(a.status()).isEqualTo(Status.PENDING);
     assertThat(a.appliedAt()).isEqualTo(LATER);
     assertThat(a.decidedAt()).isNull();
-    assertThatThrownBy(() -> a.resubmit(null, LATER)).isInstanceOf(IllegalStateException.class);
+    assertThatThrownBy(() -> a.resubmit(null, LATER)).isInstanceOf(ConflictException.class);
   }
 }

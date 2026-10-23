@@ -9,16 +9,18 @@ class Page {}
 
 describe('scrollToTopOnPageChange', () => {
   let scrollTo: ReturnType<typeof vi.fn>;
+  let scrollToAnchor: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     scrollTo = vi.fn();
+    scrollToAnchor = vi.fn();
     TestBed.configureTestingModule({
       providers: [
         provideRouter([
           { path: 'courses', component: Page },
           { path: 'courses/:slug', component: Page },
         ]),
-        { provide: ViewportScroller, useValue: { scrollToPosition: scrollTo } },
+        { provide: ViewportScroller, useValue: { scrollToPosition: scrollTo, scrollToAnchor } },
       ],
     });
     TestBed.runInInjectionContext(() => scrollToTopOnPageChange());
@@ -35,8 +37,12 @@ describe('scrollToTopOnPageChange', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it('leaves a #fragment to the page that owns the anchor', async () => {
-    await TestBed.inject(Router).navigateByUrl('/courses/k8s#reviews');
+  it('scrolls to a #fragment once the page has rendered, not to the top', async () => {
+    await TestBed.inject(Router).navigateByUrl('/courses/k8s#teach');
+    expect(scrollToAnchor).not.toHaveBeenCalled(); // the anchor isn't drawn yet
+    TestBed.tick();
+
+    expect(scrollToAnchor).toHaveBeenCalledWith('teach');
     expect(scrollTo).not.toHaveBeenCalled();
   });
 });

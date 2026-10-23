@@ -1,5 +1,6 @@
 package com.masternova.api.identity.domain;
 
+import com.masternova.api.platform.ConflictException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -70,7 +71,8 @@ public class InstructorApplication {
   /** Apply again after a rejection (or after the role was later taken away). */
   public void resubmit(String pitch, Instant now) {
     if (status == Status.PENDING) {
-      throw new IllegalStateException("already pending");
+      throw new ConflictException(
+          "APPLICATION_PENDING", "Your application is already waiting for an admin.");
     }
     this.status = Status.PENDING;
     this.pitch = normalise(pitch);
@@ -104,7 +106,8 @@ public class InstructorApplication {
 
   private void decide(Status outcome, UUID adminId, Instant now) {
     if (status != Status.PENDING) {
-      throw new IllegalStateException("not pending: " + status);
+      throw new ConflictException(
+          "APPLICATION_DECIDED", "This application was already decided the other way.");
     }
     this.status = outcome;
     this.decidedBy = Objects.requireNonNull(adminId, "adminId");
@@ -128,10 +131,6 @@ public class InstructorApplication {
 
   public Status status() {
     return status;
-  }
-
-  public boolean isPending() {
-    return status == Status.PENDING;
   }
 
   public String pitch() {

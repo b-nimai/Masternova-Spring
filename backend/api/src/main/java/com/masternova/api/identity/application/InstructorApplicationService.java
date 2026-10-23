@@ -56,10 +56,7 @@ public class InstructorApplicationService {
       }
     }
     InstructorApplication application = existing.get();
-    if (application.isPending()) {
-      throw alreadyPending();
-    }
-    application.resubmit(pitch, clock.instant());
+    application.resubmit(pitch, clock.instant()); // 409 APPLICATION_PENDING while it waits
     return application;
   }
 

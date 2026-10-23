@@ -55,6 +55,20 @@
 }
 
 // ── The pointer glow (shared/motion/pointer-glow.ts adds the class on a fine pointer only) ─────
+// Registered, not inherited: the directive writes these every frame on the card, and an
+// inherited custom property would re-style the card's whole subtree each time.
+@property --mn-pointer-x {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
+@property --mn-pointer-y {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
 .mn-pointer-glow {
   position: relative;
 

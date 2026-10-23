@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,12 +7,18 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { RouterLink } from '@angular/router';
-import { catchError, finalize, of, throwError } from 'rxjs';
-import { asProblem, isNotFound } from '../../../core/api/problem';
+import { finalize } from 'rxjs';
+import { asProblem, nullIfNotFound } from '../../../core/api/problem';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { InstructorApplicationApi } from '../instructor-application-api';
 import { Skeleton } from '../../../shared/skeleton/skeleton';
 import { Haptics } from '../../../core/haptics';
+
+/** The apply call's stable codes → what the card says. */
+const APPLY_PROBLEMS: Record<string, string> = {
+  APPLICATION_PENDING: 'Your application is already waiting for an admin.',
+  ALREADY_INSTRUCTOR: 'You can already teach.',
+};
 
 /**
  * "Teach on Masternova" (the account page): apply to teach, see the application wait, or — once an
@@ -42,13 +48,13 @@ export class TeachCard {
   private readonly haptics = inject(Haptics);
   protected readonly auth = inject(AuthStore);
 
-  /** null = never applied (the API's 404). */
+  /** null = never applied (the API's 404). Not asked for at all once the user can teach. */
   protected readonly application = rxResource({
-    stream: () =>
-      this.api
-        .mine()
-        .pipe(catchError((e: unknown) => (isNotFound(e) ? of(null) : throwError(() => e)))),
+    params: () => (this.auth.hasAnyRole(['INSTRUCTOR']) ? undefined : true),
+    stream: () => this.api.mine().pipe(nullIfNotFound()),
   });
+  /** The backend's `InstructorApplication.PITCH_MAX`. */
+  protected readonly pitchMax = 500;
   protected readonly pitch = signal('');
   protected readonly sending = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -57,6 +63,20 @@ export class TeachCard {
    * approval (or the refresh failed), and the card offers to apply again instead of waiting forever.
    */
   protected readonly roleCheck = signal<'idle' | 'refreshing' | 'done'>('idle');
+
+  /** What the card says once the application has loaded: one state, one template branch. */
+  protected readonly view = computed(() => {
+    switch (this.application.value()?.status) {
+      case 'PENDING':
+        return 'pending';
+      case 'APPROVED':
+        return this.roleCheck() === 'done' ? 'removed' : 'activating';
+      case 'REJECTED':
+        return 'rejected';
+      default:
+        return 'none';
+    }
+  });
 
   constructor() {
     effect(() => {
@@ -77,25 +97,21 @@ export class TeachCard {
   protected apply(): void {
     this.sending.set(true);
     this.error.set(null);
-    this.api.apply(this.pitch().trim() || null).subscribe({
-      next: (filed) => {
-        this.haptics.success();
-        this.application.set(filed);
-        this.sending.set(false);
-      },
-      error: (e: unknown) => {
-        this.haptics.error();
-        const code = asProblem(e)?.code;
-        this.error.set(
-          code === 'APPLICATION_PENDING'
-            ? 'Your application is already waiting for an admin.'
-            : code === 'ALREADY_INSTRUCTOR'
-              ? 'You can already teach.'
-              : 'Something went wrong. Please try again.',
-        );
-        this.application.reload();
-        this.sending.set(false);
-      },
-    });
+    this.api
+      .apply(this.pitch().trim() || null)
+      .pipe(finalize(() => this.sending.set(false)))
+      .subscribe({
+        next: (filed) => {
+          this.haptics.success();
+          this.application.set(filed);
+        },
+        error: (e: unknown) => {
+          this.haptics.error();
+          this.error.set(
+            APPLY_PROBLEMS[asProblem(e)?.code ?? ''] ?? 'Something went wrong. Please try again.',
+          );
+          this.application.reload();
+        },
+      });
   }
 }

@@ -17,6 +17,7 @@ import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import org.hibernate.annotations.BatchSize;
 
 /**
  * The user AGGREGATE ROOT — a rich entity (note 06 §6): its rules live here, not in services. New
@@ -40,8 +41,11 @@ public class User {
   private String passwordHash;
 
   // ⭐ EAGER on purpose: tiny, and needed on EVERY login to build the token. Fetching it lazily
-  //    would add a query per login for no benefit (note 10 §6).
+  //    would add a query per login for no benefit (note 10 §6). @BatchSize: a LIST of users (the
+  //    admin's instructor-application queue) loads all their roles in one more statement, not one
+  // each.
   @ElementCollection(fetch = FetchType.EAGER)
+  @BatchSize(size = 50)
   @CollectionTable(name = "app_user_role", joinColumns = @JoinColumn(name = "user_id"))
   @Enumerated(EnumType.STRING)
   @Column(name = "role", nullable = false, length = 20)

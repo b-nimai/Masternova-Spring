@@ -26,7 +26,7 @@ export class Reveal {
     }
     const reveals = inject(ScrollReveals);
     element.classList.add('mn-reveal');
-    reveals.watch(element, () => element.classList.add('mn-revealed'));
+    reveals.watch(element);
     inject(DestroyRef).onDestroy(() => reveals.forget(element));
   }
 }

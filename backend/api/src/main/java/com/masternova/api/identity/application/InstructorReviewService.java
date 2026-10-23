@@ -6,17 +6,13 @@ import com.masternova.api.identity.domain.InstructorApplication;
 import com.masternova.api.identity.domain.InstructorApplicationRepository;
 import com.masternova.api.identity.domain.User;
 import com.masternova.api.identity.domain.UserRepository;
-import com.masternova.api.platform.ConflictException;
 import com.masternova.api.platform.CursorPage;
-import com.masternova.api.platform.CursorTokens;
+import com.masternova.api.platform.KeysetCursor;
 import com.masternova.api.platform.NotFoundException;
 import java.time.Clock;
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Limit;
@@ -54,33 +50,18 @@ public class InstructorReviewService {
   @PreAuthorize("hasRole('ADMIN')")
   @Transactional(readOnly = true)
   public CursorPage<Pending> pending(String cursor) {
-    // limit + 1: the extra row only says whether there is a next page
-    Limit fetch = Limit.of(PAGE_SIZE + 1);
-    List<InstructorApplication> rows =
-        cursor == null
-            ? applications.findByStatusOrderByAppliedAtAscUserIdAsc(
-                InstructorApplication.Status.PENDING, fetch)
-            : after(cursor, fetch);
-    String next = null;
-    if (rows.size() > PAGE_SIZE) {
-      rows = rows.subList(0, PAGE_SIZE);
-      InstructorApplication last = rows.getLast();
-      next = CursorTokens.encode(last.appliedAt().toString(), last.userId().toString());
-    }
-    return new CursorPage<>(withApplicants(rows), next);
-  }
-
-  private List<InstructorApplication> after(String cursor, Limit fetch) {
-    String[] parts = CursorTokens.decode(cursor, 2);
-    Instant at;
-    UUID id;
-    try {
-      at = Instant.parse(parts[0]);
-      id = UUID.fromString(parts[1]);
-    } catch (DateTimeParseException | IllegalArgumentException e) {
-      throw CursorTokens.invalid();
-    }
-    return applications.findPendingAfter(at, id, fetch);
+    CursorPage<InstructorApplication> page =
+        KeysetCursor.page(
+            cursor,
+            PAGE_SIZE,
+            (at, id, limit) ->
+                at == null
+                    ? applications.findByStatusOrderByAppliedAtAscUserIdAsc(
+                        InstructorApplication.Status.PENDING, Limit.of(limit))
+                    : applications.findPendingAfter(at, id, Limit.of(limit)),
+            InstructorApplication::appliedAt,
+            InstructorApplication::userId);
+    return new CursorPage<>(withApplicants(page.items()), page.nextCursor());
   }
 
   private List<Pending> withApplicants(List<InstructorApplication> queue) {
@@ -100,7 +81,7 @@ public class InstructorReviewService {
     InstructorApplication application = find(userId);
     // ⭐ same transaction: approved ⇔ instructor. The applicant's next token refresh carries it.
     // Only on the approval itself: a repeated approve must not re-grant a role an admin removed.
-    if (decide(() -> application.approve(admin.id(), clock.instant()))) {
+    if (application.approve(admin.id(), clock.instant())) {
       users
           .findById(userId)
           .orElseThrow(() -> new NotFoundException("User", userId))
@@ -113,11 +94,7 @@ public class InstructorReviewService {
   @Transactional
   public InstructorApplication reject(CurrentUser admin, UUID userId) {
     InstructorApplication application = find(userId);
-    decide(
-        () -> {
-          application.reject(admin.id(), clock.instant());
-          return true;
-        });
+    application.reject(admin.id(), clock.instant());
     return application;
   }
 
@@ -125,17 +102,5 @@ public class InstructorReviewService {
     return applications
         .findForDecision(userId)
         .orElseThrow(() -> new NotFoundException("InstructorApplication", userId));
-  }
-
-  /**
-   * @return what the decision returned (approve: whether it changed anything)
-   */
-  private static boolean decide(BooleanSupplier decision) {
-    try {
-      return decision.getAsBoolean();
-    } catch (IllegalStateException alreadyDecided) {
-      throw new ConflictException(
-          "APPLICATION_DECIDED", "This application was already decided the other way.");
-    }
   }
 }

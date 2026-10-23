@@ -1,6 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -33,41 +34,41 @@ export class InstructorQueue {
   /** The next page joins the list (the queue is keyset-paged, oldest first). */
   protected showMore(cursor: string): void {
     this.loadingMore.set(true);
-    this.api.pendingApplications(cursor).subscribe({
-      next: (next) => {
-        this.queue.update(
-          (page) => page && { items: [...page.items, ...next.items], nextCursor: next.nextCursor },
-        );
-        this.loadingMore.set(false);
-      },
-      error: () => {
-        this.error.set("Couldn't load more applications.");
-        this.loadingMore.set(false);
-      },
-    });
+    this.api
+      .pendingApplications(cursor)
+      .pipe(finalize(() => this.loadingMore.set(false)))
+      .subscribe({
+        next: (next) =>
+          this.queue.update(
+            (page) =>
+              page && { items: [...page.items, ...next.items], nextCursor: next.nextCursor },
+          ),
+        error: () => this.error.set("Couldn't load more applications."),
+      });
   }
 
   protected decide(application: PendingApplicationResponse, decision: 'approve' | 'reject'): void {
     this.deciding.set(application.userId);
     this.error.set(null);
-    this.api.decide(application.userId, decision).subscribe({
-      next: () => {
-        this.haptics.success();
-        this.queue.update(
-          (page) =>
-            page && { ...page, items: page.items.filter((a) => a.userId !== application.userId) },
-        );
-        this.deciding.set(null);
-      },
-      error: (e: unknown) => {
-        this.error.set(
-          asProblem(e)?.code === 'APPLICATION_DECIDED'
-            ? `${application.displayName}'s application was already decided.`
-            : 'Something went wrong. Please try again.',
-        );
-        this.queue.reload();
-        this.deciding.set(null);
-      },
-    });
+    this.api
+      .decide(application.userId, decision)
+      .pipe(finalize(() => this.deciding.set(null)))
+      .subscribe({
+        next: () => {
+          this.haptics.success();
+          this.queue.update(
+            (page) =>
+              page && { ...page, items: page.items.filter((a) => a.userId !== application.userId) },
+          );
+        },
+        error: (e: unknown) => {
+          this.error.set(
+            asProblem(e)?.code === 'APPLICATION_DECIDED'
+              ? `${application.displayName}'s application was already decided.`
+              : 'Something went wrong. Please try again.',
+          );
+          this.queue.reload();
+        },
+      });
   }
 }

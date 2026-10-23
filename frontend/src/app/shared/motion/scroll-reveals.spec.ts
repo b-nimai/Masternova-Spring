@@ -28,9 +28,8 @@ describe('ScrollReveals', () => {
     const reveals = TestBed.inject(ScrollReveals);
     const a = document.createElement('div');
     const b = document.createElement('div');
-    const revealed: string[] = [];
-    reveals.watch(a, () => revealed.push('a'));
-    reveals.watch(b, () => revealed.push('b'));
+    reveals.watch(a);
+    reveals.watch(b);
 
     fire([
       { target: a, isIntersecting: true },
@@ -39,7 +38,8 @@ describe('ScrollReveals', () => {
     fire([{ target: a, isIntersecting: true }]); // a again: already let go
 
     expect(created).toBe(1);
-    expect(revealed).toEqual(['a']);
+    expect(a.classList).toContain('mn-revealed');
+    expect(b.classList).not.toContain('mn-revealed');
     expect(unobserve).toHaveBeenCalledWith(a);
   });
 });

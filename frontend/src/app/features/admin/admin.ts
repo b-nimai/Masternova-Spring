@@ -19,12 +19,11 @@ import { InstructorQueue } from './instructor-queue/instructor-queue';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-
 /** A custom validator is just a function: control → errors or null. An email or a user id. */
 export function userRefValidator(control: AbstractControl<string>): ValidationErrors | null {
   const value = control.value?.trim();
-  return !value || UUID.test(value) || EMAIL.test(value) ? null : { userRef: true };
+  const email = Validators.email({ value } as AbstractControl); // the signup form's rule
+  return !value || UUID.test(value) || email === null ? null : { userRef: true };
 }
 
 /** A group-level validator: at least one box ticked (the backend requires ≥ 1 role too). */

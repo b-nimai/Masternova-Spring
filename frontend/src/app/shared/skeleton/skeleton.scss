@@ -1,4 +1,5 @@
-// The blocks share one moving highlight (a background wider than the block, slid across).
+// Each block is a still grey with a highlight slid across it by `transform` (composited: no
+// repaint per frame while the page waits).
 :host {
   display: grid;
   gap: 24px;
@@ -9,28 +10,31 @@
 }
 
 .block {
+  position: relative;
+  overflow: hidden;
   border-radius: 8px;
-  background: linear-gradient(
-      100deg,
-      var(--mn-richblack-800) 30%,
-      var(--mn-richblack-700) 50%,
-      var(--mn-richblack-800) 70%
-    )
-    0 0 / 300% 100%;
+  background: var(--mn-richblack-800);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .block {
+  .block::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      var(--mn-richblack-700) 50%,
+      transparent 80%
+    );
+    transform: translateX(-100%);
     animation: shimmer 1.4s ease-in-out infinite;
   }
 }
 
 @keyframes shimmer {
-  from {
-    background-position: 100% 0;
-  }
   to {
-    background-position: 0 0;
+    transform: translateX(100%);
   }
 }
 
