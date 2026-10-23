@@ -82,12 +82,14 @@ describe('Signup', () => {
     expect(text(fixture, 'application-filed')).toContain('waiting for an admin');
   });
 
-  it('?as=instructor opens on the Instructor tab', async () => {
+  it('?as=instructor opens on the Instructor tab, and the tab follows the URL back', async () => {
     fixture.componentRef.setInput('as', 'instructor');
-    fixture.componentInstance.ngOnInit();
     await fixture.whenStable();
-
     expect(text(fixture, 'instructor-hint')).toContain('admin reviews');
+
+    fixture.componentRef.setInput('as', undefined); // the nav bar's plain "Sign up"
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('[data-testid="instructor-hint"]')).toBeNull();
   });
 
   it('maps 409 EMAIL_TAKEN onto the email field', async () => {

@@ -7,11 +7,16 @@ import com.masternova.api.identity.domain.InstructorApplicationRepository;
 import com.masternova.api.identity.domain.User;
 import com.masternova.api.identity.domain.UserRepository;
 import com.masternova.api.platform.ConflictException;
+import com.masternova.api.platform.CursorPage;
+import com.masternova.api.platform.CursorTokens;
 import com.masternova.api.platform.NotFoundException;
 import java.time.Clock;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.data.domain.Limit;
@@ -26,8 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class InstructorReviewService {
 
-  /** The queue is short (a handful a day); a cursor arrives when it isn't. */
-  static final int QUEUE_LIMIT = 100;
+  /** One page of the queue; the rest follow by cursor (oldest first: the fair order). */
+  static final int PAGE_SIZE = 50;
 
   private final InstructorApplicationRepository applications;
   private final UserRepository users;
@@ -43,12 +48,42 @@ public class InstructorReviewService {
   /** A pending application with who sent it. */
   public record Pending(InstructorApplication application, User applicant) {}
 
+  /**
+   * @param cursor null for the first page, else the previous page's {@code nextCursor}
+   */
   @PreAuthorize("hasRole('ADMIN')")
   @Transactional(readOnly = true)
-  public List<Pending> pending() {
-    List<InstructorApplication> queue =
-        applications.findByStatusOrderByAppliedAtAsc(
-            InstructorApplication.Status.PENDING, Limit.of(QUEUE_LIMIT));
+  public CursorPage<Pending> pending(String cursor) {
+    // limit + 1: the extra row only says whether there is a next page
+    Limit fetch = Limit.of(PAGE_SIZE + 1);
+    List<InstructorApplication> rows =
+        cursor == null
+            ? applications.findByStatusOrderByAppliedAtAscUserIdAsc(
+                InstructorApplication.Status.PENDING, fetch)
+            : after(cursor, fetch);
+    String next = null;
+    if (rows.size() > PAGE_SIZE) {
+      rows = rows.subList(0, PAGE_SIZE);
+      InstructorApplication last = rows.getLast();
+      next = CursorTokens.encode(last.appliedAt().toString(), last.userId().toString());
+    }
+    return new CursorPage<>(withApplicants(rows), next);
+  }
+
+  private List<InstructorApplication> after(String cursor, Limit fetch) {
+    String[] parts = CursorTokens.decode(cursor, 2);
+    Instant at;
+    UUID id;
+    try {
+      at = Instant.parse(parts[0]);
+      id = UUID.fromString(parts[1]);
+    } catch (DateTimeParseException | IllegalArgumentException e) {
+      throw CursorTokens.invalid();
+    }
+    return applications.findPendingAfter(at, id, fetch);
+  }
+
+  private List<Pending> withApplicants(List<InstructorApplication> queue) {
     // one query for all the applicants, not one per row
     Map<UUID, User> applicants =
         users.findAllById(queue.stream().map(InstructorApplication::userId).toList()).stream()
@@ -63,12 +98,14 @@ public class InstructorReviewService {
   @Transactional
   public InstructorApplication approve(CurrentUser admin, UUID userId) {
     InstructorApplication application = find(userId);
-    decide(() -> application.approve(admin.id(), clock.instant()));
     // ⭐ same transaction: approved ⇔ instructor. The applicant's next token refresh carries it.
-    users
-        .findById(userId)
-        .orElseThrow(() -> new NotFoundException("User", userId))
-        .grant(Role.INSTRUCTOR);
+    // Only on the approval itself: a repeated approve must not re-grant a role an admin removed.
+    if (decide(() -> application.approve(admin.id(), clock.instant()))) {
+      users
+          .findById(userId)
+          .orElseThrow(() -> new NotFoundException("User", userId))
+          .grant(Role.INSTRUCTOR);
+    }
     return application;
   }
 
@@ -76,19 +113,26 @@ public class InstructorReviewService {
   @Transactional
   public InstructorApplication reject(CurrentUser admin, UUID userId) {
     InstructorApplication application = find(userId);
-    decide(() -> application.reject(admin.id(), clock.instant()));
+    decide(
+        () -> {
+          application.reject(admin.id(), clock.instant());
+          return true;
+        });
     return application;
   }
 
   private InstructorApplication find(UUID userId) {
     return applications
-        .findById(userId)
+        .findForDecision(userId)
         .orElseThrow(() -> new NotFoundException("InstructorApplication", userId));
   }
 
-  private static void decide(Runnable decision) {
+  /**
+   * @return what the decision returned (approve: whether it changed anything)
+   */
+  private static boolean decide(BooleanSupplier decision) {
     try {
-      decision.run();
+      return decision.getAsBoolean();
     } catch (IllegalStateException alreadyDecided) {
       throw new ConflictException(
           "APPLICATION_DECIDED", "This application was already decided the other way.");

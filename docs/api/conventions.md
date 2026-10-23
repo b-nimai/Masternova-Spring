@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-21 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6), §13 (Phase 3), §15 (Phase 10) and §16 + §17 (Phase 11) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-23 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6), §13 (Phase 3), §15 (Phase 10) and §16 + §17 (Phase 11) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -280,8 +280,8 @@ is 401, not 404, so the API reveals nothing about what exists.
 | `GET /me` | — | 200 `UserResponse` |
 | `GET /me/instructor-application` | — | 200 `{status, pitch, appliedAt, decidedAt}`; 404 none yet |
 | `POST /me/instructor-application` | `{pitch?}` (≤ 500) | 201; 409 `APPLICATION_PENDING`; 422 `ALREADY_INSTRUCTOR`; a rejected applicant re-applies |
-| `GET /admin/instructor-applications` | — | 200 the pending queue, oldest first (`{items, nextCursor: null}`, capped at 100) |
-| `POST /admin/instructor-applications/{userId}/approve` · `…/reject` | none | 200; **idempotent**; approve grants `INSTRUCTOR` in the same transaction; 409 `APPLICATION_DECIDED` the other way |
+| `GET /admin/instructor-applications?cursor=` | — | 200 the pending queue, oldest first, keyset-paged by `(appliedAt, userId)`: 50 a page (§2's envelope); 400 `INVALID_CURSOR` |
+| `POST /admin/instructor-applications/{userId}/approve` · `…/reject` | none | 200; **idempotent** (the row is locked, so overlapping calls agree); approve grants `INSTRUCTOR` in the same transaction, only when it moves PENDING → APPROVED; 409 `APPLICATION_DECIDED` the other way |
 | `GET /admin/users?email=…` | — | 200 `UserResponse` (the admin page's lookup); 404 |
 
 - **Access token:** a 15-minute HS256 JWT with claims `sub` (user id), `roles`, `email_verified`

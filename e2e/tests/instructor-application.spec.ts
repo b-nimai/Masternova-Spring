@@ -24,6 +24,12 @@ test('sign up as an instructor → an admin approves → the applicant can teach
   await expect(admin.getByTestId('user-menu')).toBeVisible();
   await admin.goto('/admin');
   const row = admin.getByTestId('application').filter({ hasText: name });
+  await expect(admin.getByTestId('queue').or(admin.getByTestId('queue-empty'))).toBeVisible();
+  // oldest first, keyset-paged: on a long-lived stack the new application may be pages down
+  while ((await row.count()) === 0 && (await admin.getByTestId('queue-more').count()) > 0) {
+    await admin.getByTestId('queue-more').click();
+    await expect(admin.getByTestId('queue-more')).not.toHaveText('Loading…');
+  }
   await row.getByTestId('approve').click();
   await expect(row).toHaveCount(0); // gone once the server agreed
 

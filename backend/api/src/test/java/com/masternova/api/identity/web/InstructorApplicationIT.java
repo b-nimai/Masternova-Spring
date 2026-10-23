@@ -7,7 +7,13 @@ import com.masternova.api.identity.Role;
 import com.masternova.api.identity.application.SignupService;
 import com.masternova.api.identity.application.SignupService.SignupCommand;
 import com.masternova.api.identity.domain.UserRepository;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,6 +142,96 @@ class InstructorApplicationIT {
         .bodyJson()
         .extractingPath("$.code")
         .isEqualTo("APPLICATION_DECIDED");
+  }
+
+  @Test
+  void aRepeatedApproveDoesNotUndoALaterDemotion() throws Exception {
+    signupViaApi("ina@example.com", true);
+    UUID ina = idOf("ina@example.com");
+    decide(ina, "approve");
+    jdbc.sql("DELETE FROM app_user_role WHERE user_id = :id AND role = 'INSTRUCTOR'")
+        .param("id", ina)
+        .update(); // an admin took the role away again
+
+    assertThat(decide(ina, "approve")).hasStatus(HttpStatus.OK); // a retry, or a stale tab
+    assertThat(users.findById(ina).orElseThrow().roles()).containsExactly(Role.LEARNER);
+  }
+
+  @Test
+  void overlappingApprovesAllAnswer200AndGrantOnce() throws Exception {
+    signupViaApi("ina@example.com", true);
+    UUID ina = idOf("ina@example.com");
+    int clicks = 8;
+    CountDownLatch go = new CountDownLatch(1);
+    try (ExecutorService pool = Executors.newFixedThreadPool(clicks)) {
+      List<Future<Integer>> statuses = new ArrayList<>();
+      for (int i = 0; i < clicks; i++) {
+        statuses.add(
+            pool.submit(
+                () -> {
+                  go.await();
+                  return decide(ina, "approve").getResponse().getStatus();
+                }));
+      }
+      go.countDown();
+      for (Future<Integer> status : statuses) {
+        // ⭐ the row lock queues them: no 409 VERSION_CONFLICT for the losers
+        assertThat(status.get()).isEqualTo(200);
+      }
+    }
+    assertThat(users.findById(ina).orElseThrow().roles())
+        .containsExactlyInAnyOrder(Role.LEARNER, Role.INSTRUCTOR);
+  }
+
+  @Test
+  void theQueueIsKeysetPagedOldestFirst() throws Exception {
+    int total = 52; // a page is 50
+    for (int i = 0; i < total; i++) {
+      UUID id = UUID.randomUUID();
+      jdbc.sql(
+              """
+              INSERT INTO app_user (id, email, display_name, password_hash, created_at, version)
+              VALUES (:id, :email, :name, '{noop}x', now(), 0)
+              """)
+          .param("id", id)
+          .param("email", "applicant" + i + "@example.com")
+          .param("name", "Applicant " + i)
+          .update();
+      jdbc.sql(
+              """
+              INSERT INTO instructor_application (user_id, status, applied_at, version)
+              VALUES (:id, 'PENDING', now() - make_interval(mins => :ago), 0)
+              """)
+          .param("id", id)
+          .param("ago", total - i) // applicant 0 applied first
+          .update();
+    }
+
+    var first = json.readTree(queue(admin).getResponse().getContentAsString());
+    assertThat(first.get("items").size()).isEqualTo(50);
+    assertThat(first.get("items").get(0).get("displayName").asString()).isEqualTo("Applicant 0");
+    String cursor = first.get("nextCursor").asString();
+
+    var second =
+        json.readTree(
+            mvc.get()
+                .uri("/api/v1/admin/instructor-applications?cursor={c}", cursor)
+                .header("Authorization", admin)
+                .exchange()
+                .getResponse()
+                .getContentAsString());
+    assertThat(second.get("items").size()).isEqualTo(2);
+    assertThat(second.get("items").get(1).get("displayName").asString()).isEqualTo("Applicant 51");
+    assertThat(second.get("nextCursor").isNull()).isTrue();
+
+    assertThat(
+            mvc.get()
+                .uri("/api/v1/admin/instructor-applications?cursor=bm9wZQ")
+                .header("Authorization", admin))
+        .hasStatus(HttpStatus.BAD_REQUEST)
+        .bodyJson()
+        .extractingPath("$.code")
+        .isEqualTo("VALIDATION_FAILED");
   }
 
   @Test

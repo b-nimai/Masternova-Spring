@@ -7,7 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { RouterLink } from '@angular/router';
-import { catchError, of, throwError } from 'rxjs';
+import { catchError, finalize, of, throwError } from 'rxjs';
 import { asProblem, isNotFound } from '../../../core/api/problem';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { InstructorApplicationApi } from '../instructor-application-api';
@@ -52,15 +52,24 @@ export class TeachCard {
   protected readonly pitch = signal('');
   protected readonly sending = signal(false);
   protected readonly error = signal<string | null>(null);
-  private refreshedForRole = false;
+  /**
+   * The one silent refresh: 'done' with the role still missing means it was taken away after the
+   * approval (or the refresh failed), and the card offers to apply again instead of waiting forever.
+   */
+  protected readonly roleCheck = signal<'idle' | 'refreshing' | 'done'>('idle');
 
   constructor() {
     effect(() => {
       const approved =
         this.application.hasValue() && this.application.value()?.status === 'APPROVED';
-      if (approved && !this.auth.hasAnyRole(['INSTRUCTOR']) && !this.refreshedForRole) {
-        this.refreshedForRole = true;
-        untracked(() => this.auth.refresh().subscribe({ error: () => undefined }));
+      if (approved && !this.auth.hasAnyRole(['INSTRUCTOR']) && this.roleCheck() === 'idle') {
+        this.roleCheck.set('refreshing');
+        untracked(() =>
+          this.auth
+            .refresh()
+            .pipe(finalize(() => this.roleCheck.set('done')))
+            .subscribe({ error: () => undefined }),
+        );
       }
     });
   }

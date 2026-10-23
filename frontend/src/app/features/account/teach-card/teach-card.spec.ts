@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { Observable, of, throwError } from 'rxjs';
+import { Observable, of, Subject, throwError } from 'rxjs';
 import { text } from '../../../../testing/dom';
 import { Role } from '../../../core/auth/auth-api';
 import { AuthStore } from '../../../core/auth/auth-store';
@@ -69,6 +69,7 @@ describe('TeachCard', () => {
   });
 
   it('⭐ approved but the token still says learner: one silent refresh picks the role up', async () => {
+    refresh.mockReturnValue(new Subject<string>()); // still in flight
     mine = () => of({ ...pending, status: 'APPROVED', decidedAt: '2026-10-22T11:00:00Z' });
     const fixture = await render();
     fixture.detectChanges();
@@ -85,5 +86,16 @@ describe('TeachCard', () => {
 
     expect(text(fixture, 'teach-instructor')).toContain("You're an instructor");
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('approved, refreshed, and still no role (taken away since): offers to apply again', async () => {
+    mine = () => of({ ...pending, status: 'APPROVED', decidedAt: '2026-10-22T11:00:00Z' });
+    const fixture = await render();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(text(fixture, 'teach-removed')).toContain('Apply again');
+    expect(fixture.nativeElement.querySelector('[data-testid="teach-apply"]')).not.toBeNull();
   });
 });

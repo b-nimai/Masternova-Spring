@@ -29,8 +29,9 @@ class InstructorApplicationTest {
   @Test
   void decidingTwiceTheSameWayIsANoOpThatKeepsTheFirstDecision() {
     InstructorApplication a = InstructorApplication.submit(APPLICANT, null, NOW);
-    a.approve(ADMIN, NOW);
-    a.approve(UUID.randomUUID(), LATER); // a double click, a retried request
+    assertThat(a.approve(ADMIN, NOW)).isTrue();
+    // a double click, a retried request: false, so the caller grants nothing the second time
+    assertThat(a.approve(UUID.randomUUID(), LATER)).isFalse();
 
     assertThat(a.status()).isEqualTo(Status.APPROVED);
     assertThat(a.decidedAt()).isEqualTo(NOW);

@@ -81,13 +81,17 @@ public class InstructorApplication {
 
   /**
    * ⭐ Idempotent: an admin's double click (or a retried request) approves once and keeps the first
-   * decision. The caller grants the role in the same transaction.
+   * decision. The caller grants the role in the same transaction, and only when this returns {@code
+   * true}: a repeated approve must not undo a later demotion.
+   *
+   * @return whether this call approved it (false: it already was)
    */
-  public void approve(UUID adminId, Instant now) {
+  public boolean approve(UUID adminId, Instant now) {
     if (status == Status.APPROVED) {
-      return;
+      return false;
     }
     decide(Status.APPROVED, adminId, now);
+    return true;
   }
 
   /** Idempotent like approve; rejecting an approved application is a different act (a demotion). */

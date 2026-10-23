@@ -52,10 +52,6 @@
   .mn-leave {
     animation: 260ms var(--mn-ease-in) both mn-slide-out;
   }
-
-  .mn-enter {
-    animation: 420ms var(--mn-ease-out) both mn-page-in;
-  }
 }
 
 // ── The pointer glow (shared/motion/pointer-glow.ts adds the class on a fine pointer only) ─────
@@ -107,11 +103,5 @@
   to {
     opacity: 0;
     transform: translateX(24px);
-  }
-}
-
-@keyframes mn-bump {
-  40% {
-    transform: scale(1.35);
   }
 }

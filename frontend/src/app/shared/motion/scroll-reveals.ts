@@ -10,7 +10,7 @@ export class ScrollReveals {
   private readonly waiting = new Map<Element, () => void>();
   private observer?: IntersectionObserver;
 
-  /** Calls `reveal` once, the first time the element is (10 %) on screen. */
+  /** Calls `reveal` once, the first time any part of the element is on screen. */
   watch(element: Element, reveal: () => void): void {
     this.observer ??= new IntersectionObserver(
       (entries) => {
@@ -21,8 +21,9 @@ export class ScrollReveals {
           }
         }
       },
-      // a little before the very bottom edge, so content is moving in as it arrives
-      { threshold: 0.1, rootMargin: '0px 0px -5% 0px' },
+      // any pixel, a little above the bottom edge (content moves in as it arrives). Not a ratio:
+      // a section taller than ten screens never shows 10 % of itself and would stay hidden
+      { threshold: 0, rootMargin: '0px 0px -5% 0px' },
     );
     this.waiting.set(element, reveal);
     this.observer.observe(element);

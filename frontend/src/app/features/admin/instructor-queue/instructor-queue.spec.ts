@@ -2,11 +2,11 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { text } from '../../../../testing/dom';
-import { PendingApplication } from '../admin-api';
+import { PendingApplicationResponse } from '../admin-api';
 import { InstructorQueue } from './instructor-queue';
 
 describe('InstructorQueue', () => {
-  const ina: PendingApplication = {
+  const ina: PendingApplicationResponse = {
     userId: 'u1',
     email: 'ina@x.dev',
     displayName: 'Ina',
@@ -65,5 +65,34 @@ describe('InstructorQueue', () => {
     await fixture.whenStable();
 
     expect(text(fixture, 'queue-error')).toContain('already decided');
+  });
+
+  it('"Show more" appends the next page by its cursor', async () => {
+    const ben = { ...ina, userId: 'u2', displayName: 'Ben' };
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [InstructorQueue],
+      providers: [provideHttpClient(), provideHttpClientTesting()],
+    });
+    http = TestBed.inject(HttpTestingController);
+    fixture = TestBed.createComponent(InstructorQueue);
+    fixture.detectChanges();
+    http
+      .expectOne('/api/v1/admin/instructor-applications')
+      .flush({ items: [ina], nextCursor: 'c1' });
+    await fixture.whenStable();
+
+    click('queue-more');
+    const req = http.expectOne((r) => r.url === '/api/v1/admin/instructor-applications');
+    expect(req.request.params.get('cursor')).toBe('c1');
+    req.flush({ items: [ben], nextCursor: null });
+    await fixture.whenStable();
+
+    const rows = fixture.nativeElement.querySelectorAll('[data-testid="application"]');
+    expect([...rows].map((r) => (r as HTMLElement).textContent)).toEqual([
+      expect.stringContaining('Ina'),
+      expect.stringContaining('Ben'),
+    ]);
+    expect(fixture.nativeElement.querySelector('[data-testid="queue-more"]')).toBeNull();
   });
 });

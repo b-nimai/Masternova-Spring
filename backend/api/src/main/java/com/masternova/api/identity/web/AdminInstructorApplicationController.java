@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -27,10 +28,11 @@ class AdminInstructorApplicationController {
     this.review = review;
   }
 
-  /** Pending, oldest first. The list envelope of §2; no next page while the queue is capped. */
+  /** Pending, oldest first, keyset-paged: the list envelope of API conventions §2. */
   @GetMapping
-  CursorPage<PendingApplicationResponse> pending() {
-    return CursorPage.of(review.pending(), null, PendingApplicationResponse::from);
+  CursorPage<PendingApplicationResponse> pending(@RequestParam(required = false) String cursor) {
+    CursorPage<InstructorReviewService.Pending> page = review.pending(cursor);
+    return CursorPage.of(page.items(), page.nextCursor(), PendingApplicationResponse::from);
   }
 
   @PostMapping("/{userId}/approve")

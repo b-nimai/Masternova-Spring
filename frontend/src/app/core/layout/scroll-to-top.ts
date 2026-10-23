@@ -1,8 +1,9 @@
 import { ViewportScroller } from '@angular/common';
 import { DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { NavigationEnd, Router, UrlTree } from '@angular/router';
+import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
+import { pagePath } from './page-path';
 
 /**
  * Start a new PAGE at the top, but not every navigation. The router's own
@@ -25,15 +26,11 @@ export function scrollToTopOnPageChange(): void {
     )
     .subscribe((event) => {
       const tree = router.parseUrl(event.urlAfterRedirects);
-      const path = pathOf(tree);
+      const path = pagePath(tree);
       if (lastPath !== null && path !== lastPath && !tree.fragment) {
         // instant: `scroll-behavior: smooth` (styles/_motion.scss) is for anchors, not a new page
         scroller.scrollToPosition([0, 0], { behavior: 'instant' });
       }
       lastPath = path;
     });
-}
-
-function pathOf(tree: UrlTree): string {
-  return tree.root.children['primary']?.segments.map((s) => s.path).join('/') ?? '';
 }

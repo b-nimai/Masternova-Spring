@@ -50,6 +50,16 @@
           }
         </ul>
       }
+      @if (queue.value().nextCursor; as cursor) {
+        <button
+          mat-stroked-button
+          data-testid="queue-more"
+          [disabled]="loadingMore()"
+          (click)="showMore(cursor)"
+        >
+          {{ loadingMore() ? 'Loading…' : 'Show more' }}
+        </button>
+      }
     } @else if (queue.error()) {
       <p class="form-error">Couldn't load the applications.</p>
     } @else {

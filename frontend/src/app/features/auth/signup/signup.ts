@@ -1,4 +1,4 @@
-import { Component, inject, input, OnInit, signal } from '@angular/core';
+import { Component, effect, inject, input, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -28,7 +28,7 @@ type JoinAs = 'STUDENT' | 'INSTRUCTOR';
   templateUrl: './signup.html',
   styleUrl: './signup.scss',
 })
-export class Signup implements OnInit {
+export class Signup {
   private readonly api = inject(AuthApi);
 
   /** `?as=instructor` (the home page's "Become an Instructor") opens on the Instructor tab. */
@@ -55,10 +55,12 @@ export class Signup implements OnInit {
   protected readonly registeredEmail = signal<string | null>(null);
   protected readonly appliedAsInstructor = signal(false);
 
-  ngOnInit(): void {
-    if (this.as() === 'instructor') {
-      this.form.controls.joinAs.setValue('INSTRUCTOR');
-    }
+  constructor() {
+    // An effect, not ngOnInit: /signup?as=instructor → /signup reuses this component, and the tab
+    // must follow the URL (or a visitor files an application from the "plain" sign up)
+    effect(() =>
+      this.form.controls.joinAs.setValue(this.as() === 'instructor' ? 'INSTRUCTOR' : 'STUDENT'),
+    );
   }
 
   protected submit(): void {

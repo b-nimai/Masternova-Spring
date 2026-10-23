@@ -6,7 +6,7 @@
 > deny-by-default security filter chain for the whole API.
 
 **Module:** `backend/api/src/main/java/com/masternova/api/identity` · **Status:** built (Phase 3: 3.1–3.10; Google sign-in 3.6 deferred)
-**Last updated:** 2026-10-22 · **Angular:** `frontend/src/app/core/auth/` (store, interceptor, guards) + `features/auth/` (pages)
+**Last updated:** 2026-10-23 · **Angular:** `frontend/src/app/core/auth/` (store, interceptor, guards) + `features/auth/` (pages)
 
 ## 1. Problem
 
@@ -172,7 +172,8 @@ See [ADR-0006](../adr/0006-rotating-refresh-tokens-over-stateless-jwt.md). In sh
 | verification token expired / used | lookup | 422 `VERIFICATION_TOKEN_INVALID` | request a new one (later task) |
 | applying while pending / as an instructor | the application / the **stored** roles (the token may be stale) | 409 `APPLICATION_PENDING` / 422 `ALREADY_INSTRUCTOR` | wait for the admin |
 | two first applications at once | the primary key (`saveAndFlush` inside a try) | the loser gets 409 `APPLICATION_PENDING`, not a 500 | — |
-| an admin double-clicks Approve | already APPROVED | 200, nothing changes (idempotent) | — |
+| an admin double-clicks Approve | already APPROVED | 200, nothing changes (idempotent); the role is granted only by the call that moved PENDING → APPROVED, so a stale approve can't undo a later demotion | — |
+| two approves overlap (two admins, a retry) | the row, read `FOR UPDATE` (`findForDecision`) | the second waits and sees APPROVED: 200, not a 409 `VERSION_CONFLICT` | — |
 | approve after reject (or the reverse) | the status | 409 `APPLICATION_DECIDED` | the applicant re-applies; demoting is the roles editor's job |
 
 ## 9. Data & indexes
@@ -204,7 +205,7 @@ All foreign keys are indexed (Postgres doesn't do it for you: note 10 §10).
 | the HTTP contract **without a database**: no token → 401 Problem + `WWW-Authenticate: Bearer` before any controller runs; the JWT becomes the `CurrentUser` passed to the service; an invalid body never reaches the service; domain exceptions → stable codes | `AdminUserControllerTest` (6) | ⭐ `@WebMvcTest` slice + real security chain + `jwt()` |
 | `@PreAuthorize("hasRole('ADMIN')")` lets ADMIN through, denies everyone else **before the method body runs**, and fails closed with no authentication | `UserAdminServiceSecurityTest` (3) | ⭐ tiny context + `@EnableMethodSecurity` + `@WithMockUser` |
 | a pending application starts with a trimmed optional pitch; deciding twice the same way keeps the first decision; a decision can't flip; a rejected applicant resubmits | `InstructorApplicationTest` (4) | plain JUnit |
-| signup's Instructor tab files an application and grants nothing; approve grants INSTRUCTOR once even when clicked twice; reject after approve → 409; apply later / re-apply after a rejection / 409 while pending; ⭐ an approved instructor can't re-apply even with a 15-minute-old LEARNER token (the rule reads the stored roles: 422); learners get 403 on the queue and decisions; the admin finds a user by email | `InstructorApplicationIT` (6) | full app + Postgres |
+| signup's Instructor tab files an application and grants nothing; approve grants INSTRUCTOR once even when clicked twice; reject after approve → 409; apply later / re-apply after a rejection / 409 while pending; ⭐ an approved instructor can't re-apply even with a 15-minute-old LEARNER token (the rule reads the stored roles: 422); learners get 403 on the queue and decisions; a repeated approve after a demotion grants nothing; 8 overlapping approves all answer 200 (mutation-checked: without the row lock the losers get 409); the queue is keyset-paged (52 rows → 50 + 2, a bad cursor 400); the admin finds a user by email | `InstructorApplicationIT` (9) | full app + Postgres |
 | deny-by-default: an unknown route is 401, not 404 or 200 | `ApiApplicationIT` | full app |
 | identity uses only platform's public API | `ModularityTests` | static |
 
