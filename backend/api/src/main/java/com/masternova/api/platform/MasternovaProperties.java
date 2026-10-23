@@ -22,6 +22,7 @@ import org.springframework.validation.annotation.Validated;
  * @param webUrl the public URL of the Angular app (links in emails, CORS)
  * @param checkout checkout rules
  * @param idempotency Idempotency-Key handling (Phase 2.6)
+ * @param overload the bulkhead in front of the api (D5.1)
  */
 @Validated
 @ConfigurationProperties(prefix = "masternova")
@@ -30,7 +31,8 @@ public record MasternovaProperties(
     // ⭐ an EMPTY @DefaultValue on a nested record = "build it from its own defaults when no
     //    masternova.checkout.* keys are set". Without it the nested record binds as null.
     @Valid @DefaultValue Checkout checkout,
-    @Valid @DefaultValue Idempotency idempotency) {
+    @Valid @DefaultValue Idempotency idempotency,
+    @Valid @DefaultValue Overload overload) {
 
   /**
    * @param cartMaxItems the most courses one cart can hold (yaml: {@code cart-max-items})
@@ -47,4 +49,12 @@ public record MasternovaProperties(
   public record Idempotency(
       @DefaultValue("24h") @NotNull Duration retention,
       @DefaultValue("30s") @NotNull Duration inProgressTimeout) {}
+
+  /**
+   * @param maxConcurrent the most api requests one pod runs at once; the next one gets a 503
+   * @param maxWait how long a request may wait for a free slot first (absorbs a short burst)
+   */
+  public record Overload(
+      @DefaultValue("64") @Min(1) @Max(10_000) int maxConcurrent,
+      @DefaultValue("50ms") @NotNull Duration maxWait) {}
 }

@@ -70,15 +70,21 @@ topologySpreadConstraints:
 The JVM apps' probes. startup: booted yet? · liveness: wedged → restart · readiness: send
 traffic? Liveness never checks a dependency: a DB outage must not restart every pod.
 `readinessPeriod` / `readinessFailures`: how fast an unready pod leaves the endpoints.
+D5.1: a pod that is busy is not wedged. At 1 s × 3 a CPU-starved pod failed liveness under load,
+restarted, and pushed its traffic onto the rest (a restart spiral, docs/hld/03-capacity.md §4):
+liveness and startup now wait 5 s per probe, so overload is shed by readiness only.
 */}}
 {{- define "masternova.jvmProbes" -}}
 startupProbe:
   httpGet: { path: /actuator/health/liveness, port: http }
   periodSeconds: 2
+  timeoutSeconds: 5
   failureThreshold: 30
 livenessProbe:
   httpGet: { path: /actuator/health/liveness, port: http }
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
 readinessProbe:
   httpGet: { path: /actuator/health/readiness, port: http }
   periodSeconds: {{ .readinessPeriod }}

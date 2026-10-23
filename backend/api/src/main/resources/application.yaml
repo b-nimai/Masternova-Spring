@@ -19,6 +19,9 @@ spring:
       #    rows a scan returns (default 40 < the hybrid's 100 candidates), and the iterative scan
       #    keeps going past dead graph entries and rows the join filters out. Inert elsewhere.
       connection-init-sql: SET hnsw.ef_search = 100; SET hnsw.iterative_scan = relaxed_order
+      # ⭐ D5.1: fail fast. Hikari's default 30 s wait let ~1,500 requests per pod queue for 10
+      #    connections; past 2 s a request becomes a 503 OVERLOADED (GlobalExceptionHandler), not a stall.
+      connection-timeout: ${DATABASE_POOL_TIMEOUT_MS:2000}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -56,6 +59,9 @@ spring:
 
 masternova: # → MasternovaProperties (typed + validated at startup)
   web-url: ${WEB_URL:http://localhost:4200}
+  overload: # the bulkhead (platform.overload.ConcurrencyLimitFilter, D5.1): requests per pod, then 503
+    max-concurrent: ${OVERLOAD_MAX_CONCURRENT:64}
+    max-wait: 50ms
   checkout:
     cart-max-items: 20
     payment-timeout: 10s

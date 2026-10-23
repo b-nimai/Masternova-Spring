@@ -1,6 +1,6 @@
 # Architecture
 
-**Last updated:** 2026-10-15 (deployment: Kubernetes + GitOps) · **Status:** Phase 0. Containers are real; module boxes are planned.
+**Last updated:** 2026-10-23 (D5.1: the bulkhead) · **Status:** Phase 0. Containers are real; module boxes are planned.
 
 ## 1. Context (C4 level 1)
 
@@ -85,7 +85,7 @@ The real diagram is generated on every build at `backend/api/target/spring-modul
 | Traces | Micrometer Observation → OTel SDK → OTLP → Tempo; the outbox row carries `traceparent` api → worker | [ADR-0015](../adr/0015-tracing-with-micrometer-observation-and-otlp.md) |
 | Alerting | 3 SLOs with multi-window burn-rate alerts + symptom alerts → Alertmanager; one runbook per alert | `deploy/observability/prometheus/rules`, `docs/runbooks/` |
 | Health | Actuator liveness/readiness groups → Docker `HEALTHCHECK`, K8s probes | `backend/healthcheck.sh` |
-| Concurrency | Virtual threads for request handling | `spring.threads.virtual.enabled` |
+| Concurrency | Virtual threads for request handling, capped by a per-pod bulkhead (64 in flight → 503 `OVERLOADED`); Hikari waits 2 s at most ([capacity](03-capacity.md)) | `spring.threads.virtual.enabled`, `platform.overload` |
 
 ## 5. Deployment views
 

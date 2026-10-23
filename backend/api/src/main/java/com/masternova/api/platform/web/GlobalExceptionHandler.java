@@ -12,6 +12,7 @@ import com.masternova.api.platform.ValidationException;
 import com.masternova.api.platform.ValidationException.FieldError;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
+import java.sql.SQLTransientConnectionException;
 import java.util.Comparator;
 import java.util.List;
 import org.jspecify.annotations.Nullable;
@@ -105,6 +106,19 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest request) {
+    if (isPoolTimeout(ex)) {
+      // ⭐ no free connection within the pool's timeout: overload, not a bug (D5.1). A 503 with
+      //    Retry-After, like the bulkhead's, and no stack trace per request at the worst moment.
+      log.warn("No database connection for {} {}", request.getMethod(), request.getRequestURI());
+      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+          .header(HttpHeaders.RETRY_AFTER, "1")
+          .body(
+              problem(
+                  HttpStatus.SERVICE_UNAVAILABLE,
+                  "OVERLOADED",
+                  "The service is busy. Retry shortly.",
+                  request));
+    }
     log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
         .body(
@@ -161,6 +175,20 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       problem.setProperty("code", code);
     }
     return response;
+  }
+
+  /**
+   * Hikari's "Connection is not available" arrives wrapped differently per caller (JPA's {@code
+   * CannotCreateTransactionException}, JDBC's {@code CannotGetJdbcConnectionException}): look for
+   * its cause, not its wrapper.
+   */
+  private static boolean isPoolTimeout(Throwable ex) {
+    for (Throwable t = ex; t != null; t = t.getCause()) {
+      if (t instanceof SQLTransientConnectionException) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static ProblemDetail problem(

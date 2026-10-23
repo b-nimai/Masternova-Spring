@@ -173,6 +173,13 @@ k8s-gitops: ## Hand the cluster to Argo CD: the project + the root Application (
 	@echo "Argo CD UI: https://argocd.masternova.localhost:8443  (admin / \
 	$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d))"
 
+k8s-drill: ## Open a drill window (D5): pause Argo CD's auto-sync so a branch's change can be applied by hand; `make k8s-gitops` ends it
+	@# the root first: it owns the child Applications and would restore their sync policy
+	for app in masternova-root masternova-infra masternova; do \
+	  kubectl -n argocd patch application $$app --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'; \
+	done
+	@echo "GitOps paused: nothing reverts a kubectl change now. Resume with: make k8s-gitops"
+
 k8s-bump: ## GitOps deploy: commit image tag TAG (must exist on GHCR) into the local values: make k8s-bump TAG=sha-abc1234
 	deploy/argocd/bump.sh $(TAG)
 

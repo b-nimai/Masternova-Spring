@@ -34,3 +34,4 @@ e2e/playwright-report/
 
 # StudyNotion Figma exports (Phase UI reference material, not shipped)
 /design-export/
+load/results/
