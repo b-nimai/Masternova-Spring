@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { catchError, of, Subscription, throwError } from 'rxjs';
 import { EngagementApi, LIMITS, ReviewResponse } from '../../../core/api/engagement-api';
 import { asProblem, isNotFound } from '../../../core/api/problem';
+import { Haptics } from '../../../core/haptics';
 
 /**
  * The course page's reviews (Phase 11.5): the star distribution, the newest reviews with "Show
@@ -38,6 +39,7 @@ import { asProblem, isNotFound } from '../../../core/api/problem';
 })
 export class CourseReviews {
   private readonly api = inject(EngagementApi);
+  private readonly haptics = inject(Haptics);
 
   readonly courseId = input.required<string>();
   /** Enrolled (the course page's progress says so): offer the form. */
@@ -136,7 +138,10 @@ export class CourseReviews {
     this.api
       .writeReview(this.courseId(), { rating: this.draftRating(), body: this.draftBody().trim() })
       .subscribe({
-        next: (review) => this.afterWrite(review),
+        next: (review) => {
+          this.haptics.success();
+          this.afterWrite(review);
+        },
         error: (e: unknown) => this.failed(e),
       });
   }
@@ -158,6 +163,7 @@ export class CourseReviews {
 
   private failed(e: unknown): void {
     this.saving.set(false);
+    this.haptics.error();
     const reason = asProblem(e)?.reason;
     this.formError.set(
       reason === 'OWN_COURSE'

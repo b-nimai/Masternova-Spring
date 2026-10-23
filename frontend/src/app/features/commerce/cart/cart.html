@@ -11,7 +11,7 @@
     <div class="layout">
       <ul class="items">
         @for (item of cart.items(); track item.courseId) {
-          <li data-testid="cart-item">
+          <li data-testid="cart-item" animate.leave="mn-leave">
             <img [src]="cover(item.courseId)" alt="" width="185" height="148" loading="lazy" />
             <a class="title" [routerLink]="['/courses', item.slug]">{{ item.title }}</a>
             <div class="side">

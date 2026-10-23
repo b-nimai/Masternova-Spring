@@ -1,6 +1,6 @@
 <!-- Figma "Course Detail" 11167:19083: a header band, a sticky buy box, then the course -->
 @if (course.isLoading()) {
-  <div class="state"><mat-spinner diameter="36" data-testid="loading" /></div>
+  <app-skeleton class="loading" shape="band" data-testid="loading" />
 } @else if (notFound()) {
   <section class="state" data-testid="not-found">
     <h1>Course not found</h1>
@@ -108,12 +108,12 @@
     </aside>
 
     <div class="body">
-      <section class="learn">
+      <section class="learn" appReveal>
         <h2>About this course</h2>
         <p>{{ c.description }}</p>
       </section>
 
-      <section class="curriculum">
+      <section class="curriculum" appReveal>
         <h2>Course content</h2>
         <!-- ⭐ deferred: a separate JS chunk, fetched when this block scrolls into view -->
         @defer (on viewport) {
@@ -133,7 +133,7 @@
         }
       </section>
 
-      <section class="author">
+      <section class="author" appReveal>
         <h2>Author</h2>
         <p class="author-name">
           <span class="avatar" aria-hidden="true">{{ c.instructorName.charAt(0) }}</span>

@@ -6,6 +6,7 @@
 }
 
 .sidebar {
+  view-transition-name: dashboard-sidebar; // stays put while the page beside it changes
   position: sticky;
   top: 57px; // below the sticky nav bar
   align-self: start;

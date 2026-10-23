@@ -9,6 +9,24 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  border-radius: 8px; // the pointer glow follows it
+  transition: transform 300ms var(--mn-ease-out);
+
+  img {
+    transition: transform 600ms var(--mn-ease-out);
+  }
+
+  // hover: the card lifts a little and its cover leans in (the row's height doesn't change:
+  // transforms don't take layout space, so the virtual scroll's ROW_HEIGHT still holds)
+  @media (prefers-reduced-motion: no-preference) {
+    &:hover {
+      transform: translateY(-4px);
+
+      img {
+        transform: scale(1.05);
+      }
+    }
+  }
 }
 
 .cover {

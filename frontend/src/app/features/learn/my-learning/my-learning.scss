@@ -7,20 +7,8 @@
   padding-top: 16px;
 }
 
-// The Figma's pill tabs: a Rich Black 800 track, the chosen one Rich Black 900.
-.pills {
-  --mat-button-toggle-shape: 500px;
-  --mat-button-toggle-divider-color: transparent;
-  --mat-button-toggle-background-color: var(--mn-richblack-800);
-  --mat-button-toggle-text-color: var(--mn-richblack-200);
-  --mat-button-toggle-selected-state-background-color: var(--mn-richblack-900);
-  --mat-button-toggle-selected-state-text-color: var(--mn-richblack-5);
+.mn-pills {
   margin-bottom: 24px;
-  padding: 4px;
-  border: 0;
-  border-radius: 500px;
-  background: var(--mn-richblack-800);
-  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 18%);
 }
 
 .courses {

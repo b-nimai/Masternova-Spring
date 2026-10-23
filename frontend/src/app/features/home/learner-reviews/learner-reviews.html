@@ -3,7 +3,7 @@
     <h2>Reviews from other learners</h2>
     <div class="review-cards" data-testid="home-reviews">
       @for (review of reviews.value(); track review.id) {
-        <article class="review">
+        <article class="review" appReveal [appRevealDelay]="$index * 100">
           <header>
             <span class="avatar" aria-hidden="true">{{ review.authorName.charAt(0) }}</span>
             <div>

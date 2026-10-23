@@ -1,0 +1,26 @@
+<span class="mn-sr-only">Loading…</span>
+@for (i of items(); track i) {
+  <div class="item" [class]="shape()" aria-hidden="true">
+    @switch (shape()) {
+      @case ('card') {
+        <div class="block cover"></div>
+        <div class="block line wide"></div>
+        <div class="block line"></div>
+        <div class="block line short"></div>
+      }
+      @case ('band') {
+        <div class="block line short"></div>
+        <div class="block line title"></div>
+        <div class="block line wide"></div>
+        <div class="block line"></div>
+      }
+      @default {
+        <div class="block thumb"></div>
+        <div class="lines">
+          <div class="block line wide"></div>
+          <div class="block line short"></div>
+        </div>
+      }
+    }
+  </div>
+}

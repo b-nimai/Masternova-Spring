@@ -3,22 +3,22 @@ import { Component, inject } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { AuthoringApi } from '../../../core/api/authoring-api';
 import { CourseStatus } from '../../../core/api/catalog-api';
 import { coverFor } from '../../../shared/course-cover';
 import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
+import { Skeleton } from '../../../shared/skeleton/skeleton';
 
 /** /instructor — the instructor's own courses, every status, most recently edited first. */
 @Component({
   imports: [
+    Skeleton,
     DatePipe,
     RouterLink,
     MatButtonModule,
     MatIconModule,
-    MatProgressSpinnerModule,
     MoneyPipe,
     DurationPipe,
   ],

@@ -1,0 +1,58 @@
+<header>
+  <h2>Teach on Masternova</h2>
+</header>
+
+@if (auth.hasAnyRole(['INSTRUCTOR'])) {
+  <p class="lead" data-testid="teach-instructor">
+    <mat-icon inline class="ok">school</mat-icon> You're an instructor.
+  </p>
+  <a mat-flat-button routerLink="/instructor" data-testid="teach-courses">Your courses</a>
+} @else if (application.isLoading() && !application.hasValue()) {
+  <app-skeleton shape="row" />
+} @else if (application.error()) {
+  <p class="lead">Couldn't load your application. Try again later.</p>
+} @else {
+  @let current = application.value();
+  @switch (current?.status) {
+    @case ('PENDING') {
+      <p class="lead" data-testid="teach-pending">
+        <mat-icon inline>hourglass_top</mat-icon> Your application from
+        {{ current!.appliedAt | date: 'mediumDate' }} is waiting for an admin.
+      </p>
+    }
+    @case ('APPROVED') {
+      <p class="lead" data-testid="teach-approved">Approved! Setting up your instructor access…</p>
+    }
+    @default {
+      <p class="lead" [attr.data-testid]="current ? 'teach-rejected' : 'teach-none'">
+        @if (current) {
+          Your last application wasn't approved. Tell us more and apply again.
+        } @else {
+          Share what you know. An admin reviews each application, usually within a day.
+        }
+      </p>
+      <form (ngSubmit)="apply()">
+        <label class="mn-label" for="teach-pitch">What would you like to teach? (optional)</label>
+        <mat-form-field class="mn-on-surface">
+          <textarea
+            matInput
+            id="teach-pitch"
+            name="pitch"
+            rows="3"
+            maxlength="500"
+            data-testid="teach-pitch"
+            [ngModel]="pitch()"
+            (ngModelChange)="pitch.set($event)"
+          ></textarea>
+          <mat-hint align="end">{{ pitch().length }} / 500</mat-hint>
+        </mat-form-field>
+        @if (error(); as message) {
+          <p class="error" role="alert">{{ message }}</p>
+        }
+        <button mat-flat-button type="submit" [disabled]="sending()" data-testid="teach-apply">
+          {{ sending() ? 'Sending…' : 'Apply to teach' }}
+        </button>
+      </form>
+    }
+  }
+}

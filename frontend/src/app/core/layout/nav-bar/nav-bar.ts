@@ -1,5 +1,13 @@
 import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
-import { Component, computed, inject, signal } from '@angular/core';
+import {
+  afterRenderEffect,
+  Component,
+  computed,
+  ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,6 +22,7 @@ import { CartStore } from '../../commerce/cart-store';
 import { SearchBox } from '../../../shared/search-box/search-box';
 import { SITE_LINKS, visibleTo } from '../nav-items';
 import { initialsOf } from '../../../shared/initials';
+import { prefersReducedMotion } from '../../../shared/motion/reduced-motion';
 
 /**
  * The top navigation bar (Figma "Navigation Bar"): logo, links + a Catalog menu of the
@@ -58,6 +67,30 @@ export class NavBar {
     { initialValue: [] },
   );
   protected readonly searchOpen = signal(false);
+
+  private readonly cartLink = viewChild('cartLink', { read: ElementRef<HTMLElement> });
+
+  constructor() {
+    // The cart badge bumps when a course goes in: the eye catches the number that changed.
+    // After render, so the badge shows its new number while it grows (Web Animations: no CSS
+    // class to remove afterwards).
+    let previous = this.cart.count();
+    afterRenderEffect(() => {
+      const count = this.cart.count();
+      if (count > previous && !prefersReducedMotion()) {
+        this.cartLink()
+          ?.nativeElement.querySelector('.mat-badge-content')
+          ?.animate(
+            [{ transform: 'scale(1)' }, { transform: 'scale(1.45)' }, { transform: 'scale(1)' }],
+            {
+              duration: 420,
+              easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+            },
+          );
+      }
+      previous = count;
+    });
+  }
 
   /** The avatar: the display name's initials (users have no picture). */
   protected readonly initials = computed(() => initialsOf(this.auth.user()?.displayName ?? ''));

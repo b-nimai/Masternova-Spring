@@ -4,7 +4,7 @@
 > tokens into Material's *system* roles so every component follows, move the page chrome into
 > layout routes, and take each screen's spacing and assets from its Figma frame.
 
-**Last updated:** 2026-10-22 · **Roadmap:** UI.1–UI.9 (Phase UI)
+**Last updated:** 2026-10-22 · **Roadmap:** UI.1–UI.11 (Phase UI)
 **Code:**
 - `src/styles/_tokens.scss`, `src/styles/_theme.scss`, `src/styles.scss`: tokens, the M3 theme, global bits;
 - `core/layout/`: `NavBar`, `SiteFooter`, `PublicLayout`, `DashboardLayout`, `PageTitle`, `nav-items.ts`;
@@ -161,13 +161,16 @@ dark: they're `aria-hidden` decoration.
 | Dashboard sidebar | Wishlist; "Courses" | no wishlist; Cart, My Courses (instructors), Admin (admins) | our features; role-based entries |
 | Dashboard sidebar | Settings = profile + password | Settings = email preferences | the API has no profile edit or password change |
 | Auth pages | announcement bar ("PI DAY SALE") | none | no promotions |
-| Auth pages | Student / Instructor tabs | none | roles are granted by an admin, not chosen at signup |
+| Sign up | Student / Instructor tabs that pick the account type | the same tabs (`mat-button-toggle-group`, the shared `.mn-pills` style); **Instructor files an application** an admin approves (UI.10); the account is a learner meanwhile | no one grants themself a role: the identity LLD's "Becoming an instructor" |
 | Sign up | first + last name, phone number | one display name; no phone | the API's `SignupRequest` |
 | Log in | "Forgot password" | none | no password reset in the API |
 | Verify email | a 6-box OTP code + "Resend it" | the emailed link verifies on arrival; states shown in the same layout | link-based verification (identity LLD) |
 | Auth, Home | photos delivered at 3–4× their size (1.3–9 MB PNG/JPEG) | re-encoded JPEGs at 2× the displayed size (≈ 0.15–0.33 MB each; 22 MB → 0.9 MB for the home page) | identical at the size shown; a page shouldn't download 9 MB for one picture |
 | Home | "Learn More" / "Book a Demo" | "Browse Courses" / "Create Account" (signed in: "My Learning") | no demo booking; each button goes somewhere real |
-| Home | "Become an Instructor" for everyone | visitors → sign up; instructors → their courses; learners: no link, a hint | the instructor role is granted by an admin |
+| Home | "Become an Instructor" for everyone | visitors → sign up on the Instructor tab (`?as=instructor`); learners → "Teach on Masternova" on the account page (`#teach`); instructors → their courses | applying is self-service, granting is the admin's |
+| My Profile | — | a "Teach on Masternova" card: apply (optional pitch), the pending date, re-apply after a rejection, or "Your courses" | where a learner asks to teach |
+| Admin | — (no frame) | an instructor-application queue (approve / reject) above the roles editor, which now finds users **by email** | the admin's half of UI.10 |
+| All | static pages | motion (§10): page transitions, scroll reveals, press feedback, skeleton loaders, a pointer glow, haptics; all off under "reduce motion" | a product that feels alive; the Figma is a still picture |
 | Home | HTML snippets in the code panels | an Angular and a Java snippet in the spirit of Masternova's code | it's a code-teaching site about this stack |
 | Home | three static course cards ("Learn HTML" …) | the three best-rated published courses | real data |
 | Home | timeline: Leadership, Responsibility, Flexibility, Solve the problem; banner "10 years · 250 courses" | Masternova's pillars (Material icons); banner: the real number of subjects, "24/7" | no invented numbers |
@@ -205,7 +208,29 @@ dark: they're `aria-hidden` decoration.
 | Video Detail | the footer below the page | no footer | the player is a full-height page outside the public layout |
 | All | secondary greys Rich Black 400–600, a Pink 100 badge | Rich Black 300 (200 on 700) and Pink 400 | WCAG AA contrast, checked by axe in e2e (§8) |
 
-## 10. 30-second recall
+## 10. Motion that respects the user ⭐⭐ (UI.11)
+
+The Figma is a still picture; the app moves. One rule over all of it: **the OS "reduce motion"
+setting turns every effect off** (WCAG 2.3.3). CSS puts each animation under
+`@media (prefers-reduced-motion: no-preference)`; the directives ask
+`prefersReducedMotion()` (`shared/motion/reduced-motion.ts`) before doing anything.
+
+| Effect | How | Why this way |
+|---|---|---|
+| Page transitions | the router's `withViewTransitions()`; `onViewTransitionCreated` skips a navigation that keeps the path (`core/layout/page-transitions.ts`); CSS fades `::view-transition-old/new(root)`; the nav bar and sidebar get their own `view-transition-name`, so they stay put | the browser animates a snapshot: no animation code per page. A catalog filter is a query-param navigation; fading the page on each chip would be noise (the same rule as scroll-to-top) |
+| Scroll reveals | `appReveal` (+ `[appRevealDelay]` for a stagger) adds `.mn-reveal`, ONE shared `IntersectionObserver` (`ScrollReveals`) adds `.mn-revealed` | the directive hides the element only once it is watching: no JS, no observer or reduced motion → never hidden. An **animation** (`backwards`), not a transition: components keep their own `transition` |
+| Press feedback, card lift, star pop | global `.mat-mdc-button-base:active` scale; course card `translateY` + cover zoom; stars staggered by `nth-of-type` | transforms don't take layout space, so the virtual scroll's fixed row height holds |
+| Rows that leave | `animate.leave="mn-leave"` (Angular's built-in leave animation: it waits for `animationend`, then removes) | a removed cart line or a decided application slides out instead of vanishing; no `@angular/animations` |
+| Cart badge bump | `afterRenderEffect` on the count → the Web Animations API on `.mat-badge-content` | after render, so the new number is what grows; nothing to clean up |
+| Skeletons | `<app-skeleton shape="card \| row \| band" [count]>` instead of first-load spinners | the layout is there before the data; nothing jumps when it lands. One `role="status"` "Loading…" |
+| Pointer glow | `appPointerGlow` writes `--mn-pointer-x/y` (at most once per frame, outside change detection), CSS draws a radial gradient | the system cursor is never replaced; touch screens (`hover: none`) get nothing |
+| Haptics | `Haptics.tap/success/error()` (`core/haptics.ts`) from click handlers: add to cart, enroll, review, coupon, apply to teach, approve | the Vibration API: Android vibrates; iPhone Safari has no API, so it's a silent no-op there |
+
+The e2e suite runs with `reducedMotion: 'reduce'` (nothing fades under a click);
+`e2e/tests/motion.spec.ts` turns motion back on and checks the wiring: a section reveals, a card
+follows the pointer, a page change runs a view transition and a filter skips it.
+
+## 11. 30-second recall
 
 - Restyle at the **system** level: `mat.theme` + `theme-overrides` pins every M3 role to the
   design; component tokens only for shape and size; a written-down global rule for the rest.
@@ -216,3 +241,5 @@ dark: they're `aria-hidden` decoration.
   spacing. A screenshot hides how a glow or an offset block is made.
 - **Contrast is a test**, not a review comment: axe in the e2e suite.
 - Every departure from the design is a row in a table with its reason.
+- **Motion is opt-out by the OS:** `prefers-reduced-motion` gates every effect; hide nothing a
+  script must reveal unless that script is running.

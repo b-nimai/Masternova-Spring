@@ -1,10 +1,9 @@
 <!-- Figma 11167:17977. Section by section: hero, two code panels, top courses, skills, instructor, reviews -->
-<section class="hero">
-  @if (teachLink(); as link) {
-    <a class="pill" [routerLink]="link"
-      >Become an Instructor <mat-icon aria-hidden="true">arrow_forward</mat-icon></a
-    >
-  }
+@let teach = teachLink();
+<section class="hero" appPointerGlow>
+  <a class="pill" [routerLink]="teach.path" [queryParams]="teach.query" [fragment]="teach.fragment"
+    >Become an Instructor <mat-icon aria-hidden="true">arrow_forward</mat-icon></a
+  >
   <h1>Empower Your Future with <span class="mn-highlight">Coding Skills</span></h1>
   <p class="lead">
     Learn from video courses at your own pace, from anywhere in the world. Pay once, resume exactly
@@ -23,7 +22,7 @@
   </div>
 </section>
 
-<section class="panel">
+<section class="panel" appReveal>
   <div class="copy">
     <h2>Unlock your <span class="mn-highlight">coding potential</span> with our online courses.</h2>
     <p>
@@ -40,7 +39,7 @@
   <app-code-panel class="code" [lines]="firstPanel" glow="brown" />
 </section>
 
-<section class="panel reverse">
+<section class="panel reverse" appReveal>
   <div class="copy">
     <h2>
       Start <span class="mn-highlight">watching<br />in seconds</span>
@@ -63,7 +62,7 @@
 
 <app-skills-section [subjects]="subjects()" />
 
-<section class="instructor">
+<section class="instructor" appReveal>
   <div class="instructor-picture">
     <img src="home/instructor.jpg" alt="" width="616" height="545" loading="lazy" />
   </div>
@@ -73,14 +72,13 @@
       Instructors teach learners everywhere on Masternova. We provide the tools: a course wizard,
       video transcoding, and payments, so you can teach what you love.
     </p>
-    @if (teachLink(); as link) {
-      <a mat-flat-button [routerLink]="link"
-        >Start Teaching Today
-        <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></a
-      >
-    } @else {
-      <p class="hint">Ask an admin for the instructor role to start teaching.</p>
-    }
+    <a
+      mat-flat-button
+      [routerLink]="teach.path"
+      [queryParams]="teach.query"
+      [fragment]="teach.fragment"
+      >Start Teaching Today <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></a
+    >
   </div>
 </section>
 

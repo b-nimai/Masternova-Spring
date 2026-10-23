@@ -4,6 +4,12 @@
       We sent a verification link to <strong>{{ email }}</strong
       >. Open it to confirm your address, then log in.
     </p>
+    @if (appliedAsInstructor()) {
+      <p class="message" data-testid="application-filed">
+        Your instructor application is waiting for an admin. Until then you can learn; your
+        dashboard shows the decision.
+      </p>
+    }
     <a mat-flat-button routerLink="/login">Go to log in</a>
   </app-auth-shell>
 } @else {
@@ -13,6 +19,25 @@
     accent="Be Unstoppable"
   >
     <form class="auth-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="join-as">
+        <mat-button-toggle-group
+          class="mn-pills"
+          formControlName="joinAs"
+          aria-label="Join as"
+          hideSingleSelectionIndicator
+        >
+          <mat-button-toggle value="STUDENT" data-testid="join-student">Student</mat-button-toggle>
+          <mat-button-toggle value="INSTRUCTOR" data-testid="join-instructor"
+            >Instructor</mat-button-toggle
+          >
+        </mat-button-toggle-group>
+        @if (form.controls.joinAs.value === 'INSTRUCTOR') {
+          <p class="join-hint" data-testid="instructor-hint">
+            You start as a student. An admin reviews instructor applications, usually within a day.
+          </p>
+        }
+      </div>
+
       <div>
         <label class="mn-label" for="signup-name"
           >Display Name <span class="req" aria-hidden="true">*</span></label

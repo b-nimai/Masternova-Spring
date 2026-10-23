@@ -1,4 +1,4 @@
-<section class="power">
+<section class="power" appReveal>
   <div class="power-head">
     <h2>Unlock the <span class="mn-highlight">Power of Code</span></h2>
     <p>Learn to Build Anything You Can Imagine</p>
@@ -6,7 +6,13 @@
   @if (courses().length > 0) {
     <div class="cards" data-testid="top-courses">
       @for (course of courses(); track course.id) {
-        <a class="card" [routerLink]="['/courses', course.slug]">
+        <a
+          class="card"
+          appReveal
+          appPointerGlow
+          [appRevealDelay]="$index * 120"
+          [routerLink]="['/courses', course.slug]"
+        >
           <h3>{{ course.title }}</h3>
           <p>{{ course.subtitle ?? course.instructorName }}</p>
           <footer>

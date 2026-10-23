@@ -32,3 +32,23 @@ mat-icon {
   color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
   font-weight: 400;
 }
+
+// The stars pop in one after another (the eye reads the rating as it fills).
+@media (prefers-reduced-motion: no-preference) {
+  mat-icon {
+    animation: 360ms var(--mn-ease-out) backwards pop;
+  }
+
+  @for $i from 1 through 5 {
+    mat-icon:nth-of-type(#{$i}) {
+      animation-delay: #{$i * 50}ms;
+    }
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}

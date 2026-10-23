@@ -12,7 +12,7 @@
   <div class="skills-body">
     <ol class="timeline">
       @for (pillar of pillars; track pillar.title) {
-        <li>
+        <li appReveal [appRevealDelay]="$index * 100">
           <span class="dot"
             ><mat-icon aria-hidden="true">{{ pillar.icon }}</mat-icon></span
           >

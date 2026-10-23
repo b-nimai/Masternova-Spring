@@ -4,6 +4,7 @@ import { map } from 'rxjs';
 import { CourseSummary } from '../../../core/api/catalog-api';
 import { EngagementApi } from '../../../core/api/engagement-api';
 import { StarRating } from '../../../shared/star-rating/star-rating';
+import { Reveal } from '../../../shared/motion/reveal';
 
 /**
  * "Reviews from other learners" (Figma frame 46): the latest reviews of one course. The API has
@@ -14,7 +15,7 @@ import { StarRating } from '../../../shared/star-rating/star-rating';
  */
 @Component({
   selector: 'app-learner-reviews',
-  imports: [StarRating],
+  imports: [Reveal, StarRating],
   templateUrl: './learner-reviews.html',
   styleUrl: './learner-reviews.scss',
 })

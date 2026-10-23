@@ -10,8 +10,16 @@ export function uniqueEmail(): string {
   return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
-export async function signUp(page: Page, email: string, displayName = 'E2E Learner'): Promise<void> {
+export async function signUp(
+  page: Page,
+  email: string,
+  displayName = 'E2E Learner',
+  as: 'student' | 'instructor' = 'student',
+): Promise<void> {
   await page.goto('/signup');
+  if (as === 'instructor') {
+    await page.getByRole('radio', { name: 'Instructor' }).click(); // mat-button-toggle: a radio
+  }
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Display name').fill(displayName);
   await page.getByLabel('Create password').fill(PASSWORD);

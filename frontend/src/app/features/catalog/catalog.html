@@ -126,6 +126,10 @@
     }
   </p>
 
+  @if (state.loading && !state.items.length) {
+    <app-skeleton class="first-page" shape="card" [count]="6" data-testid="loading" />
+  }
+
   @if (state.items.length) {
     <!-- ⭐ The viewport scrolls ROWS of cards (3 / 2 / 1 by width): only visible rows exist in
          the DOM; (scrolledIndexChange) asks for the next page near the last row. -->
@@ -148,8 +152,8 @@
   }
 
   <footer class="more">
-    @if (state.loading) {
-      <mat-spinner diameter="28" data-testid="loading" />
+    @if (state.loading && state.items.length) {
+      <mat-spinner diameter="28" data-testid="loading-more" />
     } @else if (state.error) {
       <p class="form-error" data-testid="error">
         We couldn't load courses.

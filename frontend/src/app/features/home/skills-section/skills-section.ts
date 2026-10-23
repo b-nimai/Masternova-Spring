@@ -2,6 +2,7 @@ import { Component, input } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
+import { Reveal } from '../../../shared/motion/reveal';
 
 /**
  * "Get the skills you need" (Figma frame 40): the light band with the four-step timeline and the
@@ -9,7 +10,7 @@ import { RouterLink } from '@angular/router';
  */
 @Component({
   selector: 'app-skills-section',
-  imports: [RouterLink, MatButtonModule, MatIconModule],
+  imports: [Reveal, RouterLink, MatButtonModule, MatIconModule],
   templateUrl: './skills-section.html',
   styleUrl: './skills-section.scss',
 })

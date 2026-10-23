@@ -1,0 +1,51 @@
+:host {
+  display: block;
+}
+
+.applications {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 0;
+    border-top: 1px solid var(--mn-richblack-700);
+  }
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+
+  span {
+    color: var(--mn-richblack-300);
+    font: 400 0.875rem / 1.375rem var(--mn-font);
+  }
+}
+
+.pitch {
+  margin: 6px 0 0;
+  color: var(--mn-richblack-100);
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+.empty {
+  margin: 16px 0 0;
+  color: var(--mn-richblack-300);
+}
+
+.form-error {
+  color: var(--mat-sys-error);
+}

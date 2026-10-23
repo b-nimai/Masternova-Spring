@@ -29,6 +29,9 @@ import { AccessCta } from '../access-cta/access-cta';
 import { LEVEL_LABELS } from '../catalog-labels';
 import { CourseReviews } from '../course-reviews/course-reviews';
 import { Curriculum } from '../curriculum/curriculum';
+import { Reveal } from '../../../shared/motion/reveal';
+import { Skeleton } from '../../../shared/skeleton/skeleton';
+import { Haptics } from '../../../core/haptics';
 
 /**
  * /courses/:slug — the course page.
@@ -49,6 +52,8 @@ import { Curriculum } from '../curriculum/curriculum';
  */
 @Component({
   imports: [
+    Skeleton,
+    Reveal,
     DatePipe,
     RouterLink,
     MatButtonModule,
@@ -105,6 +110,7 @@ export class CourseDetail {
   );
 
   protected readonly enrolling = signal(false);
+  private readonly haptics = inject(Haptics);
 
   /** Free enrollment (idempotent PUT), then the progress again: the button turns to "Start". */
   protected enroll(courseId: string): void {
@@ -112,10 +118,12 @@ export class CourseDetail {
     this.learning.enroll(courseId).subscribe({
       next: () => {
         this.enrolling.set(false);
+        this.haptics.success();
         this.progress.reload();
       },
       error: () => {
         this.enrolling.set(false);
+        this.haptics.error();
         this.access.reload(); // refused (revoked, no longer free): the access says why
       },
     });

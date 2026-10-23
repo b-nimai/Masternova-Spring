@@ -128,10 +128,10 @@ Phases are listed **in the order you do them**.
 | 14 | [D4 — Kubernetes (local) + GitOps](#phase-d4--kubernetes-local--gitops) | 8 | 8 | 20 h | ~22 h | ✅ |
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 6 | 14 h | ~15 h | ✅ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 5 | 20 h | ~21 h | ✅ |
-| 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 9 | 9 | 30 h | ~23 h | ✅ |
+| 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 11 | 11 | 38 h | ~29 h | ✅ |
 | 18 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
 | 19 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **146** | **134** | **~356 h** | ~283 h | |
+| | **Total** | **148** | **136** | **~364 h** | ~289 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -454,10 +454,12 @@ without hammering the database.
 
 ## Phase UI — StudyNotion design pass
 
-**Est 30 h** · Goal: every screen built to the
+**Est 38 h** · Goal: every screen built to the
 [StudyNotion Figma](https://www.figma.com/design/Mikd0FjHKAofUlWQSi70nf/StudyNotion_shared?node-id=1-5)
 (page ✅ Approved), with Masternova's name and features. Every feature already works; this phase
 changes how it looks and is laid out, not what it does. Frames are named by their Figma node id.
+Two tasks joined on the way: UI.10, because the Figma's Student / Instructor tabs needed a real
+flow behind them (an application an admin approves), and UI.11, motion: the Figma is a still picture.
 
 | # | Task | Figma frames | Angular concept | Est | Status | Date |
 |---|---|---|---|---|---|---|
@@ -470,6 +472,8 @@ changes how it looks and is laid out, not what it does. Frames are named by thei
 | UI.7 | Instructor: My Courses table, the wizard restyled (Course Information → Course Builder → Publish, keeping our upload progress and undo/redo), Edit Video | `My Course` 11167:20944, `Course Information` 11167:21324, `Course Builder` 11167:21428 / 11167:21507, `Additional Data` 11167:21664, `Edit Video` 11167:21753 | `MatStepper` tokens + `matStepperIcon`, field colour per surface, CDK drag-drop rows | 4 h | ✅ | 2026-10-22 |
 | UI.8 | Lecture player: section sidebar with ticks and progress, video, description, Q&A below | `Video Detail` 11167:21922 / 11167:22246 / 11167:22571 | a sidebar component with its own resources (progress re-read per lecture), anchor scrolling | 2 h | ✅ | 2026-10-22 |
 | UI.9 | Responsive (390 px) + accessibility pass (axe in Playwright on every page, contrast of the dark theme), e2e selectors updated, Angular note 11, review + simplify | `Home Page Responsive` 11167:23413 | `@axe-core/playwright` (WCAG 2.1 AA in e2e), contrast fixes, overflow checks at 390 px | 2 h | ✅ | 2026-10-22 |
+| UI.10 | Instructor applications: signup's Student / Instructor tabs (the Figma's) file an application instead of choosing a role; "Teach on Masternova" on the account page (apply, pending, re-apply); the admin's queue (approve grants INSTRUCTOR in the same transaction, idempotent) and user lookup by email. Backend: `V30` table, `InstructorApplication` entity, two services, `/me/instructor-application`, `/admin/instructor-applications` | `Sign up` 11167:20280 | a pill toggle as a form control, a resource set after a write, one silent token refresh when the role arrives | 4 h | ✅ | 2026-10-22 |
+| UI.11 | Motion and feel: page transitions (View Transitions, skipped for filter navigations), scroll reveals, press feedback, card lift + cover zoom, star pop, rows that slide out, cart badge bump, skeleton loaders, a pointer glow, haptics. All off under "reduce motion"; e2e runs reduced, `motion.spec.ts` checks the wiring | — (the Figma is static) | `withViewTransitions` + `onViewTransitionCreated`, `animate.leave`, `afterRenderEffect` + Web Animations, a directive sharing one `IntersectionObserver`, `navigator.vibrate` | 4 h | ✅ | 2026-10-22 |
 
 **Not built (no backend):** About us, Contact us, Forgot / reset password, Verify phone number.
 The Figma is read through its REST API once the MCP's Starter-plan calls run out (note 11 §6).

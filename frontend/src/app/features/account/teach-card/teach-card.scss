@@ -1,0 +1,30 @@
+// Inside the account page's card (the host carries its `card` class): text, then the form.
+:host {
+  display: block;
+}
+
+.lead {
+  margin: 0 0 16px;
+  color: var(--mn-richblack-100);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.error {
+  margin: 0 0 8px;
+  color: var(--mat-sys-error);
+}
+
+.ok {
+  color: var(--mn-green-100);
+}

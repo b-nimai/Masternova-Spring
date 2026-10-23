@@ -1,6 +1,6 @@
 @let c = course();
 <!-- Figma course card (frame "Course" 11167:18844): cover, title, instructor, rating, price -->
-<article class="card" [attr.data-testid]="'course-' + c.slug">
+<article class="card" appPointerGlow [attr.data-testid]="'course-' + c.slug">
   <a class="cover" [routerLink]="['/courses', c.slug]" tabindex="-1" aria-hidden="true">
     <img [src]="cover()" alt="" width="384" height="201" loading="lazy" />
     @if (c.priceMinor === 0) {

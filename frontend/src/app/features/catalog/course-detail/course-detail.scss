@@ -3,10 +3,16 @@
   display: block;
 }
 
-.state {
+.state,
+.loading {
   max-width: var(--mn-content-width);
   margin: 0 auto;
   padding: 48px 16px;
+}
+
+.loading {
+  display: block;
+  max-width: 792px; // the course column's
 }
 
 .page {

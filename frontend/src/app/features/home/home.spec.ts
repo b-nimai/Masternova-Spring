@@ -108,7 +108,7 @@ describe('Home', () => {
 
   it('sends a visitor to sign up to teach', async () => {
     const { el } = await render([]);
-    expect(teachHref(el)).toBe('/signup');
+    expect(teachHref(el)).toBe('/signup?as=instructor');
   });
 
   it('sends an instructor to their courses', async () => {
@@ -117,10 +117,9 @@ describe('Home', () => {
     expect(teachHref(el)).toBe('/instructor');
   });
 
-  it('offers a learner no teaching link (the role comes from an admin)', async () => {
+  it('sends a learner to apply from their account (an admin grants the role)', async () => {
     signIn(['LEARNER']);
     const { el } = await render([]);
-    expect(teachHref(el)).toBeNull();
-    expect(el.textContent).toContain('Ask an admin for the instructor role');
+    expect(teachHref(el)).toBe('/account#teach');
   });
 });

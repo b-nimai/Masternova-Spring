@@ -1,1 +1,12 @@
 @use '../auth-card';
+
+// Figma "Sign up" 11167:20280: the tabs sit above the fields, 36 px before the first one.
+.join-as {
+  margin-bottom: 16px;
+}
+
+.join-hint {
+  margin: 8px 0 0;
+  color: var(--mn-richblack-300);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+}

@@ -10,15 +10,26 @@ import { CodePanel, CodeToken } from './code-panel/code-panel';
 import { CourseHighlights } from './course-highlights/course-highlights';
 import { LearnerReviews } from './learner-reviews/learner-reviews';
 import { SkillsSection } from './skills-section/skills-section';
+import { PointerGlow } from '../../shared/motion/pointer-glow';
+import { Reveal } from '../../shared/motion/reveal';
 
 /**
  * The landing page (Figma "Log In Page" 11167:17977, which is the home page): marketing sections
  * around real data: the three best-rated courses (CourseHighlights), the latest reviews of the best
  * of them (LearnerReviews), the number of subjects.
  */
+/** Where "Become an instructor" leads: a path plus an optional query or #fragment. */
+interface TeachLink {
+  path: string;
+  query?: Record<string, string>;
+  fragment?: string;
+}
+
 @Component({
   selector: 'app-home',
   imports: [
+    PointerGlow,
+    Reveal,
     RouterLink,
     MatButtonModule,
     MatIconModule,
@@ -46,13 +57,16 @@ export class Home {
     { initialValue: 0 },
   );
 
-  /** "Become an instructor": sign up first; an instructor goes to their courses. */
-  protected readonly teachLink = computed(() =>
+  /**
+   * "Become an instructor": a visitor signs up on the Instructor tab, a learner applies from the
+   * account page (an admin decides, UI.10), an instructor goes to their courses.
+   */
+  protected readonly teachLink = computed<TeachLink>(() =>
     this.auth.hasAnyRole(['INSTRUCTOR', 'ADMIN'])
-      ? '/instructor'
+      ? { path: '/instructor' }
       : this.auth.isAuthenticated()
-        ? null // a learner asks an admin for the role: there is no self-service page
-        : '/signup',
+        ? { path: '/account', fragment: 'teach' }
+        : { path: '/signup', query: { as: 'instructor' } },
   );
 
   protected readonly firstPanel: readonly CodeToken[][] = [

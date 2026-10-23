@@ -17,7 +17,7 @@
     </header>
 
     @if (results.isLoading()) {
-      <mat-spinner diameter="36" data-testid="loading" />
+      <app-skeleton shape="card" [count]="6" data-testid="loading" />
     } @else if (results.error()) {
       <p class="form-error" data-testid="error">
         Search isn't answering right now.

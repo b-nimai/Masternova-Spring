@@ -6,7 +6,7 @@
     >
   </header>
   @if (courses.isLoading()) {
-    <mat-spinner diameter="32" />
+    <app-skeleton shape="row" [count]="3" />
   } @else if (courses.error()) {
     <p class="form-error">
       Couldn't load your courses. <button mat-button (click)="courses.reload()">Retry</button>

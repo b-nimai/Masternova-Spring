@@ -4,6 +4,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { RouterLink } from '@angular/router';
 import { CourseSummary } from '../../../core/api/catalog-api';
 import { LEVEL_LABELS } from '../../catalog/catalog-labels';
+import { PointerGlow } from '../../../shared/motion/pointer-glow';
+import { Reveal } from '../../../shared/motion/reveal';
 
 /**
  * "Unlock the Power of Code" (Figma frame 41): three course cards straddling a dark and a light
@@ -11,7 +13,7 @@ import { LEVEL_LABELS } from '../../catalog/catalog-labels';
  */
 @Component({
   selector: 'app-course-highlights',
-  imports: [RouterLink, MatButtonModule, MatIconModule],
+  imports: [PointerGlow, Reveal, RouterLink, MatButtonModule, MatIconModule],
   templateUrl: './course-highlights.html',
   styleUrl: './course-highlights.scss',
 })

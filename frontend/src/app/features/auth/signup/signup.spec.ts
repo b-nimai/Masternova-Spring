@@ -46,6 +46,7 @@ describe('Signup', () => {
       email: 'asha@x.dev',
       displayName: 'Asha',
       password: 'correct-horse',
+      applyAsInstructor: false,
     });
     req.flush({
       id: 'u1',
@@ -57,6 +58,36 @@ describe('Signup', () => {
     await fixture.whenStable();
 
     expect(text(fixture, 'signup-done')).toContain('asha@x.dev');
+    expect(fixture.nativeElement.querySelector('[data-testid="application-filed"]')).toBeNull();
+  });
+
+  it('the Instructor tab files an application (no role is chosen) and says so', async () => {
+    (
+      fixture.nativeElement.querySelector('[data-testid="join-instructor"] button') as HTMLElement
+    ).click();
+    await fill();
+    expect(text(fixture, 'instructor-hint')).toContain('admin reviews');
+    submit(fixture);
+    const req = http.expectOne('/api/v1/auth/signup');
+    expect(req.request.body.applyAsInstructor).toBe(true);
+    req.flush({
+      id: 'u1',
+      email: 'asha@x.dev',
+      displayName: 'Asha',
+      roles: ['LEARNER'],
+      emailVerified: false,
+    });
+    await fixture.whenStable();
+
+    expect(text(fixture, 'application-filed')).toContain('waiting for an admin');
+  });
+
+  it('?as=instructor opens on the Instructor tab', async () => {
+    fixture.componentRef.setInput('as', 'instructor');
+    fixture.componentInstance.ngOnInit();
+    await fixture.whenStable();
+
+    expect(text(fixture, 'instructor-hint')).toContain('admin reviews');
   });
 
   it('maps 409 EMAIL_TAKEN onto the email field', async () => {

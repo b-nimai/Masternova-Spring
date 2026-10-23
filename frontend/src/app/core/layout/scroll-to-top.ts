@@ -27,7 +27,8 @@ export function scrollToTopOnPageChange(): void {
       const tree = router.parseUrl(event.urlAfterRedirects);
       const path = pathOf(tree);
       if (lastPath !== null && path !== lastPath && !tree.fragment) {
-        scroller.scrollToPosition([0, 0]);
+        // instant: `scroll-behavior: smooth` (styles/_motion.scss) is for anchors, not a new page
+        scroller.scrollToPosition([0, 0], { behavior: 'instant' });
       }
       lastPath = path;
     });

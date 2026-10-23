@@ -22,6 +22,7 @@ async function expectAccessible(page: Page, url: string): Promise<void> {
 
 test.describe('accessibility (axe)', () => {
   test('public pages', async ({ page, request }) => {
+    test.setTimeout(90_000); // six pages, each loaded to network idle and scanned: not one test's 30 s
     const { items } = await (await request.get('/api/v1/courses?limit=1')).json();
     for (const url of ['/', '/courses', `/courses/${items[0].slug}`, '/search?q=python', '/login', '/signup']) {
       await expectAccessible(page, url);

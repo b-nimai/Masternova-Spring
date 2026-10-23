@@ -38,6 +38,7 @@ import {
 } from '../../core/api/catalog-api';
 import { LEVEL_LABELS, SORT_LABELS } from './catalog-labels';
 import { CourseCard } from './course-card/course-card';
+import { Skeleton } from '../../shared/skeleton/skeleton';
 
 /** The list as the page shows it. */
 interface ListState {
@@ -80,6 +81,7 @@ const COLUMNS: readonly [query: string, columns: number][] = [
  */
 @Component({
   imports: [
+    Skeleton,
     ReactiveFormsModule,
     RouterLink,
     ScrollingModule,

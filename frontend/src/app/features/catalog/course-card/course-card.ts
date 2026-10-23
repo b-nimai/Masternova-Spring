@@ -6,10 +6,11 @@ import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
 import { StarRating } from '../../../shared/star-rating/star-rating';
 import { LEVEL_LABELS } from '../catalog-labels';
+import { PointerGlow } from '../../../shared/motion/pointer-glow';
 
 /** One course in a list — purely presentational: data in through an input, links out. */
 @Component({
-  imports: [RouterLink, MoneyPipe, DurationPipe, StarRating],
+  imports: [PointerGlow, RouterLink, MoneyPipe, DurationPipe, StarRating],
   selector: 'app-course-card',
   styleUrl: './course-card.scss',
   templateUrl: './course-card.html',

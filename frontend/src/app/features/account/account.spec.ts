@@ -1,10 +1,12 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { text } from '../../../testing/dom';
 import { AuthApi, TokenResponse } from '../../core/auth/auth-api';
 import { AuthStore } from '../../core/auth/auth-store';
 import { Account } from './account';
+import { InstructorApplicationApi } from './instructor-application-api';
 
 describe('Account', () => {
   const tokens = (emailVerified: boolean): TokenResponse => ({
@@ -23,6 +25,10 @@ describe('Account', () => {
         {
           provide: AuthApi,
           useValue: { login: () => of(tokens(verified)), logout: () => of(undefined) },
+        },
+        {
+          provide: InstructorApplicationApi,
+          useValue: { mine: () => throwError(() => new HttpErrorResponse({ status: 404 })) },
         },
       ],
     }).compileComponents();

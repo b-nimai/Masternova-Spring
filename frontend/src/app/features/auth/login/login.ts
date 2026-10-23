@@ -9,6 +9,7 @@ import { asProblem } from '../../../core/api/problem';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { AuthShell } from '../auth-shell/auth-shell';
 import { safeReturnUrl } from '../form-utils';
+import { Haptics } from '../../../core/haptics';
 
 @Component({
   selector: 'app-login',
@@ -26,6 +27,7 @@ import { safeReturnUrl } from '../form-utils';
 })
 export class Login {
   private readonly auth = inject(AuthStore);
+  private readonly haptics = inject(Haptics);
   private readonly router = inject(Router);
 
   /** `?returnUrl=/account` — bound by withComponentInputBinding() (app.config.ts). */
@@ -52,6 +54,7 @@ export class Login {
     this.auth.login(email, password).subscribe({
       next: () => void this.router.navigateByUrl(safeReturnUrl(this.returnUrl())),
       error: (e: unknown) => {
+        this.haptics.error();
         // the server deliberately gives ONE answer for unknown email and wrong password
         this.error.set(
           asProblem(e)?.code === 'INVALID_CREDENTIALS'

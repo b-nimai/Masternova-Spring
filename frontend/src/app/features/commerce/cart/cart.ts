@@ -15,6 +15,7 @@ import { coverFor } from '../../../shared/course-cover';
 import { MoneyPipe } from '../../../shared/money-pipe';
 import { CheckoutFlow } from '../checkout-flow';
 import { COMMERCE_PROBLEMS, isCouponProblem } from '../commerce-messages';
+import { Haptics } from '../../../core/haptics';
 
 /**
  * /cart — what's in the cart, priced by the SERVER, with a coupon field and the checkout button.
@@ -43,6 +44,7 @@ import { COMMERCE_PROBLEMS, isCouponProblem } from '../commerce-messages';
 export class Cart {
   protected readonly cover = coverFor;
   protected readonly cart = inject(CartStore);
+  private readonly haptics = inject(Haptics);
   private readonly api = inject(CommerceApi);
   private readonly flow = inject(CheckoutFlow);
   private readonly router = inject(Router);
@@ -75,6 +77,7 @@ export class Cart {
 
   protected remove(courseId: string): void {
     this.cart.remove(courseId);
+    this.haptics.tap();
     this.checkoutError.set(null);
   }
 
@@ -88,10 +91,12 @@ export class Cart {
     this.api.quote(this.cart.courseIds(), code).subscribe({
       next: (q) => {
         this.applying.set(false);
+        this.haptics.success();
         this.appliedCoupon.set(q.couponCode); // the resource re-prices with it
       },
       error: (e: unknown) => {
         this.applying.set(false);
+        this.haptics.error();
         const problem = asProblem(e);
         this.couponError.set(
           isCouponProblem(problem?.code) ? message(problem) : "We couldn't check that code.",

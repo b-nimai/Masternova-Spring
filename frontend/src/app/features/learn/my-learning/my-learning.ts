@@ -4,10 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { coverFor } from '../../../shared/course-cover';
 import { LearningApi, LearningCourseResponse } from '../../../core/api/learning-api';
+import { Skeleton } from '../../../shared/skeleton/skeleton';
 
 /** The dashboard's tabs (the Figma's "All / Pending / Completed"). */
 export type LearningFilter = 'ALL' | 'IN_PROGRESS' | 'COMPLETED';
@@ -34,12 +34,12 @@ const isCompleted = (c: LearningCourseResponse) =>
  */
 @Component({
   imports: [
+    Skeleton,
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
     MatIconModule,
     MatProgressBarModule,
-    MatProgressSpinnerModule,
   ],
   selector: 'app-my-learning',
   styleUrl: './my-learning.scss',

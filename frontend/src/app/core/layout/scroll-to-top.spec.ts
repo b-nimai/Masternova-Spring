@@ -27,7 +27,7 @@ describe('scrollToTopOnPageChange', () => {
 
   it('scrolls to the top when the page changes', async () => {
     await TestBed.inject(Router).navigateByUrl('/courses/k8s');
-    expect(scrollTo).toHaveBeenCalledWith([0, 0]);
+    expect(scrollTo).toHaveBeenCalledWith([0, 0], { behavior: 'instant' });
   });
 
   it('keeps the place when only the query changes (a catalog filter)', async () => {

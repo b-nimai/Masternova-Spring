@@ -19,6 +19,9 @@ export default defineConfig({
     ignoreHTTPSErrors: process.env['E2E_LOCAL_CA'] === '1',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    // The OS "reduce motion" setting: no page transitions, reveals or pop-ins, so a test never
+    // clicks through a fading page. tests/motion.spec.ts turns motion back on to test it.
+    contextOptions: { reducedMotion: 'reduce' },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
 });
