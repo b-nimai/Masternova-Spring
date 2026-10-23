@@ -1,0 +1,9 @@
+// The page fills the screen below the nav bar, so the footer starts below the fold.
+main {
+  display: block;
+  min-height: calc(100dvh - 57px);
+}
+
+.footer-placeholder {
+  height: 1px;
+}

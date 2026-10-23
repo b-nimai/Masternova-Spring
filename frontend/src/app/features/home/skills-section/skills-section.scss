@@ -1,0 +1,169 @@
+@use '../../../../styles/pictures';
+
+// ── Skills (light) ───────────────────────────────────────────────────────────────────────────
+:host {
+  display: block;
+  --gutter: max(16px, calc((100% - var(--mn-content-width)) / 2));
+}
+
+h2 {
+  margin: 0;
+  font: var(--mn-display-md);
+  letter-spacing: var(--mn-display-md-tracking);
+}
+
+.skills {
+  padding: 90px var(--gutter);
+  background: #f9f9f9;
+  color: var(--mn-richblack-700);
+
+  h2 {
+    color: var(--mn-richblack-900);
+  }
+
+  h3 {
+    margin: 0;
+    color: var(--mn-richblack-800);
+    font: 600 1.125rem / 1.625rem var(--mn-font);
+  }
+}
+
+.skills-head {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 60px;
+
+  p {
+    margin: 0 0 52px;
+    font: 500 1rem / 1.5rem var(--mn-font);
+  }
+}
+
+.skills-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 76px;
+  margin-top: 52px;
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 52px;
+  margin: 0;
+  padding: 0 0 0 12px;
+  list-style: none;
+
+  li {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  // the dotted line between two dots
+  li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 26px;
+    top: 60px;
+    height: 44px;
+    border-left: 1px dashed var(--mn-richblack-100);
+  }
+
+  p {
+    margin: 2px 0 0;
+    font: 400 0.875rem / 1.375rem var(--mn-font);
+  }
+}
+
+.dot {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 62px rgb(0 0 0 / 12%);
+  color: var(--mn-blue-200);
+}
+
+.skills-picture {
+  @extend %offset-picture;
+  --offset: 20px 20px 0 #fff;
+  flex: 0 1 714px;
+
+  // Ellipse 2 of frame 40, peeking out behind the photo
+  &::before {
+    @extend %glow;
+    left: -3%;
+    top: 5%;
+    width: 107%;
+    height: 88%;
+    background: linear-gradient(118deg, #9cecfb, #65c7f7 50%, #0052d4);
+    opacity: 0.6;
+    filter: blur(68px);
+  }
+}
+
+.stats {
+  position: absolute;
+  left: 50%;
+  bottom: -64px;
+  display: flex;
+  gap: 52px;
+  padding: 42px 52px;
+  transform: translateX(-50%);
+  background: var(--mn-green-700);
+
+  p {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin: 0;
+  }
+
+  p + p {
+    padding-left: 52px;
+    border-left: 1px solid var(--mn-green-500);
+  }
+
+  strong {
+    color: #fff;
+    font: 700 2.25rem / 2.75rem var(--mn-font);
+  }
+
+  span {
+    white-space: nowrap;
+    color: var(--mn-green-300);
+    font: 500 0.875rem / 1.375rem var(--mn-font);
+    text-transform: uppercase;
+  }
+}
+
+@media (max-width: 1099px) {
+  .skills-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 48px;
+  }
+
+  .skills-head {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .stats {
+    position: static;
+    transform: none;
+    flex-wrap: wrap;
+    gap: 24px;
+    padding: 24px;
+  }
+
+  .stats p + p {
+    padding-left: 24px;
+  }
+}

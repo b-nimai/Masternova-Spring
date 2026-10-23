@@ -28,6 +28,38 @@ class EmailAndUserTest {
         .hasMessageContaining("invalid fields");
   }
 
+  /** The regex the scan replaced (CodeQL java/polynomial-redos): same verdict on every case. */
+  private static final java.util.regex.Pattern OLD_SHAPE =
+      java.util.regex.Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "a@b.c",
+        "a@b.c.",
+        "a@.b.c",
+        "a@b..c",
+        "a@.c",
+        "a@b.",
+        "a@@b.c",
+        "a@b@c.d",
+        "a.b@c.d",
+        "a@b\tc.d",
+        "@b.c",
+        "a@bc",
+        "!@!.!.!.!"
+      })
+  void theScanAcceptsExactlyWhatTheOldRegexDid(String raw) {
+    boolean valid;
+    try {
+      new Email(raw);
+      valid = true;
+    } catch (com.masternova.api.platform.ValidationException e) {
+      valid = false;
+    }
+    assertThat(valid).as(raw).isEqualTo(OLD_SHAPE.matcher(raw).matches());
+  }
+
   @Test
   void aNewUserIsAnUnverifiedLearner() {
     User user = User.register(new Email("asha@example.com"), "  Asha  ", "{bcrypt}hash", NOW);

@@ -25,6 +25,8 @@ export interface SignupRequest {
   email: string;
   displayName: string;
   password: string;
+  /** Signup's Instructor tab: files an instructor application (an admin decides). */
+  applyAsInstructor?: boolean;
 }
 
 /** Thin HTTP layer for /api/v1/auth and /api/v1/me — no state here (that's AuthStore). */

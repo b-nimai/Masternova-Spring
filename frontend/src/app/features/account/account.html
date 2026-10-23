@@ -1,36 +1,58 @@
+<!-- Figma "Account Details" 11167:19862: an identity card, then the details card -->
 @if (auth.user(); as user) {
-  <mat-card appearance="outlined" class="account-card">
-    <mat-card-header>
-      <mat-card-title data-testid="display-name">{{ user.displayName }}</mat-card-title>
-      <mat-card-subtitle>{{ user.email }}</mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <dl>
-        <dt>Email</dt>
-        <dd data-testid="email-status">
-          @if (user.emailVerified) {
-            <mat-icon inline>verified</mat-icon> Verified
-          } @else {
-            <mat-icon inline>mark_email_unread</mat-icon> Not verified yet. Check your inbox for the
-            link.
-          }
-        </dd>
-        <dt>Roles</dt>
-        <dd>
-          <mat-chip-set aria-label="Roles">
-            @for (role of user.roles; track role) {
-              <mat-chip>{{ role }}</mat-chip>
-            }
-          </mat-chip-set>
-        </dd>
-      </dl>
-    </mat-card-content>
-    <mat-card-actions>
-      <a mat-button routerLink="/account/orders" data-testid="my-orders">My orders</a>
-      <a mat-button routerLink="/account/notifications" data-testid="email-preferences"
-        >Email preferences</a
+  <div class="cards">
+    <section class="card identity">
+      <span class="avatar" aria-hidden="true">{{ initials() }}</span>
+      <div class="who">
+        <h2 data-testid="display-name">{{ user.displayName }}</h2>
+        <p>{{ user.email }}</p>
+      </div>
+      <a mat-flat-button routerLink="/account/notifications" data-testid="email-preferences"
+        ><mat-icon>settings</mat-icon> Settings</a
       >
-      <button mat-stroked-button type="button" (click)="logout()">Log out</button>
-    </mat-card-actions>
-  </mat-card>
+    </section>
+
+    <section class="card">
+      <header>
+        <h2>Personal Details</h2>
+        <a mat-stroked-button routerLink="/account/orders" data-testid="my-orders"
+          ><mat-icon>receipt_long</mat-icon> My orders</a
+        >
+      </header>
+      <dl>
+        <div>
+          <dt>Display Name</dt>
+          <dd>{{ user.displayName }}</dd>
+        </div>
+        <div>
+          <dt>Email</dt>
+          <dd>{{ user.email }}</dd>
+        </div>
+        <div>
+          <dt>Email status</dt>
+          <dd data-testid="email-status">
+            @if (user.emailVerified) {
+              <mat-icon inline class="ok">verified</mat-icon> Verified
+            } @else {
+              <mat-icon inline>mark_email_unread</mat-icon> Not verified yet. Check your inbox for
+              the link.
+            }
+          </dd>
+        </div>
+        <div>
+          <dt>Roles</dt>
+          <dd>
+            <mat-chip-set aria-label="Roles">
+              @for (role of user.roles; track role) {
+                <mat-chip>{{ roleLabels[role] }}</mat-chip>
+              }
+            </mat-chip-set>
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <!-- Not in the Figma: where a learner asks to teach (no one picks a role at signup) -->
+    <app-teach-card class="card" id="teach" />
+  </div>
 }

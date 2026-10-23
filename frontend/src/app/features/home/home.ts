@@ -1,29 +1,113 @@
-import { Component, inject } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { MatCardModule } from '@angular/material/card';
+import { Component, computed, inject } from '@angular/core';
+import { rxResource, toSignal } from '@angular/core/rxjs-interop';
+import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { catchError, map, of, startWith } from 'rxjs';
-import { MetaApi, Ping } from '../../core/api/meta-api';
+import { RouterLink } from '@angular/router';
+import { catchError, map, of } from 'rxjs';
+import { CatalogApi } from '../../core/api/catalog-api';
+import { AuthStore } from '../../core/auth/auth-store';
+import { CodePanel, CodeToken } from './code-panel/code-panel';
+import { CourseHighlights } from './course-highlights/course-highlights';
+import { LearnerReviews } from './learner-reviews/learner-reviews';
+import { SkillsSection } from './skills-section/skills-section';
+import { PointerGlow } from '../../shared/motion/pointer-glow';
+import { Reveal } from '../../shared/motion/reveal';
 
-/** Union of everything the status card can show — the template switches over `kind`. */
-type ApiStatus = { kind: 'loading' } | { kind: 'up'; ping: Ping } | { kind: 'down' };
+/** Where "Become an instructor" leads: a path plus an optional query or #fragment. */
+interface TeachLink {
+  path: string;
+  query?: Record<string, string>;
+  fragment?: string;
+}
 
+/**
+ * The landing page (Figma "Log In Page" 11167:17977, which is the home page): marketing sections
+ * around real data: the three best-rated courses (CourseHighlights), the latest reviews of the best
+ * of them (LearnerReviews), the number of subjects.
+ */
 @Component({
   selector: 'app-home',
-  imports: [MatCardModule, MatIconModule],
+  imports: [
+    PointerGlow,
+    Reveal,
+    RouterLink,
+    MatButtonModule,
+    MatIconModule,
+    CodePanel,
+    CourseHighlights,
+    SkillsSection,
+    LearnerReviews,
+  ],
   templateUrl: './home.html',
   styleUrl: './home.scss',
 })
 export class Home {
-  private readonly meta = inject(MetaApi);
+  private readonly catalog = inject(CatalogApi);
+  protected readonly auth = inject(AuthStore);
 
-  /** RxJS stream → signal: the template reads `status()` and re-renders when it changes. */
-  protected readonly status = toSignal(
-    this.meta.ping().pipe(
-      map((ping): ApiStatus => ({ kind: 'up', ping })),
-      catchError(() => of<ApiStatus>({ kind: 'down' })),
-      startWith<ApiStatus>({ kind: 'loading' }),
+  protected readonly topCourses = rxResource({
+    stream: () => this.catalog.browse({ sort: 'HIGHEST_RATED' }, null, 3).pipe(map((p) => p.items)),
+  });
+
+  protected readonly subjects = toSignal(
+    this.catalog.categories().pipe(
+      map((categories) => categories.length),
+      catchError(() => of(0)), // a decorative number: never break the page over it
     ),
-    { requireSync: true },
+    { initialValue: 0 },
   );
+
+  /**
+   * "Become an instructor": a visitor signs up on the Instructor tab, a learner applies from the
+   * account page (an admin decides, UI.10), an instructor goes to their courses.
+   */
+  protected readonly teachLink = computed<TeachLink>(() =>
+    this.auth.hasAnyRole(['INSTRUCTOR', 'ADMIN'])
+      ? { path: '/instructor' }
+      : this.auth.isAuthenticated()
+        ? { path: '/account', fragment: 'teach' }
+        : { path: '/signup', query: { as: 'instructor' } },
+  );
+
+  protected readonly firstPanel: readonly CodeToken[][] = [
+    [{ text: '@Component({', kind: 'keyword' }],
+    [{ text: '  selector: ' }, { text: "'app-lecture'", kind: 'string' }, { text: ',' }],
+    [{ text: '  template: ' }, { text: '`<app-hls-player [src]="ticket()" />`', kind: 'string' }],
+    [{ text: '})' }],
+    [{ text: 'export class ', kind: 'keyword' }, { text: 'Lecture {' }],
+    [{ text: '  readonly ' }, { text: 'ticket', kind: 'attr' }, { text: ' = rxResource({' }],
+    [{ text: '    params: () => this.lectureId(),' }],
+    [{ text: '    stream: ({ params }) =>' }],
+    [{ text: '      this.playback.ticket(params),', kind: 'tag' }],
+    [{ text: '  });' }],
+    [{ text: '}' }],
+  ];
+
+  protected readonly secondPanel: readonly CodeToken[][] = [
+    [{ text: '@Transactional', kind: 'keyword' }],
+    [{ text: 'public ' }, { text: 'Access', kind: 'tag' }, { text: ' canWatch(' }],
+    [
+      { text: '    UserId', kind: 'tag' },
+      { text: ' who, ' },
+      { text: 'LectureId', kind: 'tag' },
+      { text: ' what) {' },
+    ],
+    [{ text: '  var lecture = catalog.lecture(what);' }],
+    [
+      { text: '  if', kind: 'keyword' },
+      { text: ' (lecture.' },
+      { text: 'isPreview', kind: 'attr' },
+      { text: '()) {' },
+    ],
+    [{ text: '    return ' }, { text: 'Access.granted()', kind: 'string' }, { text: ';' }],
+    [{ text: '  }' }],
+    [{ text: '  return ' }, { text: 'entitlements', kind: 'attr' }],
+    [{ text: '      .find(who, lecture.courseId())' }],
+    [{ text: '      .map(Entitlement::access)' }],
+    [
+      { text: '      .orElse(' },
+      { text: 'Access.denied(NOT_ENROLLED)', kind: 'string' },
+      { text: ');' },
+    ],
+  ];
 }

@@ -1,39 +1,78 @@
-// Include theming for Angular Material with `mat.theme()`.
-// This Sass mixin will define CSS variables that are used for styling Angular Material
-// components according to the Material 3 design spec.
-// Learn more about theming and how to use it for your application's
-// custom components at https://material.angular.dev/guide/theming
-@use '@angular/material' as mat;
+// Global styles: the design tokens and the Material theme (src/styles/). Feature styles live with
+// their components and read `--mat-sys-*` roles, or `--mn-*` steps where no role fits.
+@use 'styles/tokens';
+@use 'styles/theme';
+@use 'styles/motion';
 
 html {
   height: 100%;
-  @include mat.theme(
-    (
-      color: (
-        primary: mat.$azure-palette,
-        tertiary: mat.$blue-palette,
-      ),
-      typography: Roboto,
-      density: 0,
-    )
-  );
+  color-scheme: dark;
+  @include tokens.custom-properties;
+  @include theme.theme;
 }
 
-body {
-  // Default the application to a light color theme. This can be changed to
-  // `dark` to enable the dark color theme, or to `light dark` to defer to the
-  // user's system settings.
-  color-scheme: light;
+@include theme.component-surfaces;
 
-  // Set a default background, font and text colors for the application using
-  // Angular Material's system-level CSS variables. Learn more about these
-  // variables at https://material.angular.dev/guide/system-variables
+body {
   background-color: var(--mat-sys-surface);
   color: var(--mat-sys-on-surface);
   font: var(--mat-sys-body-medium);
-
-  // Reset the user agent margin.
   margin: 0;
   height: 100%;
 }
-/* You can add global styles to this file, and also import other style files */
+
+a {
+  color: var(--mn-blue-100);
+}
+
+// A field's label above the field (the Figma's "_lable text"), with a Pink 200 required mark.
+// Material's floating label stays out: the Figma's fields carry a placeholder instead.
+// Read by screen readers, not shown (a star rating's sentence, a menu's name).
+.mn-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+// The Figma's pill tabs on a mat-button-toggle-group (Enrolled Courses, Sign up's Student /
+// Instructor): a Rich Black 800 track, the chosen one Rich Black 900.
+.mn-pills {
+  --mat-button-toggle-shape: 500px;
+  --mat-button-toggle-divider-color: transparent;
+  --mat-button-toggle-background-color: var(--mn-richblack-800);
+  --mat-button-toggle-text-color: var(--mn-richblack-200);
+  --mat-button-toggle-selected-state-background-color: var(--mn-richblack-900);
+  --mat-button-toggle-selected-state-text-color: var(--mn-richblack-5);
+  padding: 4px;
+  border: 0;
+  border-radius: 500px;
+  background: var(--mn-richblack-800);
+  box-shadow: inset 0 -1px 0 rgb(255 255 255 / 18%);
+}
+
+.mn-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--mn-richblack-5);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+
+  .req {
+    color: var(--mn-pink-200);
+  }
+}
+
+// The Figma's highlighted phrase in a heading ("Coding Skills"): its Gradient/02, blue → mint.
+.mn-highlight {
+  background: linear-gradient(118deg, #1fa2ff 3.6%, #12d8fa 50.4%, #a6ffcb 104.5%);
+  background-clip: text;
+  color: transparent;
+}
+
+// A field on a Rich Black 800 surface (a card, a panel) is one step lighter, as in the Figma.
+.mat-mdc-card,
+.mn-on-surface {
+  --mat-form-field-filled-container-color: var(--mn-richblack-700);
+}

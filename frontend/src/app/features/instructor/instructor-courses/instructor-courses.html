@@ -1,26 +1,62 @@
+<!-- Figma "My Course" 11167:20944: a table of the instructor's courses -->
 <section class="mine">
   <header>
-    <h1>My courses</h1>
     <a mat-flat-button routerLink="/instructor/courses/new" data-testid="new-course"
-      ><mat-icon>add</mat-icon> New course</a
+      ><mat-icon>add_circle</mat-icon> New</a
     >
   </header>
   @if (courses.isLoading()) {
-    <mat-spinner diameter="32" />
+    <app-skeleton shape="row" [count]="3" />
   } @else if (courses.error()) {
     <p class="form-error">
       Couldn't load your courses. <button mat-button (click)="courses.reload()">Retry</button>
     </p>
   } @else {
-    <ul>
+    <ul class="table">
+      <li class="head" aria-hidden="true">
+        <span>Courses</span><span>Duration</span><span>Price</span><span>Actions</span>
+      </li>
       @for (c of courses.value()?.items; track c.id) {
-        <li [attr.data-testid]="'mine-' + c.slug">
-          <a [routerLink]="['/instructor/courses', c.id, 'edit']" class="title">{{ c.title }}</a>
-          <span class="status">{{ c.status }}</span>
-          <span class="meta"
-            >{{ c.lectureCount }} lectures · {{ c.totalDurationSeconds | duration }} ·
-            {{ c.priceMinor | money: c.currency }}</span
-          >
+        <li class="row" [attr.data-testid]="'mine-' + c.slug">
+          <div class="course">
+            <img [src]="cover(c.id)" alt="" width="221" height="148" loading="lazy" />
+            <div>
+              <a [routerLink]="['/instructor/courses', c.id, 'edit']" class="title">{{
+                c.title
+              }}</a>
+              @if (c.subtitle) {
+                <p class="subtitle">{{ c.subtitle }}</p>
+              }
+              <p class="meta">
+                {{ c.lectureCount }} lectures
+                @if (c.publishedAt) {
+                  | Published {{ c.publishedAt | date: 'MMMM d, y' }}
+                }
+              </p>
+              <span class="status" [attr.data-status]="c.status"
+                ><mat-icon aria-hidden="true">{{ statusIcon[c.status] }}</mat-icon
+                >{{ statusLabel[c.status] }}</span
+              >
+            </div>
+          </div>
+          <span class="cell">{{ c.totalDurationSeconds | duration }}</span>
+          <span class="cell">{{ c.priceMinor | money: c.currency }}</span>
+          <span class="cell actions">
+            <a
+              mat-icon-button
+              [routerLink]="['/instructor/courses', c.id, 'edit']"
+              [attr.aria-label]="'Edit ' + c.title"
+              ><mat-icon>edit</mat-icon></a
+            >
+            @if (c.status === 'PUBLISHED') {
+              <a
+                mat-icon-button
+                [routerLink]="['/courses', c.slug]"
+                [attr.aria-label]="'View ' + c.title"
+                ><mat-icon>visibility</mat-icon></a
+              >
+            }
+          </span>
         </li>
       } @empty {
         <li class="empty" data-testid="empty">No courses yet. Start your first one.</li>

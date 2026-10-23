@@ -1,6 +1,6 @@
 # API conventions
 
-**Last updated:** 2026-10-21 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6), §13 (Phase 3), §15 (Phase 10) and §16 + §17 (Phase 11) implemented; the rest decided up front, carried over from the NestJS
+**Last updated:** 2026-10-23 · **Status:** §1 (2.2), §2 + §5 (Phase 5), §3 + §6 (Phase 6), §4 (2.6), §7 + §8 (7.3), §9 (7.7), §12 (9.6), §13 (Phase 3), §15 (Phase 10) and §16 + §17 (Phase 11) implemented; the rest decided up front, carried over from the NestJS
 Masternova and adapted to Spring. Each rule is *enforced in code* by the phase named in the
 table, and that phase updates this file with the real class names.
 
@@ -272,12 +272,17 @@ is 401, not 404, so the API reveals nothing about what exists.
 
 | Endpoint | Body | Answer |
 |---|---|---|
-| `POST /auth/signup` | `{email, displayName, password}` | 201 `UserResponse`; 409 `EMAIL_TAKEN`; 400 field errors |
+| `POST /auth/signup` | `{email, displayName, password, applyAsInstructor?}` | 201 `UserResponse` (always a LEARNER; `applyAsInstructor` files an application); 409 `EMAIL_TAKEN`; 400 field errors |
 | `POST /auth/verify-email` | `{token}` | 204; 422 `VERIFICATION_TOKEN_INVALID` |
 | `POST /auth/login` | `{email, password}` | 200 `TokenResponse` + `Set-Cookie: mn_refresh`; 401 `INVALID_CREDENTIALS` |
 | `POST /auth/refresh` | none (the cookie) | 200 `TokenResponse` + a **rotated** cookie; 401 `SESSION_EXPIRED` / `SESSION_REVOKED` |
 | `POST /auth/logout` | none (the cookie) | 204; clears the cookie |
 | `GET /me` | — | 200 `UserResponse` |
+| `GET /me/instructor-application` | — | 200 `{status, pitch, appliedAt, decidedAt}`; 404 none yet |
+| `POST /me/instructor-application` | `{pitch?}` (≤ 500) | 201; 409 `APPLICATION_PENDING`; 422 `ALREADY_INSTRUCTOR`; a rejected applicant re-applies |
+| `GET /admin/instructor-applications?cursor=` | — | 200 the pending queue, oldest first, keyset-paged by `(appliedAt, userId)`: 50 a page (§2's envelope); 400 `INVALID_CURSOR` |
+| `POST /admin/instructor-applications/{userId}/approve` · `…/reject` | none | 200; **idempotent** (the row is locked, so overlapping calls agree); approve grants `INSTRUCTOR` in the same transaction, only when it moves PENDING → APPROVED; 409 `APPLICATION_DECIDED` the other way |
+| `GET /admin/users?email=…` | — | 200 `UserResponse` (the admin page's lookup); 404 |
 
 - **Access token:** a 15-minute HS256 JWT with claims `sub` (user id), `roles`, `email_verified`
   and `sid`. Clients keep it **in memory**.
@@ -288,6 +293,8 @@ is 401, not 404, so the API reveals nothing about what exists.
 - **Errors from the security chain** use the same Problem Details shape: 401 `UNAUTHENTICATED`
   (with `WWW-Authenticate: Bearer`), 403 `FORBIDDEN` with `reason: INSUFFICIENT_ROLE`.
 - **Roles** live in the token, so a role change reaches the client at its next refresh.
+- **No one chooses a role.** Signup's Student / Instructor tabs file an *application*; an admin
+  approves it (Phase UI.10). The admin endpoints are ADMIN-only on the service, not the controller.
 
 Implemented by `identity.infrastructure.security.SecurityConfig`, `ProblemSecurityHandlers` and
 `identity.web.AuthController`. Design: [`docs/lld/identity.md`](../lld/identity.md).

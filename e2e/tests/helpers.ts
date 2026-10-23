@@ -10,19 +10,27 @@ export function uniqueEmail(): string {
   return `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.com`;
 }
 
-export async function signUp(page: Page, email: string, displayName = 'E2E Learner'): Promise<void> {
+export async function signUp(
+  page: Page,
+  email: string,
+  displayName = 'E2E Learner',
+  as: 'student' | 'instructor' = 'student',
+): Promise<void> {
   await page.goto('/signup');
+  if (as === 'instructor') {
+    await page.getByRole('radio', { name: 'Instructor' }).click(); // mat-button-toggle: a radio
+  }
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Display name').fill(displayName);
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('Create password').fill(PASSWORD);
   await page.getByLabel('Confirm password').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Sign up' }).click();
+  await page.getByRole('button', { name: 'Create account' }).click();
   await expect(page.getByTestId('signup-done')).toContainText(email);
 }
 
 export async function logIn(page: Page, email: string, password = PASSWORD): Promise<void> {
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.getByRole('textbox', { name: 'Password', exact: true }).fill(password); // not the eye button
   await page.getByRole('button', { name: 'Log in' }).click();
 }
 

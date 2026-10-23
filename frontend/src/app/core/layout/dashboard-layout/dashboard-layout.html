@@ -1,0 +1,47 @@
+<div class="dashboard" [class.handset]="isHandset()">
+  <nav class="sidebar" aria-label="Dashboard">
+    <div class="group">
+      @for (item of items(); track item.link) {
+        <ng-container *ngTemplateOutlet="entry; context: { $implicit: item }"></ng-container>
+      }
+    </div>
+    <hr />
+    <div class="group">
+      @for (item of settings(); track item.link) {
+        <ng-container *ngTemplateOutlet="entry; context: { $implicit: item }"></ng-container>
+      }
+      <button type="button" class="item" data-testid="sidebar-logout" (click)="signOut()">
+        <mat-icon aria-hidden="true">logout</mat-icon> Log Out
+      </button>
+    </div>
+  </nav>
+
+  <div class="content">
+    @if (page.showHeader() && page.title(); as title) {
+      <header class="page-header">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a routerLink="/">Home</a>
+          <span aria-hidden="true">/</span>
+          <a routerLink="/account">Dashboard</a>
+          <span aria-hidden="true">/</span>
+          <span class="current" aria-current="page">{{ title }}</span>
+        </nav>
+        <h1>{{ title }}</h1>
+      </header>
+    }
+    <main>
+      <router-outlet />
+    </main>
+  </div>
+</div>
+
+<ng-template #entry let-item>
+  <a
+    class="item"
+    [routerLink]="item.link"
+    routerLinkActive="active"
+    [routerLinkActiveOptions]="{ exact: true }"
+  >
+    <mat-icon aria-hidden="true">{{ item.icon }}</mat-icon> {{ item.label }}
+  </a>
+</ng-template>

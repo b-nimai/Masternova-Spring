@@ -1,3 +1,4 @@
+import { catchError, of, OperatorFunction, throwError } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 
 /** One field problem in a 400 — the backend's ValidationException.FieldError. */
@@ -38,6 +39,11 @@ export function asProblem(error: unknown): Problem | null {
 /** A 404: "doesn't exist (for you)" — an answer, not an outage. */
 export function isNotFound(error: unknown): boolean {
   return error instanceof HttpErrorResponse && error.status === 404;
+}
+
+/** For "mine, if any" reads: a 404 becomes `null`, any other error still fails. */
+export function nullIfNotFound<T>(): OperatorFunction<T, T | null> {
+  return catchError((e: unknown) => (isNotFound(e) ? of(null) : throwError(() => e)));
 }
 
 /** `{ email: 'Enter a valid email address.' }` — ready to attach to form controls. */

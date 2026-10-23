@@ -1,66 +1,113 @@
-.my-learning {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px 16px;
+// Figma "Enrolled Courses" 11167:19927.
+:host {
+  display: block;
 }
 
-mat-button-toggle-group {
-  margin-bottom: 16px;
+.my-learning {
+  padding-top: 16px;
+}
+
+.mn-pills {
+  margin-bottom: 24px;
 }
 
 .courses {
   list-style: none;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--mat-sys-outline-variant);
+  overflow: hidden;
+  border: 1px solid var(--mn-richblack-700);
   border-radius: 8px;
 }
 
+.head,
 .course {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) auto;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 0.8fr) minmax(0, 1.2fr) 190px;
   gap: 24px;
   align-items: center;
   padding: 16px;
+}
 
-  & + & {
-    border-top: 1px solid var(--mat-sys-outline-variant);
-  }
+.head {
+  background: var(--mn-richblack-700);
+  color: var(--mn-richblack-50);
+  font: 500 0.875rem / 1.375rem var(--mn-font);
+}
+
+.course + .course,
+.head + .course {
+  border-top: 1px solid var(--mn-richblack-700);
 }
 
 .name {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 20px;
   min-width: 0;
+
+  img {
+    flex: none;
+    width: 52px;
+    height: 52px;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+
+  div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
 }
 
 .title {
-  font: var(--mat-sys-title-medium);
-  color: var(--mat-sys-on-surface);
+  color: var(--mn-richblack-5);
+  font: 500 1rem / 1.5rem var(--mn-font);
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 
 .instructor,
 .count {
-  font: var(--mat-sys-body-small);
-  color: var(--mat-sys-on-surface-variant);
+  color: var(--mn-richblack-300);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
 }
 
+.lectures {
+  color: var(--mn-richblack-50);
+  font: 500 1rem / 1.5rem var(--mn-font);
+}
+
+// Figma: Blue 100 while in progress, Caribbean Green 100 once completed, on Rich Black 700.
 .progress {
   display: flex;
   flex-direction: column;
   gap: 6px;
+
+  mat-progress-bar {
+    --mat-progress-bar-active-indicator-color: var(--mn-blue-100);
+    --mat-progress-bar-track-color: var(--mn-richblack-700);
+    --mat-progress-bar-active-indicator-height: 8px;
+    --mat-progress-bar-track-height: 8px;
+    --mat-progress-bar-track-shape: 200px;
+    border-radius: 200px;
+
+    &.done {
+      --mat-progress-bar-active-indicator-color: var(--mn-green-100);
+    }
+  }
 }
 
 .label {
-  font: var(--mat-sys-label-large);
+  color: var(--mn-richblack-50);
+  font: 600 0.75rem / 1.25rem var(--mn-font);
 }
 
 .none {
   padding: 16px;
-  color: var(--mat-sys-on-surface-variant);
+  color: var(--mn-richblack-300);
 }
 
 .empty {
@@ -72,19 +119,18 @@ mat-button-toggle-group {
   text-align: center;
 
   mat-icon {
-    font-size: 48px;
     width: 48px;
     height: 48px;
-    color: var(--mat-sys-on-surface-variant);
+    font-size: 48px;
+    color: var(--mn-richblack-300);
   }
 }
 
-.form-error {
-  color: var(--mat-sys-error);
-}
+@media (max-width: 899px) {
+  .head {
+    display: none;
+  }
 
-/* a phone: name, then progress, then the button, stacked */
-@media (max-width: 600px) {
   .course {
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;

@@ -1,3 +1,60 @@
+// Figma "Course content": sections are Rich Black 700 bars, lectures sit on Rich Black 900,
+// the whole list in a Rich Black 600 border.
+:host {
+  display: block;
+  --mat-expansion-container-background-color: var(--mn-richblack-900);
+  --mat-expansion-container-shape: 0;
+  --mat-expansion-header-text-color: var(--mn-richblack-5);
+  --mat-expansion-header-description-color: var(--mn-richblack-25);
+  --mat-expansion-container-elevation-shadow: none; // one border around all sections instead
+  --mat-expansion-header-hover-state-layer-color: var(--mn-richblack-600);
+  --mat-expansion-header-focus-state-layer-color: var(--mn-richblack-600);
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--mn-richblack-50);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+}
+
+.collapse {
+  border: 0;
+  background: none;
+  color: var(--mn-yellow-50);
+  font: 500 0.875rem / 1.375rem var(--mn-font);
+  cursor: pointer;
+}
+
+mat-accordion {
+  display: block;
+  border: 1px solid var(--mn-richblack-600);
+}
+
+mat-expansion-panel {
+  border-bottom: 1px solid var(--mn-richblack-600);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+mat-expansion-panel-header {
+  background: var(--mn-richblack-700);
+}
+
+mat-panel-description {
+  flex: none;
+  gap: 12px;
+
+  .count {
+    color: var(--mn-yellow-50);
+  }
+}
+
 .lectures {
   list-style: none;
   margin: 0;
@@ -31,7 +88,7 @@
   }
 
   .preview {
-    color: var(--mat-sys-primary);
+    color: var(--mn-yellow-50);
     font: var(--mat-sys-label-medium);
   }
 

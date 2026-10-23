@@ -1,12 +1,14 @@
+// In the buy box: full-width buttons stacked 12 px apart (Figma "Add to Cart" / "Buy now").
 .cta {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  margin: 8px 0 16px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
 }
 
 .hint {
   margin: 0;
-  color: var(--mat-sys-on-surface-variant);
+  color: var(--mn-richblack-25);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+  text-align: center;
 }

@@ -1,32 +1,86 @@
-<section class="home">
-  <h1>Masternova</h1>
-  <p class="tagline">
-    Sell access to a video — and make sure only the people who paid can watch it.
+<!-- Figma 11167:17977. Section by section: hero, two code panels, top courses, skills, instructor, reviews -->
+@let teach = teachLink();
+<section class="hero" appPointerGlow>
+  <a class="pill" [routerLink]="teach.path" [queryParams]="teach.query" [fragment]="teach.fragment"
+    >Become an Instructor <mat-icon aria-hidden="true">arrow_forward</mat-icon></a
+  >
+  <h1>Empower Your Future with <span class="mn-highlight">Coding Skills</span></h1>
+  <p class="lead">
+    Learn from video courses at your own pace, from anywhere in the world. Pay once, resume exactly
+    where you stopped, and ask the instructor under every lecture.
   </p>
-
-  <mat-card appearance="outlined" class="status">
-    <mat-card-header>
-      <mat-card-title>Backend status</mat-card-title>
-    </mat-card-header>
-    <mat-card-content>
-      @let s = status();
-      @switch (s.kind) {
-        @case ('loading') {
-          <p>Checking the API…</p>
-        }
-        @case ('up') {
-          <p class="up" data-testid="api-status">
-            <mat-icon aria-hidden="true">check_circle</mat-icon> API: {{ s.ping.status }}
-          </p>
-          <p class="meta">version {{ s.ping.version }} · {{ s.ping.time }}</p>
-        }
-        @case ('down') {
-          <p class="down" data-testid="api-status">
-            <mat-icon aria-hidden="true">error</mat-icon> API: unreachable — is the backend running
-            on :8080?
-          </p>
-        }
-      }
-    </mat-card-content>
-  </mat-card>
+  <div class="actions">
+    <a mat-flat-button routerLink="/courses">Browse Courses</a>
+    @if (auth.isAuthenticated()) {
+      <a mat-stroked-button routerLink="/learning">My Learning</a>
+    } @else {
+      <a mat-stroked-button routerLink="/signup">Create Account</a>
+    }
+  </div>
+  <div class="hero-picture">
+    <img src="home/hero.jpg" alt="" width="1035" height="515" fetchpriority="high" />
+  </div>
 </section>
+
+<section class="panel" appReveal>
+  <div class="copy">
+    <h2>Unlock your <span class="mn-highlight">coding potential</span> with our online courses.</h2>
+    <p>
+      Our courses are designed and taught by people who build software for a living and like sharing
+      what they know.
+    </p>
+    <div class="actions">
+      <a mat-flat-button routerLink="/courses"
+        >Try it Yourself <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></a
+      >
+      <a mat-stroked-button routerLink="/search">Search Courses</a>
+    </div>
+  </div>
+  <app-code-panel class="code" [lines]="firstPanel" glow="brown" />
+</section>
+
+<section class="panel reverse" appReveal>
+  <div class="copy">
+    <h2>
+      Start <span class="mn-highlight">watching<br />in seconds</span>
+    </h2>
+    <p>
+      Go ahead, give it a try. Preview lectures are free, and a purchase opens the whole course the
+      moment it's paid.
+    </p>
+    <div class="actions">
+      <a mat-flat-button [routerLink]="auth.isAuthenticated() ? '/learning' : '/courses'"
+        >Continue Lesson <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></a
+      >
+      <a mat-stroked-button routerLink="/courses">Learn More</a>
+    </div>
+  </div>
+  <app-code-panel class="code" [lines]="secondPanel" glow="blue" />
+</section>
+
+<app-course-highlights [courses]="topCourses.hasValue() ? topCourses.value() : []" />
+
+<app-skills-section [subjects]="subjects()" />
+
+<section class="instructor" appReveal>
+  <div class="instructor-picture">
+    <img src="home/instructor.jpg" alt="" width="616" height="545" loading="lazy" />
+  </div>
+  <div class="copy">
+    <h2>Become an<br /><span class="mn-highlight">instructor</span></h2>
+    <p>
+      Instructors teach learners everywhere on Masternova. We provide the tools: a course wizard,
+      video transcoding, and payments, so you can teach what you love.
+    </p>
+    <a
+      mat-flat-button
+      [routerLink]="teach.path"
+      [queryParams]="teach.query"
+      [fragment]="teach.fragment"
+      >Start Teaching Today <mat-icon iconPositionEnd aria-hidden="true">arrow_forward</mat-icon></a
+    >
+  </div>
+</section>
+
+<!-- ⭐ hasValue() first: value() throws while the resource is in error -->
+<app-learner-reviews [course]="topCourses.hasValue() ? topCourses.value()[0] : undefined" />

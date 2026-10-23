@@ -4,7 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl } from '@angular/forms';
 import { submit, text, type } from '../../../testing/dom';
 import { User } from '../../core/auth/auth-api';
-import { Admin, uuidValidator } from './admin';
+import { Admin, userRefValidator } from './admin';
 
 describe('Admin', () => {
   const id = '3f6c1a52-8a1e-4b55-9a3e-0d2f8a0b7c11';
@@ -25,31 +25,47 @@ describe('Admin', () => {
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(Admin);
+    fixture.detectChanges();
+    http.expectOne('/api/v1/admin/instructor-applications').flush({ items: [], nextCursor: null });
+    http.match('/api/v1/meta/ping'); // the status card's ping: not what these tests are about
     await fixture.whenStable();
   });
 
   afterEach(() => http.verify());
 
   async function findUser(user = learner) {
-    type(fixture, 'id', id);
+    type(fixture, 'who', id);
     submit(fixture);
     http.expectOne(`/api/v1/admin/users/${id}`).flush(user);
     await fixture.whenStable();
   }
 
-  it('uuidValidator accepts UUIDs (and empty — that is `required`’s job)', () => {
-    expect(uuidValidator(new FormControl(id, { nonNullable: true }))).toBeNull();
-    expect(uuidValidator(new FormControl('', { nonNullable: true }))).toBeNull();
-    expect(uuidValidator(new FormControl('42', { nonNullable: true }))).toEqual({ uuid: true });
+  it('userRefValidator accepts an email or a UUID (and empty — that is `required`’s job)', () => {
+    const check = (v: string) => userRefValidator(new FormControl(v, { nonNullable: true }));
+    expect(check(id)).toBeNull();
+    expect(check(' b@x.dev ')).toBeNull();
+    expect(check('')).toBeNull();
+    expect(check('42')).toEqual({ userRef: true });
   });
 
-  it('rejects a non-UUID id without calling the API', async () => {
-    type(fixture, 'id', 'not-a-uuid');
+  it('rejects something that is neither without calling the API', async () => {
+    type(fixture, 'who', 'not-a-user');
     submit(fixture);
     await fixture.whenStable();
 
-    http.expectNone((req) => req.url.startsWith('/api/v1/admin'));
-    expect(text(fixture, 'uuid-error')).toContain('UUID');
+    http.expectNone((req) => req.url.startsWith('/api/v1/admin/users'));
+    expect(text(fixture, 'who-error')).toContain('email address');
+  });
+
+  it('looks an email up by email, not by id', async () => {
+    type(fixture, 'who', 'B@x.dev');
+    submit(fixture);
+    const req = http.expectOne((r) => r.url === '/api/v1/admin/users');
+    expect(req.request.params.get('email')).toBe('B@x.dev');
+    req.flush(learner);
+    await fixture.whenStable();
+
+    expect(text(fixture, 'found-user')).toContain('Ben');
   });
 
   it('finds a user and ticks their current roles', async () => {
@@ -79,10 +95,10 @@ describe('Admin', () => {
   });
 
   it.each([
-    ['NOT_FOUND', 404, 'No user with that id.'],
+    ['NOT_FOUND', 404, 'No user with that email or id.'],
     ['CANNOT_DEMOTE_SELF', 422, "You can't remove your own ADMIN role."],
   ])('maps %s to a readable message', async (code, status, message) => {
-    type(fixture, 'id', id);
+    type(fixture, 'who', id);
     submit(fixture);
     http
       .expectOne(`/api/v1/admin/users/${id}`)

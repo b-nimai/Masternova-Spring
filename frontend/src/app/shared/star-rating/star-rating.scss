@@ -1,0 +1,54 @@
+// Figma rating row: the number in Yellow 100, stars Yellow 100 (empty: Rich Black 400),
+// the count in Rich Black 400.
+:host {
+  display: inline-block;
+  font: 600 1rem / 1.5rem var(--mn-font);
+}
+
+.row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--mn-yellow-100);
+}
+
+.value {
+  margin-right: 6px;
+}
+
+mat-icon {
+  width: 1.25em;
+  height: 1.25em;
+  font-size: 1.25em;
+  font-variation-settings: 'FILL' 1; // Material Symbols draw outlines unless asked
+
+  &.empty {
+    color: var(--mn-richblack-400);
+  }
+}
+
+.count {
+  margin-left: 6px;
+  color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
+  font-weight: 400;
+}
+
+// The stars pop in one after another (the eye reads the rating as it fills).
+@media (prefers-reduced-motion: no-preference) {
+  mat-icon {
+    animation: 360ms var(--mn-ease-out) backwards pop;
+  }
+
+  @for $i from 1 through 5 {
+    mat-icon:nth-of-type(#{$i}) {
+      animation-delay: #{$i * 50}ms;
+    }
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}

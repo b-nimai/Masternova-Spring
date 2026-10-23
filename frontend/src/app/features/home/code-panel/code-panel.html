@@ -1,0 +1,7 @@
+<div class="code-wrap" [class]="'glow-' + glow()">
+  <!-- decorative: the snippet illustrates, it isn't content to read aloud -->
+  <pre
+    class="code"
+    aria-hidden="true"
+  ><ol>@for (line of lines(); track $index) {<li>@for (token of line; track $index) {<span [class]="token.kind">{{ token.text }}</span>}</li>}</ol></pre>
+</div>

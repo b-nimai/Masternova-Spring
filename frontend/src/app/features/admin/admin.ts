@@ -13,13 +13,17 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { asProblem } from '../../core/api/problem';
 import { Role, User } from '../../core/auth/auth-api';
+import { ApiStatus } from '../../shared/api-status/api-status';
 import { AdminApi } from './admin-api';
+import { InstructorQueue } from './instructor-queue/instructor-queue';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** A custom validator is just a function: control → errors or null. */
-export function uuidValidator(control: AbstractControl<string>): ValidationErrors | null {
-  return !control.value || UUID.test(control.value.trim()) ? null : { uuid: true };
+/** A custom validator is just a function: control → errors or null. An email or a user id. */
+export function userRefValidator(control: AbstractControl<string>): ValidationErrors | null {
+  const value = control.value?.trim();
+  const email = Validators.email({ value } as AbstractControl); // the signup form's rule
+  return !value || UUID.test(value) || email === null ? null : { userRef: true };
 }
 
 /** A group-level validator: at least one box ticked (the backend requires ≥ 1 role too). */
@@ -31,10 +35,12 @@ function atLeastOneChecked(group: AbstractControl): ValidationErrors | null {
 
 export const ALL_ROLES: readonly Role[] = ['LEARNER', 'INSTRUCTOR', 'ADMIN'];
 
-/** Look up a user by id, then change their roles. */
+/** The instructor-application queue; look up a user by email (or id), then change their roles. */
 @Component({
   selector: 'app-admin',
   imports: [
+    ApiStatus,
+    InstructorQueue,
     ReactiveFormsModule,
     MatCardModule,
     MatFormFieldModule,
@@ -50,7 +56,7 @@ export class Admin {
   private readonly fb = inject(NonNullableFormBuilder);
 
   protected readonly roles = ALL_ROLES;
-  protected readonly lookup = this.fb.group({ id: ['', [Validators.required, uuidValidator]] });
+  protected readonly lookup = this.fb.group({ who: ['', [Validators.required, userRefValidator]] });
   // ⭐ a typed group of booleans: rolesForm.value.ADMIN is `boolean | undefined`, a typo won't compile
   protected readonly rolesForm = this.fb.group(
     { LEARNER: false, INSTRUCTOR: false, ADMIN: false },
@@ -69,7 +75,8 @@ export class Admin {
     }
     this.start();
     this.user.set(null);
-    this.api.getUser(this.lookup.getRawValue().id.trim()).subscribe({
+    const who = this.lookup.getRawValue().who.trim();
+    (UUID.test(who) ? this.api.getUser(who) : this.api.findByEmail(who)).subscribe({
       next: (user) => this.show(user),
       error: (e: unknown) => this.fail(e),
     });
@@ -113,7 +120,7 @@ export class Admin {
   private fail(e: unknown): void {
     // ⭐ branch on the stable `code`, never on the human-readable `detail`
     const messages: Record<string, string> = {
-      NOT_FOUND: 'No user with that id.',
+      NOT_FOUND: 'No user with that email or id.',
       CANNOT_DEMOTE_SELF: "You can't remove your own ADMIN role.",
       INSUFFICIENT_ROLE: 'You need the ADMIN role for this.',
     };

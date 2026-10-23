@@ -1,45 +1,254 @@
-.course-detail {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 16px;
+// Figma "Course Detail" 11167:19083: a 792 px column and a 384 px buy box, 24 px apart.
+:host {
+  display: block;
 }
 
-.category {
-  margin: 16px 0 0;
-  color: var(--mat-sys-primary);
-  font: var(--mat-sys-label-large);
+.state,
+.loading {
+  max-width: var(--mn-content-width);
+  margin: 0 auto;
+  padding: 48px 16px;
+}
+
+.loading {
+  display: block;
+  max-width: 792px; // the course column's
+}
+
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 792px) 384px;
+  grid-template-areas:
+    'band box'
+    'body box'
+    'reviews reviews';
+  column-gap: 24px;
+  max-width: var(--mn-content-width);
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+
+// ⭐ A full-bleed band from inside a centred grid: an enormous spread shadow paints the
+// background to both edges, and clip-path keeps it to the band's own height.
+.band {
+  grid-area: band;
+  padding: 32px 0;
+  background: var(--mn-richblack-800);
+  box-shadow: 0 0 0 100vmax var(--mn-richblack-800);
+  clip-path: inset(0 -100vmax);
+  color: var(--mn-richblack-5);
+
+  p {
+    margin: 0 0 12px;
+  }
+}
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--mn-richblack-600);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+
+  a {
+    color: var(--mn-richblack-300);
+    text-decoration: none;
+  }
+
+  .current {
+    color: var(--mn-yellow-50);
+    font-weight: 500;
+  }
 }
 
 h1 {
-  margin: 4px 0;
+  margin: 0 0 12px;
+  font: 400 1.875rem / 2.375rem var(--mn-font);
 }
 
 .subtitle {
-  font: var(--mat-sys-title-medium);
+  color: var(--mn-richblack-200);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
 }
 
-.meta {
-  color: var(--mat-sys-on-surface-variant);
+.rating-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  color: var(--mn-richblack-25);
+}
+
+.muted {
+  color: var(--mn-richblack-300);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
+}
+
+.banner {
+  padding: 8px 12px;
+  border-radius: 8px;
+
+  &.draft {
+    background: var(--mat-sys-tertiary-container);
+    color: var(--mat-sys-on-tertiary-container);
+  }
+
+  &.locked {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+}
+
+// The buy box: Rich Black 700, the cover on top, sticky beside the course while it scrolls.
+.buy-box {
+  grid-area: box;
+  position: sticky;
+  top: 89px; // the nav bar + 32 px
+  align-self: start;
+  z-index: 1;
+  margin-top: 32px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--mn-richblack-700);
+
+  img {
+    display: block;
+    width: 100%;
+    height: 201px;
+    object-fit: cover;
+  }
+
+  h2 {
+    margin: 16px 0 8px;
+    color: var(--mn-richblack-5);
+    font: 500 1rem / 1.5rem var(--mn-font);
+  }
+}
+
+.buy-body {
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
 }
 
 .price {
-  font: var(--mat-sys-headline-small);
+  margin: 0 0 16px;
+  color: var(--mn-richblack-5);
+  font: 700 1.875rem / 2.375rem var(--mn-font);
 }
 
-.draft {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mat-sys-tertiary-container);
-  color: var(--mat-sys-on-tertiary-container);
+.includes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mn-green-100);
+  font: 500 0.875rem / 1.875rem var(--mn-font);
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  mat-icon {
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
+  }
 }
 
-.locked {
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--mat-sys-error-container);
-  color: var(--mat-sys-on-error-container);
+.share {
+  align-self: center;
+  margin-top: 16px;
+}
+
+// Below the band
+.body {
+  grid-area: body;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding-top: 32px;
+
+  h2 {
+    margin: 0 0 12px;
+    color: var(--mn-richblack-5);
+    font: 600 1.5rem / 2rem var(--mn-font);
+  }
+}
+
+// "What you'll learn": a Rich Black 700 frame, 32 px in
+.learn {
+  padding: 32px;
+  border: 1px solid var(--mn-richblack-700);
+
+  h2 {
+    font: 500 1.875rem / 2.375rem var(--mn-font);
+  }
+
+  p {
+    margin: 0;
+    color: var(--mn-richblack-50);
+    font: 500 0.875rem / 1.375rem var(--mn-font);
+    white-space: pre-line; // instructors write paragraphs
+  }
 }
 
 .curriculum {
   min-height: 120px; // gives the deferred block a box to scroll into view
+}
+
+.author-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: var(--mn-richblack-5);
+  font: 500 1rem / 1.5rem var(--mn-font);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--mn-yellow-50);
+  color: var(--mn-richblack-900);
+  font: 600 1.25rem / 1 var(--mn-font);
+}
+
+.reviews {
+  grid-area: reviews;
+  padding-top: 48px;
+}
+
+@media (max-width: 1099px) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'band' 'box' 'body' 'reviews';
+  }
+
+  .buy-box {
+    position: static;
+    max-width: 480px;
+  }
 }

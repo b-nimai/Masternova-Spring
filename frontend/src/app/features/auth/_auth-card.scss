@@ -1,22 +1,55 @@
-// shared by the login / signup / verify cards
-:host {
-  display: block;
-  padding: 32px 16px;
-}
-
-.auth-card {
-  max-width: 420px;
-  margin: 0 auto;
-}
-
-form {
+// Shared by the login / signup / verify pages: the form inside AuthShell (Figma: 20 px between
+// fields, 36 px before the button).
+.auth-form {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-top: 16px;
+  gap: 20px;
+
+  mat-form-field {
+    width: 100%;
+  }
+
+  > button[type='submit'] {
+    margin-top: 16px;
+  }
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(
+    2,
+    minmax(0, 1fr)
+  ); // minmax: fields may shrink below their own width
+  gap: 20px;
+
+  @media (max-width: 599px) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .form-error {
+  margin: 0;
   color: var(--mat-sys-error);
-  margin: 0 0 12px;
+}
+
+.switch {
+  margin: 0;
+  color: var(--mn-richblack-300);
+  font: 400 0.875rem / 1.375rem var(--mn-font);
+  text-align: center;
+}
+
+.message {
+  margin: 0;
+  color: var(--mn-richblack-100);
+  font: 400 1.125rem / 1.625rem var(--mn-font);
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mn-richblack-5);
+  font: 500 1rem / 1.5rem var(--mn-font);
+  text-decoration: none;
 }

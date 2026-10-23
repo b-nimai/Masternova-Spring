@@ -6,6 +6,7 @@ import com.masternova.api.engagement.domain.Question;
 import com.masternova.api.engagement.domain.QuestionRepository;
 import com.masternova.api.identity.CurrentUser;
 import com.masternova.api.platform.CursorPage;
+import com.masternova.api.platform.KeysetCursor;
 import com.masternova.api.platform.NotFoundException;
 import java.util.List;
 import java.util.UUID;
@@ -38,7 +39,7 @@ public class QuestionQueries {
   public QuestionPage page(CurrentUser me, UUID lectureId, String cursor, int limit) {
     CourseRef course = participants.ofLecture(me, lectureId);
     CursorPage<Question> page =
-        NewestFirstCursor.page(
+        KeysetCursor.page(
             cursor,
             limit,
             (at, id, n) -> questions.page(lectureId, at, id, n),

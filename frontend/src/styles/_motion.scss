@@ -1,0 +1,121 @@
+// Motion (UI.11): page transitions, scroll reveals, press feedback, the pointer glow, and the
+// keyframes components name in `animate.enter` / `animate.leave`. ⭐ Everything that moves sits
+// under `prefers-reduced-motion: no-preference`: with "reduce motion" on, the app is still.
+// The directives check the same setting (shared/motion/reduced-motion.ts).
+
+:root {
+  --mn-ease-out: cubic-bezier(0.22, 1, 0.36, 1); // fast start, long gentle landing
+  --mn-ease-in: cubic-bezier(0.55, 0, 1, 0.45);
+}
+
+// The nav bar and the dashboard sidebar stay put while the page under them changes.
+.nav {
+  view-transition-name: site-nav;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth; // anchors (#reviews, #teach); a new page still starts instantly
+  }
+
+  // ── Page transitions (the router's withViewTransitions) ─────────────────────────────────────
+  ::view-transition-old(root) {
+    animation: 140ms var(--mn-ease-in) both mn-fade-out;
+  }
+
+  ::view-transition-new(root) {
+    animation: 320ms var(--mn-ease-out) 80ms both mn-page-in;
+  }
+
+  // ── Scroll reveals (shared/motion/reveal.ts adds .mn-reveal, then .mn-revealed) ─────────────
+  // An animation, not a transition: components keep their own `transition` (hover colours)
+  // without either overriding the other. `backwards` holds the start during the stagger delay and
+  // lets go at the end, so a hover transform still works afterwards.
+  .mn-reveal:not(.mn-revealed) {
+    opacity: 0;
+  }
+
+  .mn-revealed {
+    animation: 700ms var(--mn-ease-out) var(--mn-reveal-delay, 0ms) backwards mn-rise;
+  }
+
+  // ── Press feedback: every Material button gives a little under the finger ──────────────────
+  .mat-mdc-button-base {
+    transition: transform 140ms var(--mn-ease-out);
+
+    &:active:not([disabled], [aria-disabled='true']) {
+      transform: scale(0.96);
+    }
+  }
+
+  // ── List rows leaving (animate.leave="mn-leave": a removed cart line, a decided application) ─
+  .mn-leave {
+    animation: 260ms var(--mn-ease-in) both mn-slide-out;
+  }
+}
+
+// ── The pointer glow (shared/motion/pointer-glow.ts adds the class on a fine pointer only) ─────
+// Registered, not inherited: the directive writes these every frame on the card, and an
+// inherited custom property would re-style the card's whole subtree each time.
+@property --mn-pointer-x {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
+@property --mn-pointer-y {
+  syntax: '<length-percentage>';
+  inherits: false;
+  initial-value: 50%;
+}
+
+.mn-pointer-glow {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      var(--mn-glow-size, 420px) circle at var(--mn-pointer-x, 50%) var(--mn-pointer-y, 50%),
+      var(--mn-glow-color, rgb(255 214 10 / 9%)),
+      transparent 65%
+    );
+    opacity: 0;
+    transition: opacity 400ms var(--mn-ease-out);
+    pointer-events: none;
+  }
+
+  &:hover::after {
+    opacity: 1;
+  }
+}
+
+@keyframes mn-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes mn-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+@keyframes mn-rise {
+  from {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+}
+
+@keyframes mn-slide-out {
+  to {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+}

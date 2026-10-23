@@ -1,0 +1,137 @@
+// Masternova's design tokens, copied from the StudyNotion Figma (page 🎨 Colors, frame "Color"
+// 6:1156, and page 📝 Typography). Every scale becomes a CSS custom property:
+// `--mn-<scale>-<step>`, e.g. `--mn-richblack-800`. The Material theme (_theme.scss) maps them onto
+// Material's system roles, so components should read `--mat-sys-*` first and reach for a raw
+// `--mn-*` step only when the Figma uses a colour no role carries (a card's 800 on a 900 page).
+
+@use 'sass:map';
+
+$palettes: (
+  'richblack': (
+    5: #f1f2ff,
+    25: #dbddea,
+    50: #c5c7d4,
+    100: #afb2bf,
+    200: #999daa,
+    300: #838894,
+    400: #6e727f,
+    500: #585d69,
+    600: #424854,
+    700: #2c333f,
+    800: #161d29,
+    900: #000814,
+  ),
+  'richblue': (
+    5: #ecf5ff,
+    25: #c6d6e1,
+    50: #a0b7c3,
+    100: #7a98a6,
+    200: #537988,
+    300: #2d5a6a,
+    400: #073b4c,
+    500: #063544,
+    600: #042e3b,
+    700: #032833,
+    800: #01212a,
+    900: #001b22,
+  ),
+  'blue': (
+    5: #eaf5ff,
+    25: #b4daec,
+    50: #7ec0d9,
+    100: #47a5c5,
+    200: #118ab2,
+    300: #0f7a9d,
+    400: #0c6a87,
+    500: #0a5a72,
+    600: #074b5d,
+    700: #053b48,
+    800: #022b32,
+    900: #001b1d,
+  ),
+  'green': (
+    // "Caribbean Green" in the Figma
+    5: #c1fffd,
+    25: #83f1de,
+    50: #44e4bf,
+    100: #06d6a0,
+    200: #05bf8e,
+    300: #05a77b,
+    400: #049069,
+    500: #037957,
+    600: #026144,
+    700: #014a32,
+    800: #01321f,
+    900: #001b0d,
+  ),
+  'brown': (
+    5: #fff4c4,
+    25: #ffe395,
+    50: #ffd166,
+    100: #e7bc5b,
+    200: #cfa64f,
+    300: #b89144,
+    400: #a07c39,
+    500: #88662d,
+    600: #705122,
+    700: #593c17,
+    800: #41260b,
+    900: #291100,
+  ),
+  'pink': (
+    5: #fff1f1,
+    25: #fbc7d1,
+    50: #f79cb0,
+    100: #f37290,
+    200: #ef476f,
+    300: #d43d63,
+    400: #ba3356,
+    500: #9f294a,
+    600: #841e3e,
+    700: #691432,
+    800: #4f0a25,
+    900: #340019,
+  ),
+  'yellow': (
+    5: #fff970,
+    25: #ffe83d,
+    50: #ffd60a,
+    100: #e7c009,
+    200: #cfab08,
+    300: #b69507,
+    400: #9e8006,
+    500: #866a04,
+    600: #6e5503,
+    700: #553f02,
+    800: #3d2a01,
+    900: #251400,
+  ),
+);
+
+/// One step of a scale, for SCSS that needs the value at compile time (the theme).
+@function color($scale, $step) {
+  @return map.get($palettes, $scale, $step);
+}
+
+@mixin custom-properties {
+  @each $scale, $steps in $palettes {
+    @each $step, $value in $steps {
+      --mn-#{$scale}-#{$step}: #{$value};
+    }
+  }
+
+  // Typography: Inter everywhere, Edu SA Beginner for the handwritten quotes.
+  --mn-font: 'Inter', system-ui, sans-serif;
+  --mn-font-hand: 'Edu SA Beginner', cursive;
+  // Display md (36/44, -2 % tracking) is the Figma's page-hero size; the rest come from M3's scale.
+  --mn-display-md: 600 2.25rem / 2.75rem var(--mn-font);
+  --mn-display-md-tracking: -0.02em;
+
+  // The Figma's buttons: 8 px corners and a light inset edge bottom-right.
+  --mn-radius: 8px;
+  --mn-button-edge: inset -2px -2px 0 0 rgb(255 255 255 / 51%);
+  --mn-button-edge-dark: inset -2px -2px 0 0 rgb(255 255 255 / 10%);
+
+  // Content width: the Figma's 1440 frame with 120 px gutters.
+  --mn-content-width: 1200px;
+}

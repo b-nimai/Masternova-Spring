@@ -1,0 +1,69 @@
+<mat-card appearance="outlined">
+  <mat-card-header>
+    <mat-card-title>Instructor applications</mat-card-title>
+    <mat-card-subtitle>Approving grants the Instructor role</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    @if (error(); as message) {
+      <p class="form-error" role="alert" data-testid="queue-error">{{ message }}</p>
+    }
+    @if (queue.hasValue()) {
+      @let items = queue.value().items;
+      @if (items.length === 0) {
+        <p class="empty" data-testid="queue-empty">No applications waiting.</p>
+      } @else {
+        <ul class="applications" data-testid="queue">
+          @for (a of items; track a.userId) {
+            <li data-testid="application" animate.leave="mn-leave">
+              <div class="who">
+                <strong>{{ a.displayName }}</strong>
+                <span>{{ a.email }}</span>
+                <span class="meta">
+                  Applied {{ a.appliedAt | date: 'mediumDate' }}
+                  @if (!a.emailVerified) {
+                    · <mat-icon inline>mark_email_unread</mat-icon> email not verified
+                  }
+                </span>
+                @if (a.pitch) {
+                  <p class="pitch">“{{ a.pitch }}”</p>
+                }
+              </div>
+              <div class="actions">
+                <button
+                  mat-flat-button
+                  data-testid="approve"
+                  [disabled]="deciding() === a.userId"
+                  (click)="decide(a, 'approve')"
+                >
+                  Approve
+                </button>
+                <button
+                  mat-stroked-button
+                  data-testid="reject"
+                  [disabled]="deciding() === a.userId"
+                  (click)="decide(a, 'reject')"
+                >
+                  Reject
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+      @if (queue.value().nextCursor; as cursor) {
+        <button
+          mat-stroked-button
+          data-testid="queue-more"
+          [disabled]="loadingMore()"
+          (click)="showMore(cursor)"
+        >
+          {{ loadingMore() ? 'Loading…' : 'Show more' }}
+        </button>
+      }
+    } @else if (queue.error()) {
+      <p class="form-error">Couldn't load the applications.</p>
+    } @else {
+      <app-skeleton shape="row" [count]="2" />
+    }
+  </mat-card-content>
+</mat-card>

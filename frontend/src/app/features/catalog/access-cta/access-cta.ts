@@ -7,6 +7,7 @@ import { CourseProgressResponse } from '../../../core/api/learning-api';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { CartItem, CartStore } from '../../../core/commerce/cart-store';
 import { DENIAL_MESSAGES } from '../../../shared/denial-messages';
+import { Haptics } from '../../../core/haptics';
 
 /**
  * The course page's call to action, chosen by the entitlement engine's answer (API conventions
@@ -31,6 +32,7 @@ export class AccessCta {
   protected readonly auth = inject(AuthStore);
   protected readonly cart = inject(CartStore);
   private readonly router = inject(Router);
+  private readonly haptics = inject(Haptics);
 
   readonly access = input.required<AccessResponse>();
   readonly slug = input.required<string>();
@@ -77,6 +79,7 @@ export class AccessCta {
     const offer = this.offer();
     if (offer) {
       this.cart.add(offer);
+      this.haptics.success();
     }
     if (goToCart) {
       void this.router.navigate(['/cart']);

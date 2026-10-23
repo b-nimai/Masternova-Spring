@@ -18,7 +18,17 @@
 }
 
 .stars {
-  color: var(--mat-sys-tertiary);
+  font-size: 0.875rem;
+}
+
+// the review form's stars: Yellow when chosen, filled either way (Material Symbols' FILL axis)
+.rating mat-icon {
+  color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
+  font-variation-settings: 'FILL' 1;
+
+  &.on {
+    color: var(--mn-yellow-100);
+  }
 }
 
 .bars {
@@ -44,7 +54,7 @@
     span {
       display: block;
       height: 100%;
-      background: var(--mat-sys-tertiary);
+      background: var(--mn-yellow-100);
     }
   }
 }
@@ -67,8 +77,10 @@
   padding: 0;
 
   li {
-    padding: 12px 0;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    margin-bottom: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--mn-richblack-800); // the Figma's review card
   }
 
   .who {

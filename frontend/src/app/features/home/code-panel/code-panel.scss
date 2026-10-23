@@ -1,0 +1,72 @@
+// Figma "HTML_source_code_example": a glass panel over a blurred glow.
+:host {
+  display: block;
+}
+
+.code-wrap {
+  position: relative;
+  flex: 0 1 534px;
+  padding: 32px;
+  box-sizing: border-box;
+
+  // the Figma's blurred ellipse behind the code
+  &::before {
+    content: '';
+    position: absolute;
+    left: 10%;
+    top: -10%;
+    width: 70%;
+    height: 80%;
+    border-radius: 50%;
+    filter: blur(68px);
+    opacity: 0.2;
+  }
+
+  &.glow-brown::before {
+    background: linear-gradient(124deg, #8a2be2 -6.46%, #ffa500 59.04%, #f8f8ff 124.53%);
+  }
+
+  &.glow-blue::before {
+    background: linear-gradient(118deg, #1fa2ff -6.46%, #12d8fa 59.04%, #a6ffcb 124.53%);
+  }
+}
+
+.code {
+  position: relative;
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  border: 1px solid rgb(255 255 255 / 22%);
+  background: linear-gradient(124deg, rgb(14 26 45 / 24%) 1.4%, rgb(17 30 50 / 38%) 105%);
+  backdrop-filter: blur(26px);
+  color: var(--mn-richblack-50);
+  font:
+    700 0.875rem / 1.375rem 'Roboto Mono',
+    monospace;
+
+  ol {
+    margin: 0;
+    padding-left: 2.5em;
+  }
+
+  li::marker {
+    color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
+  }
+
+  li:first-child,
+  .keyword {
+    color: var(--mn-brown-100);
+  }
+
+  .tag {
+    color: var(--mn-blue-50);
+  }
+
+  .attr {
+    color: var(--mn-pink-100);
+  }
+
+  .string {
+    color: var(--mn-pink-300);
+  }
+}

@@ -48,6 +48,7 @@ describe('LecturePlayer', () => {
   const fromTheStart = () => http.expectOne(RESUME).flush(resumeAt(0));
 
   afterEach(() => {
+    http.match((r) => r.url.startsWith('/api/v1/courses/')); // the sidebar's course: not under test
     http.verify();
     vi.useRealTimers();
   });

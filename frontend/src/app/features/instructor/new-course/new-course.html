@@ -5,14 +5,14 @@
   </mat-card-header>
   <mat-card-content>
     <form [formGroup]="form" (ngSubmit)="create()">
-      <mat-form-field appearance="outline">
+      <mat-form-field>
         <mat-label>Title</mat-label>
         <input matInput formControlName="title" data-testid="title" />
         @if (form.controls.title.hasError('required')) {
           <mat-error>A title is required.</mat-error>
         }
       </mat-form-field>
-      <mat-form-field appearance="outline">
+      <mat-form-field>
         <mat-label>Category</mat-label>
         <mat-select formControlName="categorySlug" data-testid="category">
           @for (root of categories(); track root.slug) {
@@ -27,7 +27,7 @@
           <mat-error>{{ form.controls.categorySlug.getError('server') }}</mat-error>
         }
       </mat-form-field>
-      <mat-form-field appearance="outline">
+      <mat-form-field>
         <mat-label>Level</mat-label>
         <mat-select formControlName="level">
           @for (l of levels; track l) {
@@ -35,7 +35,7 @@
           }
         </mat-select>
       </mat-form-field>
-      <mat-form-field appearance="outline">
+      <mat-form-field>
         <mat-label>Language</mat-label>
         <input matInput formControlName="language" maxlength="2" />
       </mat-form-field>

@@ -1,0 +1,27 @@
+<div class="shell" [class.single]="!photo()">
+  <section class="form-column">
+    <header>
+      <h1>{{ heading() }}</h1>
+      @if (tagline() || accent()) {
+        <p class="tagline">
+          {{ tagline() }}
+          @if (accent(); as accent) {
+            <span class="accent">{{ accent }}</span>
+          }
+        </p>
+      }
+    </header>
+    <ng-content />
+  </section>
+
+  @if (photo()) {
+    <div class="photo" aria-hidden="true">
+      <div class="backdrop">
+        @for (tile of tiles; track tile) {
+          <img src="auth/frame-pattern.svg" alt="" width="385" height="194" [style]="tile" />
+        }
+      </div>
+      <img class="picture" src="auth/auth.jpg" alt="" width="558" height="504" loading="lazy" />
+    </div>
+  }
+</div>

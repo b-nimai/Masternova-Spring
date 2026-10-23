@@ -1,0 +1,20 @@
+@if (reviews.hasValue() && reviews.value().length > 0) {
+  <section class="reviews">
+    <h2>Reviews from other learners</h2>
+    <div class="review-cards" data-testid="home-reviews">
+      @for (review of reviews.value(); track review.id) {
+        <article class="review" appReveal [appRevealDelay]="$index * 100">
+          <header>
+            <span class="avatar" aria-hidden="true">{{ review.authorName.charAt(0) }}</span>
+            <div>
+              <h3>{{ review.authorName }}</h3>
+              <p>{{ course()?.title }}</p>
+            </div>
+          </header>
+          <p class="body">{{ review.body }}</p>
+          <app-star-rating class="rating" [value]="review.rating" />
+        </article>
+      }
+    </div>
+  </section>
+}

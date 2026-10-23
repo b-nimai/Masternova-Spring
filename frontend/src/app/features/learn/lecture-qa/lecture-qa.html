@@ -2,7 +2,7 @@
   <h2>Questions &amp; answers</h2>
 
   <form class="ask" (ngSubmit)="ask()">
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
+    <mat-form-field subscriptSizing="dynamic">
       <mat-label>Ask a question about this lecture</mat-label>
       <input
         matInput
@@ -14,7 +14,7 @@
       />
     </mat-form-field>
     @if (askTitle().trim()) {
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-form-field subscriptSizing="dynamic">
         <mat-label>Details (optional)</mat-label>
         <textarea
           matInput
@@ -95,7 +95,7 @@
                 <p class="meta">Only the first {{ limits.threadAnswers }} answers are shown.</p>
               }
               <form class="reply" (ngSubmit)="postReply()">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-form-field subscriptSizing="dynamic">
                   <mat-label>{{ replyTo() ? 'Your reply' : 'Your answer' }}</mat-label>
                   <textarea
                     matInput

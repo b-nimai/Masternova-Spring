@@ -1,23 +1,37 @@
-import { DecimalPipe } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
-import { rxResource } from '@angular/core/rxjs-interop';
+import { DatePipe, ViewportScroller } from '@angular/common';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  inject,
+  Injector,
+  input,
+  signal,
+} from '@angular/core';
+import { rxResource, toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CatalogApi } from '../../../core/api/catalog-api';
 import { AccessResponse, EntitlementApi } from '../../../core/api/entitlement-api';
 import { LearningApi } from '../../../core/api/learning-api';
 import { AuthStore } from '../../../core/auth/auth-store';
 import { CartItem } from '../../../core/commerce/cart-store';
 import { isNotFound } from '../../../core/api/problem';
+import { coverFor } from '../../../shared/course-cover';
 import { DENIAL_MESSAGES, isDenialReason } from '../../../shared/denial-messages';
 import { DurationPipe } from '../../../shared/duration-pipe';
 import { MoneyPipe } from '../../../shared/money-pipe';
+import { StarRating } from '../../../shared/star-rating/star-rating';
 import { AccessCta } from '../access-cta/access-cta';
 import { LEVEL_LABELS } from '../catalog-labels';
 import { CourseReviews } from '../course-reviews/course-reviews';
 import { Curriculum } from '../curriculum/curriculum';
+import { Reveal } from '../../../shared/motion/reveal';
+import { Skeleton } from '../../../shared/skeleton/skeleton';
+import { Haptics } from '../../../core/haptics';
 
 /**
  * /courses/:slug — the course page.
@@ -38,7 +52,9 @@ import { Curriculum } from '../curriculum/curriculum';
  */
 @Component({
   imports: [
-    DecimalPipe,
+    Skeleton,
+    Reveal,
+    DatePipe,
     RouterLink,
     MatButtonModule,
     MatIconModule,
@@ -48,6 +64,7 @@ import { Curriculum } from '../curriculum/curriculum';
     Curriculum,
     AccessCta,
     CourseReviews,
+    StarRating,
   ],
   selector: 'app-course-detail',
   styleUrl: './course-detail.scss',
@@ -93,6 +110,7 @@ export class CourseDetail {
   );
 
   protected readonly enrolling = signal(false);
+  private readonly haptics = inject(Haptics);
 
   /** Free enrollment (idempotent PUT), then the progress again: the button turns to "Start". */
   protected enroll(courseId: string): void {
@@ -100,10 +118,12 @@ export class CourseDetail {
     this.learning.enroll(courseId).subscribe({
       next: () => {
         this.enrolling.set(false);
+        this.haptics.success();
         this.progress.reload();
       },
       error: () => {
         this.enrolling.set(false);
+        this.haptics.error();
         this.access.reload(); // refused (revoked, no longer free): the access says why
       },
     });
@@ -153,4 +173,39 @@ export class CourseDetail {
   });
 
   protected readonly levelLabels = LEVEL_LABELS;
+
+  protected readonly cover = computed(() => coverFor(this.course.value()?.id ?? ''));
+
+  /** "en" → "English", in the viewer's own language (a computed: one formatter per course). */
+  protected readonly languageName = computed(() => {
+    const code = this.course.value()?.language ?? '';
+    return new Intl.DisplayNames(undefined, { type: 'language' }).of(code) ?? code;
+  });
+
+  protected readonly shareState = signal<'idle' | 'copied' | 'failed'>('idle');
+
+  private readonly fragment = toSignal(inject(ActivatedRoute).fragment);
+  private readonly scroller = inject(ViewportScroller);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    // `#reviews` (the player's "Add Review"): the anchor exists only once the course has
+    // rendered, so the router can't scroll to it on arrival. Scroll once it's on the page.
+    effect(() => {
+      if (this.fragment() === 'reviews' && this.course.hasValue()) {
+        afterNextRender(() => this.scroller.scrollToAnchor('reviews'), {
+          injector: this.injector,
+        });
+      }
+    });
+  }
+
+  /** The Figma's "Share": copies the page's address (refused: an insecure page, no permission). */
+  protected share(): void {
+    const copied = navigator.clipboard?.writeText(location.href) ?? Promise.reject();
+    copied.then(
+      () => this.shareState.set('copied'),
+      () => this.shareState.set('failed'),
+    );
+  }
 }

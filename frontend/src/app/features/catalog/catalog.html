@@ -1,15 +1,75 @@
+<!-- Figma "Course" 11167:18844: a header band, sort tabs, then the course cards -->
+<header class="band">
+  <div class="band-inner">
+    <div>
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a routerLink="/">Home</a>
+        <span aria-hidden="true">/</span>
+        <a routerLink="/courses" [queryParams]="{}">Catalog</a>
+        <span aria-hidden="true">/</span>
+        <span class="current" aria-current="page">{{ heading() }}</span>
+      </nav>
+      <h1>{{ heading() }}</h1>
+      <p class="lead">
+        @if (activeCategory(); as category) {
+          Every published course in {{ category.name }}, from first steps to production. Filter by
+          level and price, or sort to find the one for you.
+        } @else {
+          Every published course on Masternova. Pick a subject, filter by level and price, or search
+          for exactly what you want to learn.
+        }
+      </p>
+    </div>
+    @if (categories().length > 0) {
+      <nav class="related" aria-label="Subjects">
+        <h2>Subjects</h2>
+        <ul>
+          @for (root of categories(); track root.slug) {
+            <li>
+              <a routerLink="/courses" [queryParams]="{ category: root.slug }">{{ root.name }}</a>
+            </li>
+          }
+        </ul>
+      </nav>
+    }
+  </div>
+</header>
+
 <section class="catalog">
-  <header class="filters" aria-label="Filter courses">
-    <mat-form-field appearance="outline" class="search" subscriptSizing="dynamic">
-      <mat-label>Search courses</mat-label>
-      <mat-icon matPrefix>search</mat-icon>
-      <input matInput data-testid="search" [formControl]="searchControl" autocomplete="off" />
+  <h2 class="section-title">Courses to get you started</h2>
+  <div class="tabs" role="group" aria-label="Sort courses" data-testid="sort">
+    @for (s of sorts; track s) {
+      <button
+        type="button"
+        class="tab"
+        [class.active]="(query().sort ?? 'NEWEST') === s"
+        [attr.aria-pressed]="(query().sort ?? 'NEWEST') === s"
+        [attr.data-testid]="'sort-' + s"
+        (click)="setSort(s)"
+      >
+        {{ sortLabels[s] }}
+      </button>
+    }
+  </div>
+
+  <div class="filters" aria-label="Filter courses" role="group">
+    <mat-form-field class="search">
+      <mat-icon matPrefix aria-hidden="true">search</mat-icon>
+      <input
+        matInput
+        data-testid="search"
+        placeholder="Search courses"
+        aria-label="Search courses"
+        [formControl]="searchControl"
+        autocomplete="off"
+      />
     </mat-form-field>
 
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Category</mat-label>
+    <mat-form-field class="category">
       <mat-select
         data-testid="category"
+        aria-label="Category"
+        placeholder="All categories"
         [value]="query().category ?? null"
         (selectionChange)="setCategory($event.value)"
       >
@@ -21,19 +81,6 @@
               <mat-option [value]="child.slug">{{ child.name }}</mat-option>
             }
           </mat-optgroup>
-        }
-      </mat-select>
-    </mat-form-field>
-
-    <mat-form-field appearance="outline" subscriptSizing="dynamic">
-      <mat-label>Sort by</mat-label>
-      <mat-select
-        data-testid="sort"
-        [value]="query().sort ?? 'NEWEST'"
-        (selectionChange)="setSort($event.value)"
-      >
-        @for (s of sorts; track s) {
-          <mat-option [value]="s">{{ sortLabels[s] }}</mat-option>
         }
       </mat-select>
     </mat-form-field>
@@ -68,7 +115,7 @@
         <mat-icon>filter_alt_off</mat-icon> Clear filters
       </button>
     }
-  </header>
+  </div>
 
   @let state = list();
   <p class="status" data-testid="status" aria-live="polite">
@@ -79,24 +126,34 @@
     }
   </p>
 
+  @if (state.loading && !state.items.length) {
+    <app-skeleton class="first-page" shape="card" [count]="6" data-testid="loading" />
+  }
+
   @if (state.items.length) {
-    <!-- ⭐ Only the visible cards exist in the DOM; (scrolledIndexChange) asks for the next page. -->
+    <!-- ⭐ The viewport scrolls ROWS of cards (3 / 2 / 1 by width): only visible rows exist in
+         the DOM; (scrolledIndexChange) asks for the next page near the last row. -->
     <cdk-virtual-scroll-viewport
       class="results"
-      [itemSize]="cardHeight"
+      [itemSize]="rowHeight"
       (scrolledIndexChange)="onScrolled()"
     >
-      <app-course-card
-        *cdkVirtualFor="let course of state.items; trackBy: trackById"
-        [course]="course"
-        [style.height.px]="cardHeight"
-      />
+      <div
+        *cdkVirtualFor="let row of rows(); trackBy: trackByFirst"
+        class="row"
+        [style.grid-template-columns]="'repeat(' + columns() + ', minmax(0, 1fr))'"
+        [style.height.px]="rowHeight"
+      >
+        @for (course of row; track course.id) {
+          <app-course-card [course]="course" />
+        }
+      </div>
     </cdk-virtual-scroll-viewport>
   }
 
   <footer class="more">
-    @if (state.loading) {
-      <mat-spinner diameter="28" data-testid="loading" />
+    @if (state.loading && state.items.length) {
+      <mat-spinner diameter="28" data-testid="loading-more" />
     } @else if (state.error) {
       <p class="form-error" data-testid="error">
         We couldn't load courses.

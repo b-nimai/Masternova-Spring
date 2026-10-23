@@ -1,6 +1,4 @@
 <section class="cart">
-  <h1>Your cart</h1>
-
   @if (cart.count() === 0) {
     <div class="empty" data-testid="cart-empty">
       <mat-icon>shopping_cart</mat-icon>
@@ -8,87 +6,95 @@
       <a mat-flat-button routerLink="/courses">Browse courses</a>
     </div>
   } @else {
+    <!-- Figma "Shopping Cart" 11167:19615 (titled "Wishlist" there): rows + a summary box -->
+    <p class="count">{{ cart.count() }} {{ cart.count() === 1 ? 'Course' : 'Courses' }} in Cart</p>
     <div class="layout">
       <ul class="items">
         @for (item of cart.items(); track item.courseId) {
-          <li data-testid="cart-item">
+          <li data-testid="cart-item" animate.leave="mn-leave">
+            <img [src]="cover(item.courseId)" alt="" width="185" height="148" loading="lazy" />
             <a class="title" [routerLink]="['/courses', item.slug]">{{ item.title }}</a>
-            <span class="price">{{ item.priceMinor | money: item.currency }}</span>
-            <button
-              mat-icon-button
-              type="button"
-              [attr.aria-label]="'Remove ' + item.title"
-              (click)="remove(item.courseId)"
-            >
-              <mat-icon>close</mat-icon>
-            </button>
+            <div class="side">
+              <button
+                mat-stroked-button
+                type="button"
+                class="remove"
+                [attr.aria-label]="'Remove ' + item.title"
+                (click)="remove(item.courseId)"
+              >
+                <mat-icon>delete</mat-icon> Remove
+              </button>
+              <span class="price">{{ item.priceMinor | money: item.currency }}</span>
+            </div>
           </li>
         }
       </ul>
 
-      <mat-card appearance="outlined" class="summary">
-        <mat-card-content>
-          <!-- ⭐ value() throws while the resource is in error: ask hasValue() first -->
-          @if (quote.hasValue() ? quote.value() : null; as q) {
-            <dl data-testid="totals">
-              <dt>Subtotal</dt>
-              <dd>{{ q.subtotalMinor | money: q.currency }}</dd>
-              @if (q.discountMinor > 0) {
-                <dt>Coupon {{ q.couponCode }}</dt>
-                <dd class="discount" data-testid="discount">
-                  −{{ q.discountMinor | money: q.currency }}
-                </dd>
-              }
-              <dt class="total">Total</dt>
-              <dd class="total" data-testid="total">
-                {{ q.totalMinor | money: q.currency }}
+      <section class="summary mn-on-surface" aria-label="Order summary">
+        <!-- ⭐ value() throws while the resource is in error: ask hasValue() first -->
+        @if (quote.hasValue() ? quote.value() : null; as q) {
+          <dl data-testid="totals">
+            <dt class="total">Total:</dt>
+            <dd class="total" data-testid="total">
+              {{ q.totalMinor | money: q.currency }}
+            </dd>
+            @if (q.discountMinor > 0) {
+              <dd class="was">{{ q.subtotalMinor | money: q.currency }}</dd>
+              <dt>Coupon {{ q.couponCode }}</dt>
+              <dd class="discount" data-testid="discount">
+                −{{ q.discountMinor | money: q.currency }}
               </dd>
-            </dl>
-          } @else if (quote.isLoading()) {
-            <mat-spinner diameter="28" />
-          }
-          @if (quoteProblem(); as problem) {
-            <p class="form-error" data-testid="quote-error">{{ problem }}</p>
-          }
-
-          @if (appliedCoupon(); as code) {
-            <p class="applied" data-testid="applied-coupon">
-              <mat-icon inline>sell</mat-icon> {{ code }} applied
-              <button mat-button type="button" (click)="removeCoupon()">Remove</button>
-            </p>
-          } @else {
-            <form class="coupon" [formGroup]="couponForm" (ngSubmit)="applyCoupon()">
-              <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                <mat-label>Coupon code</mat-label>
-                <input matInput formControlName="code" data-testid="coupon-input" />
-                @if (couponError(); as error) {
-                  <mat-hint class="form-error" data-testid="coupon-error">{{ error }}</mat-hint>
-                }
-              </mat-form-field>
-              <button mat-stroked-button type="submit" [disabled]="applying()">Apply</button>
-            </form>
-          }
-
-          @if (checkoutError(); as error) {
-            <p class="form-error" data-testid="checkout-error">{{ error }}</p>
-          }
-          <button
-            mat-flat-button
-            type="button"
-            class="checkout"
-            data-testid="checkout"
-            [disabled]="checkingOut() || !quote.hasValue() || !!quoteProblem()"
-            (click)="checkout()"
-          >
-            @if (checkingOut()) {
-              Processing…
-            } @else {
-              Checkout
             }
-          </button>
-          <p class="hint">You'll pay securely with Razorpay. Prices include taxes.</p>
-        </mat-card-content>
-      </mat-card>
+          </dl>
+        } @else if (quote.isLoading()) {
+          <mat-spinner diameter="28" />
+        }
+        @if (quoteProblem(); as problem) {
+          <p class="form-error" data-testid="quote-error">{{ problem }}</p>
+        }
+
+        @if (appliedCoupon(); as code) {
+          <p class="applied" data-testid="applied-coupon">
+            <mat-icon inline>sell</mat-icon> {{ code }} applied
+            <button mat-button type="button" (click)="removeCoupon()">Remove</button>
+          </p>
+        } @else {
+          <form class="coupon" [formGroup]="couponForm" (ngSubmit)="applyCoupon()">
+            <mat-form-field subscriptSizing="dynamic">
+              <input
+                matInput
+                formControlName="code"
+                placeholder="Coupon code"
+                aria-label="Coupon code"
+                data-testid="coupon-input"
+              />
+              @if (couponError(); as error) {
+                <mat-hint class="form-error" data-testid="coupon-error">{{ error }}</mat-hint>
+              }
+            </mat-form-field>
+            <button mat-stroked-button type="submit" [disabled]="applying()">Apply</button>
+          </form>
+        }
+
+        @if (checkoutError(); as error) {
+          <p class="form-error" data-testid="checkout-error">{{ error }}</p>
+        }
+        <button
+          mat-flat-button
+          type="button"
+          class="checkout"
+          data-testid="checkout"
+          [disabled]="checkingOut() || !quote.hasValue() || !!quoteProblem()"
+          (click)="checkout()"
+        >
+          @if (checkingOut()) {
+            Processing…
+          } @else {
+            Buy Now
+          }
+        </button>
+        <p class="hint">You'll pay securely with Razorpay. Prices include taxes.</p>
+      </section>
     </div>
   }
 </section>

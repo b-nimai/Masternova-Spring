@@ -7,13 +7,7 @@
         <span class="number" data-testid="average">{{
           s.count > 0 ? (s.average | number: '1.1-1') : '—'
         }}</span>
-        <span class="stars" aria-hidden="true">
-          @for (n of stars; track n) {
-            <mat-icon inline>{{
-              s.average >= n - 0.25 ? 'star' : s.average >= n - 0.75 ? 'star_half' : 'star_border'
-            }}</mat-icon>
-          }
-        </span>
+        <app-star-rating class="stars" [value]="s.average" />
         <span class="count">{{ s.count }} {{ s.count === 1 ? 'rating' : 'ratings' }}</span>
       </div>
       <ul class="bars" aria-label="Ratings by stars">
@@ -42,11 +36,11 @@
             [attr.data-testid]="'star-' + n"
             (click)="draftRating.set(n)"
           >
-            <mat-icon>{{ n <= draftRating() ? 'star' : 'star_border' }}</mat-icon>
+            <mat-icon [class.on]="n <= draftRating()">star</mat-icon>
           </button>
         }
       </div>
-      <mat-form-field appearance="outline" subscriptSizing="dynamic">
+      <mat-form-field subscriptSizing="dynamic">
         <mat-label>What did you think? (optional)</mat-label>
         <textarea
           matInput
@@ -86,13 +80,7 @@
         <li data-testid="review-item">
           <p class="who">
             <strong>{{ r.authorName }}</strong>
-            <span class="stars" [attr.aria-label]="r.rating + ' out of 5'">
-              @for (n of stars; track n) {
-                <mat-icon inline aria-hidden="true">{{
-                  n <= r.rating ? 'star' : 'star_border'
-                }}</mat-icon>
-              }
-            </span>
+            <app-star-rating class="stars" [value]="r.rating" />
             <span class="when"
               >{{ r.createdAt | date: 'mediumDate' }}{{ r.edited ? ' · edited' : '' }}</span
             >

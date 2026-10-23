@@ -1,91 +1,159 @@
-<article class="course-detail">
-  <a mat-button routerLink="/courses"><mat-icon>arrow_back</mat-icon> All courses</a>
-
-  @if (course.isLoading()) {
-    <mat-spinner diameter="36" data-testid="loading" />
-  } @else if (notFound()) {
-    <section data-testid="not-found">
-      <h1>Course not found</h1>
-      <p>It may have been removed, or it isn't published yet.</p>
-    </section>
-  } @else if (course.error()) {
-    <p class="form-error" data-testid="error">
-      We couldn't load this course.
-      <button mat-button type="button" (click)="course.reload()">Retry</button>
-    </p>
-  } @else if (course.value(); as c) {
-    <header>
-      <p class="category">{{ c.category.name }}</p>
+<!-- Figma "Course Detail" 11167:19083: a header band, a sticky buy box, then the course -->
+@if (course.isLoading()) {
+  <app-skeleton class="loading" shape="band" data-testid="loading" />
+} @else if (notFound()) {
+  <section class="state" data-testid="not-found">
+    <h1>Course not found</h1>
+    <p>It may have been removed, or it isn't published yet.</p>
+    <a mat-flat-button routerLink="/courses">Browse courses</a>
+  </section>
+} @else if (course.error()) {
+  <p class="state form-error" data-testid="error">
+    We couldn't load this course.
+    <button mat-button type="button" (click)="course.reload()">Retry</button>
+  </p>
+} @else if (course.value(); as c) {
+  <article class="page">
+    <header class="band">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a routerLink="/">Home</a>
+        <span aria-hidden="true">/</span>
+        <a routerLink="/courses">Catalog</a>
+        <span aria-hidden="true">/</span>
+        <a class="current" routerLink="/courses" [queryParams]="{ category: c.category.slug }">{{
+          c.category.name
+        }}</a>
+      </nav>
       <h1 data-testid="title">{{ c.title }}</h1>
       @if (c.subtitle) {
         <p class="subtitle">{{ c.subtitle }}</p>
       }
-      <p class="meta">
-        By {{ c.instructorName }} · {{ levelLabels[c.level] }} · {{ c.lectureCount }} lectures ·
-        {{ c.totalDurationSeconds | duration }}
+      <p class="rating-row">
         @if (c.ratingCount > 0) {
-          · <mat-icon inline>star</mat-icon> {{ c.ratingAverage | number: '1.1-2' }} ({{
-            c.ratingCount
-          }})
+          <app-star-rating [value]="c.ratingAverage" [count]="c.ratingCount" />
+        } @else {
+          <span class="muted">No ratings yet</span>
+        }
+        <span>{{ c.enrollmentCount }} {{ c.enrollmentCount === 1 ? 'learner' : 'learners' }}</span>
+      </p>
+      <p>Created by {{ c.instructorName }}</p>
+      <p class="facts">
+        <span
+          ><mat-icon aria-hidden="true">signal_cellular_alt</mat-icon
+          >{{ levelLabels[c.level] }}</span
+        >
+        <span><mat-icon aria-hidden="true">language</mat-icon>{{ languageName() }}</span>
+        @if (c.publishedAt) {
+          <span
+            ><mat-icon aria-hidden="true">info</mat-icon>Published
+            {{ c.publishedAt | date: 'MM/yyyy' }}</span
+          >
         }
       </p>
       @if (c.status !== 'PUBLISHED') {
-        <p class="draft" data-testid="draft-banner">{{ c.status }} — only you can see this page.</p>
+        <p class="banner draft" data-testid="draft-banner">
+          {{ c.status }} — only you can see this page.
+        </p>
       }
-      <p class="price" data-testid="price">{{ c.priceMinor | money: c.currency }}</p>
       @if (lockedMessage(); as message) {
-        <p class="locked" data-testid="locked-banner">
+        <p class="banner locked" data-testid="locked-banner">
           <mat-icon inline>lock</mat-icon> {{ message }}
         </p>
       }
-      @if (access.value(); as a) {
-        <app-access-cta
-          [access]="a.course"
-          [slug]="c.slug"
-          [firstLectureId]="firstLectureId()"
-          [offer]="offer()"
-          [progress]="progress.hasValue() ? progress.value() : null"
-          [enrolling]="enrolling()"
-          (retry)="access.reload()"
-          (enroll)="enroll(c.id)"
-        />
-      }
     </header>
 
-    <section class="description">
-      <h2>About this course</h2>
-      <p>{{ c.description }}</p>
-    </section>
+    <aside class="buy-box">
+      <img [src]="cover()" alt="" width="384" height="201" />
+      <div class="buy-body">
+        <p class="price" data-testid="price">{{ c.priceMinor | money: c.currency }}</p>
+        @if (access.value(); as a) {
+          <app-access-cta
+            [access]="a.course"
+            [slug]="c.slug"
+            [firstLectureId]="firstLectureId()"
+            [offer]="offer()"
+            [progress]="progress.hasValue() ? progress.value() : null"
+            [enrolling]="enrolling()"
+            (retry)="access.reload()"
+            (enroll)="enroll(c.id)"
+          />
+        }
+        <h2>This course includes:</h2>
+        <ul class="includes">
+          <li>
+            <mat-icon aria-hidden="true">schedule</mat-icon>
+            {{ c.totalDurationSeconds | duration }} on-demand video
+          </li>
+          <li>
+            <mat-icon aria-hidden="true">menu_book</mat-icon>
+            {{ c.lectureCount }} lectures in {{ c.sections.length }} sections
+          </li>
+          <li><mat-icon aria-hidden="true">all_inclusive</mat-icon> Lifetime access once paid</li>
+          <li><mat-icon aria-hidden="true">devices</mat-icon> Resume on any device</li>
+        </ul>
+        <button mat-button type="button" class="share" data-testid="share" (click)="share()">
+          @switch (shareState()) {
+            @case ('copied') {
+              Link copied
+            }
+            @case ('failed') {
+              Couldn't copy the link
+            }
+            @default {
+              Share
+            }
+          }
+        </button>
+      </div>
+    </aside>
 
-    <section class="curriculum">
-      <h2>Course content</h2>
-      <!-- ⭐ deferred: a separate JS chunk, fetched when this block scrolls into view -->
-      @defer (on viewport) {
-        <app-curriculum
-          [sections]="c.sections"
-          [slug]="c.slug"
-          [access]="lectureAccess()"
-          [completed]="completed()"
-        />
-      } @placeholder {
-        <p data-testid="curriculum-placeholder">
-          {{ c.sections.length }} sections · {{ c.lectureCount }} lectures
+    <div class="body">
+      <section class="learn" appReveal>
+        <h2>About this course</h2>
+        <p>{{ c.description }}</p>
+      </section>
+
+      <section class="curriculum" appReveal>
+        <h2>Course content</h2>
+        <!-- ⭐ deferred: a separate JS chunk, fetched when this block scrolls into view -->
+        @defer (on viewport) {
+          <app-curriculum
+            [sections]="c.sections"
+            [slug]="c.slug"
+            [access]="lectureAccess()"
+            [completed]="completed()"
+            [totalSeconds]="c.totalDurationSeconds"
+          />
+        } @placeholder {
+          <p data-testid="curriculum-placeholder">
+            {{ c.sections.length }} sections · {{ c.lectureCount }} lectures
+          </p>
+        } @loading (minimum 200ms) {
+          <mat-spinner diameter="28" />
+        }
+      </section>
+
+      <section class="author" appReveal>
+        <h2>Author</h2>
+        <p class="author-name">
+          <span class="avatar" aria-hidden="true">{{ c.instructorName.charAt(0) }}</span>
+          {{ c.instructorName }}
         </p>
-      } @loading (minimum 200ms) {
-        <mat-spinner diameter="28" />
-      }
-    </section>
+      </section>
+    </div>
 
     @if (c.status === 'PUBLISHED') {
       <!-- Phase 11: deferred like the curriculum; the form only for an enrolled learner -->
-      @defer (on viewport) {
-        <app-course-reviews
-          [courseId]="c.id"
-          [canReview]="progress.hasValue() && progress.value().enrolled"
-        />
-      } @placeholder {
-        <p>Reviews</p>
-      }
+      <div class="reviews" id="reviews">
+        @defer (on viewport) {
+          <app-course-reviews
+            [courseId]="c.id"
+            [canReview]="progress.hasValue() && progress.value().enrolled"
+          />
+        } @placeholder {
+          <p>Reviews</p>
+        }
+      </div>
     }
-  }
-</article>
+  </article>
+}

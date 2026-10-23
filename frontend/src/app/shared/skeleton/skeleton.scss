@@ -1,0 +1,92 @@
+// Each block is a still grey with a highlight slid across it by `transform` (composited: no
+// repaint per frame while the page waits).
+:host {
+  display: grid;
+  gap: 24px;
+}
+
+:host:has(.card) {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+}
+
+.block {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--mn-richblack-800);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .block::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      var(--mn-richblack-700) 50%,
+      transparent 80%
+    );
+    transform: translateX(-100%);
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.band {
+  padding: 32px 0;
+}
+
+.cover {
+  height: 201px; // the course card's
+  margin-bottom: 10px;
+}
+
+.thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+}
+
+.lines {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.line {
+  width: 70%;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.wide {
+  width: 92%;
+}
+
+.short {
+  width: 40%;
+}
+
+.title {
+  width: 60%;
+  height: 30px;
+}

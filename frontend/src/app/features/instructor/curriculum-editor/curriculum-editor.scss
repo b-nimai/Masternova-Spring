@@ -6,7 +6,7 @@
 
   .totals {
     margin-left: auto;
-    color: var(--mat-sys-on-surface-variant);
+    color: var(--mn-richblack-300);
   }
 }
 
@@ -16,10 +16,14 @@
   gap: 16px;
 }
 
+// Figma "Course Builder": each section a Rich Black 700 box with a 600 border, lectures on
+// rows divided by Rich Black 600 rules, "Add Lecture" in Yellow 50.
 .section {
-  padding: 12px;
-  border: 1px solid var(--mat-sys-outline-variant);
-  border-radius: 12px;
+  --mat-form-field-filled-container-color: var(--mn-richblack-600);
+  padding: 12px 24px;
+  border: 1px solid var(--mn-richblack-600);
+  border-radius: 8px;
+  background: var(--mn-richblack-700);
 
   header {
     display: flex;
@@ -42,12 +46,14 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 4px 8px;
-    border-radius: 8px;
-    background: var(--mat-sys-surface);
+    padding: 4px 8px 4px 24px;
+    border-bottom: 1px solid var(--mn-richblack-600);
+    background: var(--mn-richblack-700);
+    color: var(--mn-richblack-50);
   }
 
   .handle {
+    color: var(--mn-richblack-300); // WCAG AA: the Figma's darker grey is below 4.5:1 here
     cursor: grab;
   }
 
@@ -56,11 +62,11 @@
   }
 
   .time {
-    color: var(--mat-sys-on-surface-variant);
+    color: var(--mn-richblack-300);
   }
 
   .empty {
-    color: var(--mat-sys-on-surface-variant);
+    color: var(--mn-richblack-300);
   }
 }
 
@@ -86,4 +92,11 @@
 
 .add-section {
   margin-top: 16px;
+
+  // Figma "Create Section": a Yellow 50 outline button
+  button {
+    --mat-button-outlined-label-text-color: var(--mn-yellow-50);
+    border: 1px solid var(--mn-yellow-50);
+    background: transparent;
+  }
 }

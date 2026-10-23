@@ -1,0 +1,36 @@
+<footer class="footer">
+  <div class="columns">
+    <div class="about">
+      <a routerLink="/" class="brand">
+        <img src="logo.svg" alt="" width="28" height="28" />
+        <span>Masternova</span>
+      </a>
+      <p>Sell access to a video — and make sure only the people who paid can watch it.</p>
+    </div>
+
+    @for (column of columns(); track column.heading) {
+      <nav class="column" [attr.aria-label]="column.heading">
+        <h2>{{ column.heading }}</h2>
+        @for (item of column.links; track item.link) {
+          <a [routerLink]="item.link">{{ item.label }}</a>
+        }
+      </nav>
+    }
+
+    @if (categories().length > 0) {
+      <nav class="column subjects" aria-label="Subjects">
+        <h2>Subjects</h2>
+        @for (category of categories(); track category.slug) {
+          <a routerLink="/courses" [queryParams]="{ category: category.slug }">{{
+            category.name
+          }}</a>
+        }
+      </nav>
+    }
+  </div>
+
+  <div class="bottom">
+    <a routerLink="/playground">Angular playground</a>
+    <span>© {{ year }} Masternova</span>
+  </div>
+</footer>

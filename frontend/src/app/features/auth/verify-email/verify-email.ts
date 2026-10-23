@@ -1,17 +1,18 @@
 import { Component, inject, input, OnInit, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
+import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { RouterLink } from '@angular/router';
 import { AuthApi } from '../../../core/auth/auth-api';
 import { AuthStore } from '../../../core/auth/auth-store';
+import { AuthShell } from '../auth-shell/auth-shell';
 
 type VerifyState = 'verifying' | 'verified' | 'invalid' | 'missing';
 
 /** Landing page of the email link: /verify-email?token=… */
 @Component({
   selector: 'app-verify-email',
-  imports: [RouterLink, MatCardModule, MatButtonModule, MatProgressSpinnerModule],
+  imports: [RouterLink, MatButtonModule, MatIconModule, MatProgressSpinnerModule, AuthShell],
   templateUrl: './verify-email.html',
   styleUrl: './verify-email.scss',
 })

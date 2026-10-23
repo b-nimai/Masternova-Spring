@@ -3,6 +3,8 @@ package com.masternova.api.identity.application;
 import com.masternova.api.identity.IdentityProperties;
 import com.masternova.api.identity.UserRegistered;
 import com.masternova.api.identity.domain.Email;
+import com.masternova.api.identity.domain.InstructorApplication;
+import com.masternova.api.identity.domain.InstructorApplicationRepository;
 import com.masternova.api.identity.domain.User;
 import com.masternova.api.identity.domain.UserRepository;
 import com.masternova.api.identity.domain.VerificationToken;
@@ -23,6 +25,7 @@ public class SignupService {
 
   private final UserRepository users;
   private final VerificationTokenRepository verificationTokens;
+  private final InstructorApplicationRepository instructorApplications;
   private final PasswordEncoder passwords;
   private final SecureTokens tokens;
   private final EventPublisher events;
@@ -32,6 +35,7 @@ public class SignupService {
   SignupService(
       UserRepository users,
       VerificationTokenRepository verificationTokens,
+      InstructorApplicationRepository instructorApplications,
       PasswordEncoder passwords,
       SecureTokens tokens,
       EventPublisher events,
@@ -39,6 +43,7 @@ public class SignupService {
       Clock clock) {
     this.users = users;
     this.verificationTokens = verificationTokens;
+    this.instructorApplications = instructorApplications;
     this.passwords = passwords;
     this.tokens = tokens;
     this.events = events;
@@ -46,7 +51,17 @@ public class SignupService {
     this.clock = clock;
   }
 
-  public record SignupCommand(String email, String displayName, String password) {}
+  /**
+   * @param applyAsInstructor signup's "Instructor" tab: files an application an admin decides on.
+   *     The account itself is a LEARNER either way; no one chooses a role.
+   */
+  public record SignupCommand(
+      String email, String displayName, String password, boolean applyAsInstructor) {
+
+    public SignupCommand(String email, String displayName, String password) {
+      this(email, displayName, password, false);
+    }
+  }
 
   @Transactional // ⭐ the unit of work: user, token and event commit together (pattern 16, 17)
   public User signup(SignupCommand command) {
@@ -62,6 +77,10 @@ public class SignupService {
     } catch (DataIntegrityViolationException raceLost) {
       // two signups with one email at the same instant: the unique constraint picked a winner
       throw emailTaken();
+    }
+
+    if (command.applyAsInstructor()) {
+      instructorApplications.save(InstructorApplication.submit(user.id(), null, now));
     }
 
     String rawToken = tokens.generate();

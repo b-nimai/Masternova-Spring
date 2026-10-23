@@ -5,6 +5,7 @@ import com.masternova.api.engagement.domain.Review;
 import com.masternova.api.engagement.domain.ReviewRepository;
 import com.masternova.api.identity.CurrentUser;
 import com.masternova.api.platform.CursorPage;
+import com.masternova.api.platform.KeysetCursor;
 import com.masternova.api.platform.NotFoundException;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -26,7 +27,7 @@ public class ReviewQueries {
   /** A published course's reviews, newest first: {@code limit} per page, keyset-paged. */
   public CursorPage<Review> page(UUID courseId, String cursor, int limit) {
     participants.requirePublished(courseId); // 404 for a draft: its reviews are invisible too
-    return NewestFirstCursor.page(
+    return KeysetCursor.page(
         cursor,
         limit,
         (at, id, n) -> reviews.page(courseId, at, id, n),

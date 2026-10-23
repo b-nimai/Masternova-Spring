@@ -1,4 +1,5 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
+import { StarRating } from '../../../shared/star-rating/star-rating';
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -6,9 +7,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { catchError, of, Subscription, throwError } from 'rxjs';
+import { Subscription } from 'rxjs';
 import { EngagementApi, LIMITS, ReviewResponse } from '../../../core/api/engagement-api';
-import { asProblem, isNotFound } from '../../../core/api/problem';
+import { asProblem, nullIfNotFound } from '../../../core/api/problem';
+import { Haptics } from '../../../core/haptics';
 
 /**
  * The course page's reviews (Phase 11.5): the star distribution, the newest reviews with "Show
@@ -23,6 +25,7 @@ import { asProblem, isNotFound } from '../../../core/api/problem';
 @Component({
   selector: 'app-course-reviews',
   imports: [
+    StarRating,
     DatePipe,
     DecimalPipe,
     FormsModule,
@@ -36,6 +39,7 @@ import { asProblem, isNotFound } from '../../../core/api/problem';
 })
 export class CourseReviews {
   private readonly api = inject(EngagementApi);
+  private readonly haptics = inject(Haptics);
 
   readonly courseId = input.required<string>();
   /** Enrolled (the course page's progress says so): offer the form. */
@@ -73,10 +77,7 @@ export class CourseReviews {
   /** The learner's own review: null = none yet (a 404 is an answer, not an error). */
   protected readonly mine = rxResource({
     params: () => (this.canReview() ? this.courseId() : undefined),
-    stream: ({ params: id }) =>
-      this.api
-        .myReview(id)
-        .pipe(catchError((e: unknown) => (isNotFound(e) ? of(null) : throwError(() => e)))),
+    stream: ({ params: id }) => this.api.myReview(id).pipe(nullIfNotFound()),
   });
 
   /** The saved review, or null (none yet, or it couldn't be loaded: the form starts empty). */
@@ -134,7 +135,10 @@ export class CourseReviews {
     this.api
       .writeReview(this.courseId(), { rating: this.draftRating(), body: this.draftBody().trim() })
       .subscribe({
-        next: (review) => this.afterWrite(review),
+        next: (review) => {
+          this.haptics.success();
+          this.afterWrite(review);
+        },
         error: (e: unknown) => this.failed(e),
       });
   }
@@ -156,6 +160,7 @@ export class CourseReviews {
 
   private failed(e: unknown): void {
     this.saving.set(false);
+    this.haptics.error();
     const reason = asProblem(e)?.reason;
     this.formError.set(
       reason === 'OWN_COURSE'

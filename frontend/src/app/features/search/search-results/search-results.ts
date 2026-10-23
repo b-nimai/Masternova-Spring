@@ -2,10 +2,10 @@ import { Component, computed, inject, input } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router } from '@angular/router';
 import { SearchApi, SearchMode } from '../../../core/api/search-api';
 import { CourseCard } from '../../catalog/course-card/course-card';
+import { Skeleton } from '../../../shared/skeleton/skeleton';
 
 const MODES: readonly SearchMode[] = ['HYBRID', 'KEYWORD', 'SEMANTIC'];
 
@@ -20,7 +20,7 @@ const MODES: readonly SearchMode[] = ['HYBRID', 'KEYWORD', 'SEMANTIC'];
  */
 @Component({
   selector: 'app-search-results',
-  imports: [MatButtonToggleModule, MatIconModule, MatProgressSpinnerModule, CourseCard],
+  imports: [Skeleton, MatButtonToggleModule, MatIconModule, CourseCard],
   templateUrl: './search-results.html',
   styleUrl: './search-results.scss',
 })

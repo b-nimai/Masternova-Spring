@@ -1,9 +1,10 @@
 .new-course {
-  max-width: 560px;
-  margin: 24px auto;
+  max-width: 792px;
+  margin: 16px auto 0;
 
   form {
     display: flex;
     flex-direction: column;
+    gap: 16px;
   }
 }

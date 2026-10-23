@@ -1,0 +1,103 @@
+// Figma "Navigation Bar": Rich Black 800, a 700 bottom border, 120 px gutters, 32 px gaps.
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  min-height: 56px;
+  padding: 0 max(16px, calc((100% - var(--mn-content-width)) / 2));
+  background: var(--mn-richblack-800);
+  border-bottom: 1px solid var(--mn-richblack-700);
+  box-sizing: border-box;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mn-richblack-5);
+  text-decoration: none;
+  font: 700 1.25rem / 1 var(--mn-font);
+  letter-spacing: -0.02em;
+}
+
+.links {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: 0;
+  background: none;
+  color: var(--mn-richblack-25);
+  font: 400 1rem / 1.5rem var(--mn-font);
+  text-decoration: none;
+  cursor: pointer;
+
+  &.active {
+    color: var(--mn-yellow-25);
+  }
+
+  mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+  }
+}
+
+.menu-button {
+  margin-left: auto;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--mn-richblack-100);
+}
+
+.search {
+  width: 18rem;
+}
+
+// Signed out: the Figma's Secondary button, at the bar's height.
+.auth {
+  --mat-button-outlined-container-height: 40px;
+  --mat-button-outlined-horizontal-padding: 12px;
+  border: 1px solid var(--mn-richblack-700);
+}
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-left: 8px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mn-yellow-50);
+  color: var(--mn-richblack-900);
+  font: 600 0.75rem / 1 var(--mn-font);
+  cursor: pointer;
+}
+
+// Phones: tighter gaps, and the logo without its word (the link keeps its aria-label).
+@media (max-width: 599px) {
+  .bar {
+    gap: 4px;
+  }
+
+  .actions {
+    gap: 0;
+  }
+
+  .brand span {
+    display: none;
+  }
+}

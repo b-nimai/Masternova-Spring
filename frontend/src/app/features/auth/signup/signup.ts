@@ -1,23 +1,29 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, input, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import { MatCardModule } from '@angular/material/card';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { RouterLink } from '@angular/router';
 import { asProblem } from '../../../core/api/problem';
 import { AuthApi } from '../../../core/auth/auth-api';
+import { AuthShell } from '../auth-shell/auth-shell';
 import { applyServerErrors, passwordsMatch } from '../form-utils';
+
+type JoinAs = 'STUDENT' | 'INSTRUCTOR';
 
 @Component({
   selector: 'app-signup',
   imports: [
     ReactiveFormsModule,
     RouterLink,
-    MatCardModule,
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    MatButtonToggleModule,
+    MatIconModule,
+    AuthShell,
   ],
   templateUrl: './signup.html',
   styleUrl: './signup.scss',
@@ -25,8 +31,14 @@ import { applyServerErrors, passwordsMatch } from '../form-utils';
 export class Signup {
   private readonly api = inject(AuthApi);
 
+  /** `?as=instructor` (the home page's "Become an Instructor") opens on the Instructor tab. */
+  readonly as = input<string>();
+
   protected readonly form = inject(NonNullableFormBuilder).group(
     {
+      // The Figma's Student / Instructor tabs. Not a role: Instructor files an application that
+      // an admin decides on (the account is a learner either way).
+      joinAs: ['STUDENT' as JoinAs],
       email: ['', [Validators.required, Validators.email, Validators.maxLength(320)]],
       displayName: ['', [Validators.required, Validators.maxLength(100)]],
       // 8–72: the SAME rule as the backend (72 = bcrypt's input limit). The server checks again.
@@ -37,8 +49,19 @@ export class Signup {
   );
   protected readonly submitting = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** One toggle shows both password fields, so the user can compare them. */
+  protected readonly showPasswords = signal(false);
   /** Set after success: the address the verification email went to. */
   protected readonly registeredEmail = signal<string | null>(null);
+  protected readonly appliedAsInstructor = signal(false);
+
+  constructor() {
+    // An effect, not ngOnInit: /signup?as=instructor → /signup reuses this component, and the tab
+    // must follow the URL (or a visitor files an application from the "plain" sign up)
+    effect(() =>
+      this.form.controls.joinAs.setValue(this.as() === 'instructor' ? 'INSTRUCTOR' : 'STUDENT'),
+    );
+  }
 
   protected submit(): void {
     if (this.form.invalid) {
@@ -47,9 +70,13 @@ export class Signup {
     }
     this.submitting.set(true);
     this.error.set(null);
-    const { email, displayName, password } = this.form.getRawValue();
-    this.api.signup({ email, displayName, password }).subscribe({
-      next: (user) => this.registeredEmail.set(user.email),
+    const { email, displayName, password, joinAs } = this.form.getRawValue();
+    const applyAsInstructor = joinAs === 'INSTRUCTOR';
+    this.api.signup({ email, displayName, password, applyAsInstructor }).subscribe({
+      next: (user) => {
+        this.appliedAsInstructor.set(applyAsInstructor);
+        this.registeredEmail.set(user.email);
+      },
       error: (e: unknown) => {
         const problem = asProblem(e);
         if (problem?.code === 'EMAIL_TAKEN') {
