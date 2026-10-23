@@ -11,6 +11,7 @@
 -- DelegatingPasswordEncoder; real accounts are always {bcrypt}):
 --   instructor@seed.test / seed-password   (INSTRUCTOR: owns most courses, sees /instructor)
 --   learner@seed.test    / seed-password
+--   admin@seed.test      / seed-password   (ADMIN: decides instructor applications, sees /admin)
 
 \set ON_ERROR_STOP on
 \if :{?courses}
@@ -42,7 +43,7 @@ DELETE FROM app_user WHERE email LIKE '%@seed.test';
 
 SELECT setseed(0.42);
 
--- 20 instructors + 1 learner. The first instructor is the one you can log in as.
+-- 20 instructors, 1 learner, 1 admin. The first instructor is the one you can log in as.
 INSERT INTO app_user (id, email, display_name, password_hash, email_verified_at, created_at, version)
 SELECT gen_random_uuid(),
        CASE WHEN n = 1 THEN 'instructor@seed.test' ELSE 'instructor' || n || '@seed.test' END,
@@ -53,11 +54,14 @@ SELECT gen_random_uuid(),
 FROM generate_series(1, 20) AS n;
 
 INSERT INTO app_user (id, email, display_name, password_hash, email_verified_at, created_at, version)
-VALUES (gen_random_uuid(), 'learner@seed.test', 'Lee Learner', '{noop}seed-password', now(), now(), 0);
+VALUES (gen_random_uuid(), 'learner@seed.test', 'Lee Learner', '{noop}seed-password', now(), now(), 0),
+       (gen_random_uuid(), 'admin@seed.test', 'Ada Admin', '{noop}seed-password', now(), now(), 0);
 
 INSERT INTO app_user_role (user_id, role)
-SELECT id, CASE WHEN email = 'learner@seed.test' THEN 'LEARNER' ELSE 'INSTRUCTOR' END
-FROM app_user WHERE email LIKE '%@seed.test';
+SELECT id, CASE WHEN email IN ('learner@seed.test', 'admin@seed.test') THEN 'LEARNER' ELSE 'INSTRUCTOR' END
+FROM app_user WHERE email LIKE '%@seed.test'
+UNION ALL
+SELECT id, 'ADMIN' FROM app_user WHERE email = 'admin@seed.test';
 
 -- Courses. Topic × flavour titles; the instructor, child category, level, language, price, rating
 -- and publish date vary pseudo-randomly. ~10 % stay drafts (published_at NULL).

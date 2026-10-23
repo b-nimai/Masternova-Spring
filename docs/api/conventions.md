@@ -272,12 +272,17 @@ is 401, not 404, so the API reveals nothing about what exists.
 
 | Endpoint | Body | Answer |
 |---|---|---|
-| `POST /auth/signup` | `{email, displayName, password}` | 201 `UserResponse`; 409 `EMAIL_TAKEN`; 400 field errors |
+| `POST /auth/signup` | `{email, displayName, password, applyAsInstructor?}` | 201 `UserResponse` (always a LEARNER; `applyAsInstructor` files an application); 409 `EMAIL_TAKEN`; 400 field errors |
 | `POST /auth/verify-email` | `{token}` | 204; 422 `VERIFICATION_TOKEN_INVALID` |
 | `POST /auth/login` | `{email, password}` | 200 `TokenResponse` + `Set-Cookie: mn_refresh`; 401 `INVALID_CREDENTIALS` |
 | `POST /auth/refresh` | none (the cookie) | 200 `TokenResponse` + a **rotated** cookie; 401 `SESSION_EXPIRED` / `SESSION_REVOKED` |
 | `POST /auth/logout` | none (the cookie) | 204; clears the cookie |
 | `GET /me` | — | 200 `UserResponse` |
+| `GET /me/instructor-application` | — | 200 `{status, pitch, appliedAt, decidedAt}`; 404 none yet |
+| `POST /me/instructor-application` | `{pitch?}` (≤ 500) | 201; 409 `APPLICATION_PENDING`; 422 `ALREADY_INSTRUCTOR`; a rejected applicant re-applies |
+| `GET /admin/instructor-applications` | — | 200 the pending queue, oldest first (`{items, nextCursor: null}`, capped at 100) |
+| `POST /admin/instructor-applications/{userId}/approve` · `…/reject` | none | 200; **idempotent**; approve grants `INSTRUCTOR` in the same transaction; 409 `APPLICATION_DECIDED` the other way |
+| `GET /admin/users?email=…` | — | 200 `UserResponse` (the admin page's lookup); 404 |
 
 - **Access token:** a 15-minute HS256 JWT with claims `sub` (user id), `roles`, `email_verified`
   and `sid`. Clients keep it **in memory**.
@@ -288,6 +293,8 @@ is 401, not 404, so the API reveals nothing about what exists.
 - **Errors from the security chain** use the same Problem Details shape: 401 `UNAUTHENTICATED`
   (with `WWW-Authenticate: Bearer`), 403 `FORBIDDEN` with `reason: INSUFFICIENT_ROLE`.
 - **Roles** live in the token, so a role change reaches the client at its next refresh.
+- **No one chooses a role.** Signup's Student / Instructor tabs file an *application*; an admin
+  approves it (Phase UI.10). The admin endpoints are ADMIN-only on the service, not the controller.
 
 Implemented by `identity.infrastructure.security.SecurityConfig`, `ProblemSecurityHandlers` and
 `identity.web.AuthController`. Design: [`docs/lld/identity.md`](../lld/identity.md).

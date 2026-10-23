@@ -6,7 +6,7 @@
 > deny-by-default security filter chain for the whole API.
 
 **Module:** `backend/api/src/main/java/com/masternova/api/identity` · **Status:** built (Phase 3: 3.1–3.10; Google sign-in 3.6 deferred)
-**Last updated:** 2026-10-02 · **Angular:** `frontend/src/app/core/auth/` (store, interceptor, guards) + `features/auth/` (pages)
+**Last updated:** 2026-10-22 · **Angular:** `frontend/src/app/core/auth/` (store, interceptor, guards) + `features/auth/` (pages)
 
 ## 1. Problem
 
@@ -43,6 +43,7 @@ moment either party uses it twice.
 | `AuthSession` (a device / login) | id = token family, user, created, last used, `revokedAt`, `revokeReason` | once revoked, never un-revoked; every refresh token belongs to one |
 | `RefreshToken` | id, session, `tokenHash` (unique), issued, expires, `consumedAt` | consumed **at most once** (conditional update); consumed + presented again → REUSE |
 | `VerificationToken` | id, user, `tokenHash`, purpose, expires, `usedAt` | single use, 24 h |
+| `InstructorApplication` (UI.10) | user id (= its id), status PENDING / APPROVED / REJECTED, optional pitch ≤ 500, applied, decided at / by, `@Version` | one per user; decided ⇔ `decidedAt` set (a DB check too); deciding the same way twice is a no-op, the other way is refused; only a decided one is resubmitted; **approved ⇒ the user holds INSTRUCTOR**, granted in the same transaction |
 
 ## 4. Class design
 
@@ -119,6 +120,24 @@ sequenceDiagram
 notification module in Phase 4; in dev the link is logged) → `POST /auth/verify-email {token}`
 sets `emailVerifiedAt`.
 
+**Becoming an instructor (UI.10):** no one picks a role. Signup's "Instructor" tab (or "Teach on
+Masternova" on the account page) files an application; the admin page lists the pending ones.
+
+```mermaid
+sequenceDiagram
+  participant L as Learner
+  participant A as API
+  participant D as Admin
+  L->>A: POST /auth/signup {…, applyAsInstructor: true}
+  A-->>L: 201 user (LEARNER) — one transaction: user + application PENDING
+  D->>A: GET /admin/instructor-applications
+  A-->>D: the queue, oldest first (applicants loaded in one query)
+  D->>A: POST /admin/instructor-applications/{id}/approve
+  A-->>D: 200 APPROVED — application + role INSTRUCTOR in one transaction (a repeat: same answer)
+  L->>A: POST /auth/refresh (within 15 min, or the account page asks for it)
+  A-->>L: a token with roles [LEARNER, INSTRUCTOR]
+```
+
 ## 6. Patterns used
 
 | Pattern | Where | The force that justified it |
@@ -151,6 +170,10 @@ See [ADR-0006](../adr/0006-rotating-refresh-tokens-over-stateless-jwt.md). In sh
 | two tabs refresh at once | conditional UPDATE: one wins | the loser gets 401 and its tab re-reads the cookie-backed state | single-flight refresh in the client |
 | duplicate signup | unique email | 409 `EMAIL_TAKEN` | — |
 | verification token expired / used | lookup | 422 `VERIFICATION_TOKEN_INVALID` | request a new one (later task) |
+| applying while pending / as an instructor | the application / the **stored** roles (the token may be stale) | 409 `APPLICATION_PENDING` / 422 `ALREADY_INSTRUCTOR` | wait for the admin |
+| two first applications at once | the primary key (`saveAndFlush` inside a try) | the loser gets 409 `APPLICATION_PENDING`, not a 500 | — |
+| an admin double-clicks Approve | already APPROVED | 200, nothing changes (idempotent) | — |
+| approve after reject (or the reverse) | the status | 409 `APPLICATION_DECIDED` | the applicant re-applies; demoting is the roles editor's job |
 
 ## 9. Data & indexes
 
@@ -163,6 +186,7 @@ See [ADR-0006](../adr/0006-rotating-refresh-tokens-over-stateless-jwt.md). In sh
 | `auth_session` | index on user |
 | `refresh_token` | `token_hash` UNIQUE, index on session |
 | `verification_token` | `token_hash` UNIQUE |
+| `instructor_application` (`V30`) | PK = user id; checks on status and "decided ⇔ `decided_at`"; a **partial** index on `applied_at` WHERE PENDING (the queue); `decided_by` indexed |
 
 All foreign keys are indexed (Postgres doesn't do it for you: note 10 §10).
 
@@ -179,6 +203,8 @@ All foreign keys are indexed (Postgres doesn't do it for you: note 10 §10).
 | a learner can't use admin endpoints (403 `INSUFFICIENT_ROLE`); a promoted role arrives with the **next refresh**; an admin can't demote themself (422 `CANNOT_DEMOTE_SELF`); invalid requests → 400 | `RbacIT` (5) | full app + Postgres |
 | the HTTP contract **without a database**: no token → 401 Problem + `WWW-Authenticate: Bearer` before any controller runs; the JWT becomes the `CurrentUser` passed to the service; an invalid body never reaches the service; domain exceptions → stable codes | `AdminUserControllerTest` (6) | ⭐ `@WebMvcTest` slice + real security chain + `jwt()` |
 | `@PreAuthorize("hasRole('ADMIN')")` lets ADMIN through, denies everyone else **before the method body runs**, and fails closed with no authentication | `UserAdminServiceSecurityTest` (3) | ⭐ tiny context + `@EnableMethodSecurity` + `@WithMockUser` |
+| a pending application starts with a trimmed optional pitch; deciding twice the same way keeps the first decision; a decision can't flip; a rejected applicant resubmits | `InstructorApplicationTest` (4) | plain JUnit |
+| signup's Instructor tab files an application and grants nothing; approve grants INSTRUCTOR once even when clicked twice; reject after approve → 409; apply later / re-apply after a rejection / 409 while pending; ⭐ an approved instructor can't re-apply even with a 15-minute-old LEARNER token (the rule reads the stored roles: 422); learners get 403 on the queue and decisions; the admin finds a user by email | `InstructorApplicationIT` (6) | full app + Postgres |
 | deny-by-default: an unknown route is 401, not 404 or 200 | `ApiApplicationIT` | full app |
 | identity uses only platform's public API | `ModularityTests` | static |
 

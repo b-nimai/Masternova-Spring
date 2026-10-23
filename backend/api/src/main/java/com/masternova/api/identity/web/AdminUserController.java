@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** ADMIN-only user management. The authorisation rule lives on UserAdminService. */
@@ -22,6 +23,11 @@ class AdminUserController {
 
   AdminUserController(UserAdminService admin) {
     this.admin = admin;
+  }
+
+  @GetMapping(params = "email")
+  UserResponse byEmail(@RequestParam String email) {
+    return UserResponse.from(admin.getByEmail(email));
   }
 
   @GetMapping("/{id}")

@@ -2,6 +2,7 @@ package com.masternova.api.identity.application;
 
 import com.masternova.api.identity.CurrentUser;
 import com.masternova.api.identity.Role;
+import com.masternova.api.identity.domain.Email;
 import com.masternova.api.identity.domain.User;
 import com.masternova.api.identity.domain.UserRepository;
 import com.masternova.api.platform.NotFoundException;
@@ -32,6 +33,14 @@ public class UserAdminService {
   @Transactional(readOnly = true)
   public User get(UUID userId) {
     return users.findById(userId).orElseThrow(() -> new NotFoundException("User", userId));
+  }
+
+  /** Admins know people by email, not by id: the admin page's lookup. */
+  @PreAuthorize("hasRole('ADMIN')")
+  @Transactional(readOnly = true)
+  public User getByEmail(String email) {
+    String normalised = new Email(email).value();
+    return users.findByEmail(normalised).orElseThrow(() -> new NotFoundException("User", email));
   }
 
   @PreAuthorize("hasRole('ADMIN')")

@@ -52,7 +52,11 @@ class AuthController {
   ResponseEntity<UserResponse> signup(@Valid @RequestBody SignupRequest request) {
     User user =
         signup.signup(
-            new SignupCommand(request.email(), request.displayName(), request.password()));
+            new SignupCommand(
+                request.email(),
+                request.displayName(),
+                request.password(),
+                Boolean.TRUE.equals(request.applyAsInstructor())));
     return ResponseEntity.created(URI.create("/api/v1/me")).body(UserResponse.from(user));
   }
 
