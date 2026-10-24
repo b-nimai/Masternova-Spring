@@ -91,6 +91,7 @@ TAG ?= $(eval TAG := $(shell h=$$(git rev-parse --short=7 HEAD); \
   git diff --quiet HEAD -- backend frontend && echo sha-$$h \
   || echo sha-$$h-dirty-$$(git diff HEAD -- backend frontend | shasum | cut -c1-7)))$(TAG)
 REGISTRY := localhost:5050
+BARMAN_PLUGIN := https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.15.1/manifest.yaml
 
 k8s-up: ## Create the local k3d cluster (3 nodes, registry on :5050, ingress on :8082/:8443)
 	k3d cluster list masternova >/dev/null 2>&1 || k3d cluster create --config deploy/k3d/cluster.yaml
@@ -112,6 +113,9 @@ k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ lo
 	  -n cert-manager --create-namespace --set crds.enabled=true --wait
 	kubectl apply -f deploy/k3d/local-ca.yaml
 	kubectl -n cert-manager wait certificate/masternova-local-ca --for=condition=Ready --timeout=60s
+	@# CNPG's Barman Cloud plugin (D5.4): WAL archiving + base backups as a sidecar; needs cert-manager
+	kubectl apply -f $(BARMAN_PLUGIN)
+	kubectl -n cnpg-system rollout status deploy/barman-cloud --timeout=180s
 	helm repo add argo https://argoproj.github.io/argo-helm --force-update >/dev/null
 	helm upgrade --install argocd argo/argo-cd --version 10.10.5 -n argocd --create-namespace \
 	  -f deploy/k3d/argocd-values.yaml --wait

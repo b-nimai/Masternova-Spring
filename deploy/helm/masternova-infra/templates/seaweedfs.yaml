@@ -85,6 +85,8 @@ spec:
             {{- toYaml $creds | nindent 12 }}
             - { name: AWS_DEFAULT_REGION, value: us-east-1 }
             - { name: BUCKET, value: {{ $s.bucket }} }
+            - name: BACKUP_BUCKET
+              value: {{ ternary (trimPrefix "s3://" .Values.postgres.backup.destinationPath | trimSuffix "/") "" .Values.postgres.backup.enabled | quote }}
             - name: CORS
               value: {{ dict "CORSRules" (list (dict "AllowedOrigins" $s.corsOrigins "AllowedMethods" (list "PUT" "GET" "HEAD") "AllowedHeaders" (list "*") "ExposeHeaders" (list "ETag") "MaxAgeSeconds" 3000)) | toJson | quote }}
           command: [/bin/sh, -c]
@@ -94,6 +96,9 @@ spec:
               s3="aws --endpoint-url http://seaweedfs:8333"
               $s3 s3api head-bucket --bucket "$BUCKET" 2>/dev/null || $s3 s3api create-bucket --bucket "$BUCKET"
               $s3 s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "$CORS"
+              # the database backups' bucket (D5.4), private: no CORS, never presigned
+              [ -z "$BACKUP_BUCKET" ] || $s3 s3api head-bucket --bucket "$BACKUP_BUCKET" 2>/dev/null \
+                || $s3 s3api create-bucket --bucket "$BACKUP_BUCKET"
               echo "media-init: $BUCKET + cors ready"
           resources:
             requests: { cpu: 50m, memory: 64Mi }

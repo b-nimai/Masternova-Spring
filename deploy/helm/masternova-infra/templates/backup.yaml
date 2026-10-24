@@ -1,0 +1,51 @@
+{{- $b := .Values.postgres.backup -}}
+{{- if $b.enabled }}
+# Backups (D5.4): the Barman Cloud plugin archives every WAL segment and takes a daily base backup
+# into an S3 bucket; together they allow a restore to any second inside the retention window
+# (point-in-time recovery). The plugin, not CNPG's in-tree `barmanObjectStore`: the "standard"
+# Postgres images carry no barman-cloud binaries, the plugin brings them as a sidecar
+# (docs/runbooks/restore-database.md).
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ $b.objectStore }}
+  labels: {{- include "infra.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  retentionPolicy: {{ $b.retention | quote }}
+  configuration:
+    destinationPath: {{ $b.destinationPath }}
+    endpointURL: {{ $b.endpointURL }}
+    s3Credentials:
+      accessKeyId: { name: {{ $b.credentialsSecret }}, key: ACCESS_KEY_ID }
+      secretAccessKey: { name: {{ $b.credentialsSecret }}, key: ACCESS_SECRET_KEY }
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: masternova-db-daily
+  labels: {{- include "infra.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+spec:
+  schedule: {{ $b.schedule | quote }} # six fields: seconds first
+  backupOwnerReference: self
+  cluster: { name: masternova-db }
+  method: plugin
+  pluginConfiguration: { name: barman-cloud.cloudnative-pg.io }
+{{- if $b.devCredentials }}
+---
+# The local stack's SeaweedFS accepts any key (ADR-0012). A real environment never sets
+# devCredentials: its Secret comes from the secret store (or IRSA: inheritFromIAMRole).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $b.credentialsSecret }}
+  labels: {{- include "infra.labels" (dict "root" . "component" "postgres") | nindent 4 }}
+type: Opaque
+stringData:
+  ACCESS_KEY_ID: masternova
+  ACCESS_SECRET_KEY: masternova-dev-secret
+{{- end }}
+{{- end }}

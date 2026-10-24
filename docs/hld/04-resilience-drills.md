@@ -1,6 +1,6 @@
 # Resilience drills: kill things on purpose
 
-**Last updated:** 2026-10-24 (D5.3) · **Status:** run on the local k3d cluster
+**Last updated:** 2026-10-24 (D5.3, D5.4) · **Status:** run on the local k3d cluster
 
 Each drill breaks one part of the running system, under load where it matters, and checks a claim
 the design makes. The scripts are in [`load/chaos/`](../../load/chaos/); each prints what clients
@@ -85,20 +85,45 @@ pod reached a connection that died mid-statement and became 500 `INTERNAL`. They
 The api never restarted. Its liveness doesn't check the database (D4), and Hikari replaced the
 dead connections on its own: `masternova-db-rw` follows the primary.
 
-## 4. Found by the drills
+## 4. Backup and point-in-time restore (D5.4)
+
+WAL archiving and base backups go to S3 (the in-cluster SeaweedFS for the drill) through CNPG's
+**Barman Cloud plugin**, not the in-tree `barmanObjectStore`: the `standard` Postgres images have
+no barman-cloud binaries, and the plugin brings them as a sidecar.
+[`load/chaos/pitr-drill.sh`](../../load/chaos/pitr-drill.sh):
+
+1. an on-demand base backup (11 s);
+2. a marker row; **T**; the marker deleted (the "accident");
+3. `pg_switch_wal()` and wait until that segment is archived;
+4. a **new** cluster restored to T, from the bucket;
+5. the marker is back in the restore and still gone from the live database.
+
+| | Result |
+|---|---|
+| Correctness | ✅ the deleted row is back at T; 10,000 / 10,000 courses |
+| **RPO** | ≤ 60 s (`archive_timeout: 60s`); 0 for anything older than the last archived segment |
+| **RTO**, images cached | **57 s** create → Ready |
+| RTO, cold node | **73 min**: image pulls on this network (sidecar 7 min, Postgres image after failed pulls) |
+
+Runbook: [restore-database.md](../runbooks/restore-database.md).
+
+## 5. Found by the drills
 
 | Finding | Fix |
 |---|---|
 | **SeaweedFS wedged.** After ~19 h through host sleep cycles and large uploads it spun at 5.1 cores at 475 Mi of a 512 Mi limit; its own `AssignVolume` RPCs timed out. Readiness took it out of the Service, and the api answered every upload with a fast 503 `STORAGE_UNAVAILABLE`, as designed. But nothing restarted it: there was no liveness probe | A liveness probe (`/healthz`, 6 × 5 s); memory 512 Mi → 1 Gi; `GOMEMLIMIT=768MiB`. It held 855 MB of *anonymous* memory after a few 167 MiB uploads: Go's GC paces on the heap, not the cgroup. After the change, one 167 MiB upload took it from 139 Mi to 535 Mi (anon 556 MB): still under the soft limit, so whether the GC holds it at ~768 Mi is not yet observed. The liveness probe is the safety net either way. |
 | **A failover surfaced as a few 500s.** Most requests in the gap got 503 `OVERLOADED` (no connection within 2 s). The ones on a connection that died mid-statement (`PSQLException`, SQLSTATE `08006`) fell through to 500 `INTERNAL` | `GlobalExceptionHandler`: SQLSTATE class `08` and `57P01–03` → 503 `DATABASE_UNAVAILABLE` + `Retry-After` (API conventions §1) |
+| **Enabling backups took the database down for ~10 min.** CNPG's default `primaryUpdateMethod: restart` restarts the primary *in place* for a change that needs a restart (here: adding the sidecar). Its node took 10 min to pull the sidecar image, with no primary meanwhile | `primaryUpdateMethod: switchover` in the chart: the standby, already updated and running, is promoted first |
+| **The first PITR drill "passed" while its restore had timed out.** A `grep` after the script hid its exit code, and the script's cleanup didn't run on failure (the drill schema stayed in the live database) | `trap` cleanup in the script; drill results are read from the script's own verdict line |
 | **The SeaweedFS spin was also load-test noise.** A storage server spinning at 5 cores on an 8-vCPU laptop explains some of the D5.1 runs that measured far worse than their neighbours | Recorded in [capacity §6](03-capacity.md) |
 
-## 5. Reproduce
+## 6. Reproduce
 
 ```bash
 load/chaos/kill-worker-mid-transcode.sh             # crash; GRACEFUL=1 for SIGTERM
 load/chaos/kill-under-load.sh api                   # crash; GRACEFUL=1 for a pod delete
 load/chaos/kill-under-load.sh primary
+load/chaos/pitr-drill.sh                            # KEEP=1 keeps the restored cluster
 ```
 
 The drills need `ffmpeg` and `jq` on the host, and `docker exec` into the k3d nodes (crash mode).
