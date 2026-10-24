@@ -1,6 +1,6 @@
 # Catalog indexes — measured, not guessed
 
-**Last updated:** 2026-10-02 · **Task:** 5.9 · **Migration:** [`V8__catalog_indexes.sql`](../../backend/api/src/main/resources/db/migration/V8__catalog_indexes.sql) · **LLD:** [`../lld/catalog.md`](../lld/catalog.md) §9 · **ADR:** [0009 keyset pagination](../adr/0009-keyset-pagination-over-offset.md)
+**Last updated:** 2026-10-23 · **Task:** 5.9, D5.2 · **Migration:** [`V8__catalog_indexes.sql`](../../backend/api/src/main/resources/db/migration/V8__catalog_indexes.sql) · **LLD:** [`../lld/catalog.md`](../lld/catalog.md) §9 · **ADR:** [0009 keyset pagination](../adr/0009-keyset-pagination-over-offset.md)
 
 > **One-liner:** every list query the catalog sends was measured with `EXPLAIN ANALYZE` on 10,000
 > seeded courses **before** an index existed (V6 had none on purpose), each candidate index was
@@ -215,3 +215,53 @@ Three findings, each now in code and in a test:
    out (unpublished since the last sweep).
 3. The distance cut-off sits in an **outer** query around `ORDER BY embedding <=> :q LIMIT n`:
    inside, it would no longer be the index's ordering and the plan falls back to the exact scan.
+
+## 10. D5.2 — where the real mix spends database time (2026-10-23)
+
+Phases 5 and 11 measured each query alone. D5.2 asks a different question: **under the D5.1 traffic
+mix, which statements cost the most in total** (calls × mean), on the cluster's CNPG Postgres 17?
+
+`pg_stat_statements` is now on in the infra chart (`pg_stat_statements.max: 5000`, `track: top`;
+any `pg_stat_statements.*` parameter makes CNPG preload the library and create the extension).
+Turning it on restarts Postgres once: CNPG rolls the standby, then the primary; the api pods
+reconnected without a restart. Method: `pg_stat_statements_reset()`, 3 minutes of
+`RATE=100 k6 run load/slo-mix.js`, then:
+
+```sql
+SELECT total_exec_time, calls, mean_exec_time, rows / calls, query
+FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 15;
+```
+
+| Share of DB time | Calls | Mean | Statement |
+|---:|---:|---:|---|
+| **36.4 %** | 1,777 | 5.81 ms | keyword search (`KeywordRanker`: `websearch_to_tsquery` ×2, `ts_rank_cd`, top 100) |
+| **18.5 %** | 865 | 6.07 ms | typeahead (`suggestTitles`: `<%` + `word_similarity`, top 8) |
+| 15.2 % | 6,279 | 0.69 ms | course list page (keyset, V8's index) |
+| 7.9 % | 1,920 | 1.17 ms | category filter, highest rated |
+| 4.6 % | 2,793 | 0.47 ms | course detail |
+| 2.8 % + 2.2 % | 2,793 + 1,795 | 0.29 / 0.35 ms | curriculum lectures (`section_id = ANY(…)`: one query per page, no N+1) |
+| 1.7 % | 14,443 | 0.03 ms | `BEGIN READ ONLY` (every `@Transactional(readOnly = true)`) |
+
+Search and typeahead are 15 % of the traffic and **55 % of the database time**. `EXPLAIN (ANALYZE,
+BUFFERS)` on both, warm:
+
+- **Keyword "spring boot":** the GIN index finds 452 matches in **0.16 ms**; the other 4.8 ms is
+  the heap: 428 blocks, one per match, to compute `ts_rank_cd` over each vector before the top-N
+  sort. That's §9's finding again: for a common word the rank, not the lookup, is the cost.
+- **Typeahead "kub":** the trigram GIN returns 500 candidates in 0.2 ms; reading and scoring them
+  (`word_similarity`, 459 heap blocks) is the other ~3 ms.
+
+**Tried and rejected: KNN on a GiST trigram index.** `gist (lower(title) gist_trgm_ops) WHERE
+status = 'PUBLISHED'` can return rows *in distance order* (`ORDER BY 'kub' <<<-> lower(title)`), so
+in principle a top-8 stops after 8 rows. It didn't: **2.2 ms vs 1.25 ms** for the current plan
+(same transaction, rolled back). The seed builds 10,000 titles from ~20 templates, so 451 titles
+are *equally* close to "kub"; the index can't stop at 8 among ties, and a GiST scan is slower than
+GIN's bitmap. Not shipped.
+
+**Why nothing was changed:** both statements cost in proportion to the number of matches, and
+the seed exaggerates that number (~450 matches for any word, where a real catalog's titles are far
+more varied). At 5–6 ms they are well inside the 300 ms budget; during the D5.1 collapse they
+waited for a connection, not on the planner. The lever that matters at the knee is how many
+statements run at once, which is the pool's job (capacity §8). If search grows into a real cost,
+the next steps are a cap on matches ranked (rank the first *n* by a cheaper score) or moving
+search off the primary to the CNPG standby (`masternova-db-r`).

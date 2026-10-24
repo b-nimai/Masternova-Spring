@@ -1,6 +1,6 @@
 import { expect, Page, test } from "@playwright/test";
 import path from "node:path";
-import { logIn } from "./helpers";
+import { cspViolations, logIn } from "./helpers";
 
 /**
  * Phase 7 end to end, in the real stack: the browser uploads a video straight to S3 (SeaweedFS),
@@ -35,6 +35,7 @@ test.describe("media", () => {
     page,
   }) => {
     test.setTimeout(180_000); // a real transcode in the worker
+    const violations = cspViolations(page); // storage, blob: media and the hls.js worker (D5.5)
     await newCourseOnCurriculumStep(page);
 
     // the browser PUTs the parts straight to storage; the api only planned and completes
@@ -63,5 +64,6 @@ test.describe("media", () => {
     await expect
       .poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime), { timeout: 30_000 })
       .toBeGreaterThan(0.5); // ⭐ segments actually decoded and played
+    expect(violations).toEqual([]);
   });
 });

@@ -48,7 +48,8 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
 @WebMvcTest(
     controllers = AdminUserController.class,
     // the idempotency filter is a platform web component the slice would pick up; it isn't under
-    // test here and needs a database-backed store
+    // test here and needs a database-backed store. (The bulkhead stays: the slice runs the real
+    // filter chain, SecuritySliceConfig gives it its settings and a meter registry.)
     excludeFilters =
         @ComponentScan.Filter(
             type = FilterType.REGEX,

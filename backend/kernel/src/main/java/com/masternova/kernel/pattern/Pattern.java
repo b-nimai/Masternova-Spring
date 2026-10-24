@@ -28,7 +28,10 @@ public enum Pattern {
   SPECIFICATION(Category.ENTERPRISE),
   UNIT_OF_WORK(Category.ENTERPRISE),
   TRANSACTIONAL_OUTBOX(Category.ENTERPRISE),
-  VALUE_OBJECT(Category.ENTERPRISE);
+  VALUE_OBJECT(Category.ENTERPRISE),
+
+  // Resilience
+  BULKHEAD(Category.RESILIENCE);
 
   private final Category category;
 
@@ -44,6 +47,7 @@ public enum Pattern {
     CREATIONAL,
     STRUCTURAL,
     BEHAVIORAL,
-    ENTERPRISE
+    ENTERPRISE,
+    RESILIENCE
   }
 }

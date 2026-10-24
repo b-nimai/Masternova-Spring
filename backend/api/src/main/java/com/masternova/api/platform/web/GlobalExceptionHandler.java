@@ -1,6 +1,7 @@
 package com.masternova.api.platform.web;
 
 import com.masternova.api.platform.ConflictException;
+import com.masternova.api.platform.DatabaseFailures;
 import com.masternova.api.platform.DomainException;
 import com.masternova.api.platform.ForbiddenException;
 import com.masternova.api.platform.NotFoundException;
@@ -14,6 +15,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -105,6 +107,18 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest request) {
+    Optional<DatabaseFailures.Unavailable> unavailable =
+        DatabaseFailures.classify(ex, request.getMethod());
+    if (unavailable.isPresent()) {
+      // the database is busy or gone: not a bug, so no stack trace per request at the worst moment
+      DatabaseFailures.Unavailable u = unavailable.get();
+      log.warn("{} on {} {}", u.code(), request.getMethod(), request.getRequestURI());
+      ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE);
+      if (u.retryable()) {
+        response.header(HttpHeaders.RETRY_AFTER, "1");
+      }
+      return response.body(problem(HttpStatus.SERVICE_UNAVAILABLE, u.code(), u.detail(), request));
+    }
     log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
         .body(

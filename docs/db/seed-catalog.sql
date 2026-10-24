@@ -12,6 +12,7 @@
 --   instructor@seed.test / seed-password   (INSTRUCTOR: owns most courses, sees /instructor)
 --   learner@seed.test    / seed-password
 --   admin@seed.test      / seed-password   (ADMIN: decides instructor applications, sees /admin)
+--   learner2..learner50@seed.test / seed-password   (the k6 learners of load/slo-mix.js, D5.1)
 
 \set ON_ERROR_STOP on
 \if :{?courses}
@@ -43,7 +44,7 @@ DELETE FROM app_user WHERE email LIKE '%@seed.test';
 
 SELECT setseed(0.42);
 
--- 20 instructors, 1 learner, 1 admin. The first instructor is the one you can log in as.
+-- 20 instructors, 50 learners, 1 admin. The first instructor is the one you can log in as.
 INSERT INTO app_user (id, email, display_name, password_hash, email_verified_at, created_at, version)
 SELECT gen_random_uuid(),
        CASE WHEN n = 1 THEN 'instructor@seed.test' ELSE 'instructor' || n || '@seed.test' END,
@@ -57,8 +58,13 @@ INSERT INTO app_user (id, email, display_name, password_hash, email_verified_at,
 VALUES (gen_random_uuid(), 'learner@seed.test', 'Lee Learner', '{noop}seed-password', now(), now(), 0),
        (gen_random_uuid(), 'admin@seed.test', 'Ada Admin', '{noop}seed-password', now(), now(), 0);
 
+INSERT INTO app_user (id, email, display_name, password_hash, email_verified_at, created_at, version)
+SELECT gen_random_uuid(), 'learner' || n || '@seed.test', 'Load Learner ' || n,
+       '{noop}seed-password', now(), now(), 0
+FROM generate_series(2, 50) AS n;
+
 INSERT INTO app_user_role (user_id, role)
-SELECT id, CASE WHEN email IN ('learner@seed.test', 'admin@seed.test') THEN 'LEARNER' ELSE 'INSTRUCTOR' END
+SELECT id, CASE WHEN email LIKE 'instructor%' THEN 'INSTRUCTOR' ELSE 'LEARNER' END
 FROM app_user WHERE email LIKE '%@seed.test'
 UNION ALL
 SELECT id, 'ADMIN' FROM app_user WHERE email = 'admin@seed.test';

@@ -31,14 +31,30 @@ spec:
         - name: seaweedfs
           image: {{ $s.image }}
           args: [server, -s3, -dir=/data, -volume.max=0]
-          env: {{- toYaml $creds | nindent 12 }}
+          env:
+            {{- toYaml $creds | nindent 12 }}
+            # ⭐ D5.3: Go's GC paces itself on the heap, not the cgroup: without a soft limit the heap
+            #    grew past 850 MiB of anonymous memory after a few large uploads and then spun at the
+            #    hard limit. GOMEMLIMIT (75 % of it) makes the GC collect, and return memory, earlier.
+            - { name: GOMEMLIMIT, value: "{{ div (mul $s.memoryLimitMi 3) 4 }}MiB" }
           ports: [{ name: s3, containerPort: 8333 }]
           readinessProbe:
             httpGet: { path: /healthz, port: s3 }
             periodSeconds: 5
+          # ⭐ D5.3: after ~19 h through host sleep cycles SeaweedFS wedged (its own AssignVolume RPCs
+          #    timed out). Readiness took it out of the Service (the api answered 503
+          #    STORAGE_UNAVAILABLE, as designed) but nothing restarted it. One process holds master,
+          #    volume, filer and S3: a minute without /healthz is a restart.
+          livenessProbe:
+            httpGet: { path: /healthz, port: s3 }
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # D5.3: 512Mi wasn't enough (values: memoryLimitMi). Two 167 MiB multipart uploads took it
+          # from 149Mi to 479Mi, and near the limit Go's GC spun at 5 cores until the process wedged.
           resources:
-            requests: { cpu: 100m, memory: 256Mi }
-            limits: { memory: 512Mi }
+            requests: { cpu: 100m, memory: {{ div $s.memoryLimitMi 2 }}Mi }
+            limits: { memory: {{ $s.memoryLimitMi }}Mi }
           volumeMounts: [{ name: data, mountPath: /data }]
   volumeClaimTemplates:
     - metadata: { name: data }
@@ -69,6 +85,9 @@ spec:
             {{- toYaml $creds | nindent 12 }}
             - { name: AWS_DEFAULT_REGION, value: us-east-1 }
             - { name: BUCKET, value: {{ $s.bucket }} }
+            - name: BACKUP_BUCKET
+              # the bucket only: s3://bucket/some/prefix/ → bucket
+              value: {{ ternary (trimPrefix "s3://" .Values.postgres.backup.destinationPath | regexFind "^[^/]+") "" .Values.postgres.backup.enabled | quote }}
             - name: CORS
               value: {{ dict "CORSRules" (list (dict "AllowedOrigins" $s.corsOrigins "AllowedMethods" (list "PUT" "GET" "HEAD") "AllowedHeaders" (list "*") "ExposeHeaders" (list "ETag") "MaxAgeSeconds" 3000)) | toJson | quote }}
           command: [/bin/sh, -c]
@@ -78,6 +97,9 @@ spec:
               s3="aws --endpoint-url http://seaweedfs:8333"
               $s3 s3api head-bucket --bucket "$BUCKET" 2>/dev/null || $s3 s3api create-bucket --bucket "$BUCKET"
               $s3 s3api put-bucket-cors --bucket "$BUCKET" --cors-configuration "$CORS"
+              # the database backups' bucket (D5.4), private: no CORS, never presigned
+              [ -z "$BACKUP_BUCKET" ] || $s3 s3api head-bucket --bucket "$BACKUP_BUCKET" 2>/dev/null \
+                || $s3 s3api create-bucket --bucket "$BACKUP_BUCKET"
               echo "media-init: $BUCKET + cors ready"
           resources:
             requests: { cpu: 50m, memory: 64Mi }

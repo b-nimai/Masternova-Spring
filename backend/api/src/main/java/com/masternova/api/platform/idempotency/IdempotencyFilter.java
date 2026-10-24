@@ -1,5 +1,6 @@
 package com.masternova.api.platform.idempotency;
 
+import com.masternova.api.platform.DatabaseFailures;
 import com.masternova.api.platform.MasternovaProperties;
 import com.masternova.api.platform.ProblemTypes;
 import com.masternova.api.platform.idempotency.IdempotencyStore.Claim;
@@ -20,8 +21,6 @@ import java.util.HexFormat;
 import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -89,14 +88,27 @@ class IdempotencyFilter extends OncePerRequestFilter {
     byte[] body = StreamUtils.copyToByteArray(request.getInputStream());
     String caller = caller();
     Instant now = clock.instant();
-    Claim claim =
-        store.claim(
-            caller,
-            key,
-            hash(request, body),
-            now,
-            now.plus(settings.inProgressTimeout()),
-            now.plus(settings.retention()));
+    Claim claim;
+    try {
+      claim =
+          store.claim(
+              caller,
+              key,
+              hash(request, body),
+              now,
+              now.plus(settings.inProgressTimeout()),
+              now.plus(settings.retention()));
+    } catch (RuntimeException e) {
+      // ⭐ this filter reaches the database BEFORE Spring MVC, so GlobalExceptionHandler never sees
+      //    its failures: the same policy here, or a busy pool becomes a bare 500
+      DatabaseFailures.Unavailable u =
+          DatabaseFailures.classify(e, request.getMethod()).orElseThrow(() -> e);
+      if (u.retryable()) {
+        response.setHeader(HttpHeaders.RETRY_AFTER, "1");
+      }
+      writeProblem(request, response, HttpStatus.SERVICE_UNAVAILABLE, u.code(), u.detail());
+      return;
+    }
 
     // ⭐ exhaustive over the sealed Claim type (note 02)
     switch (claim) {
@@ -171,10 +183,7 @@ class IdempotencyFilter extends OncePerRequestFilter {
       String code,
       String detail)
       throws IOException {
-    ProblemDetail problem = ProblemTypes.problem(status, code, detail, request);
-    response.setStatus(status.value());
-    response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-    response.getOutputStream().write(json.writeValueAsBytes(problem));
+    ProblemTypes.write(response, json, ProblemTypes.problem(status, code, detail, request));
   }
 
   /** Keys are scoped PER CALLER: one user can never see another user's stored response. */

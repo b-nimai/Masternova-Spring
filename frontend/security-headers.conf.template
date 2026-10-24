@@ -1,0 +1,20 @@
+# Security headers (D5.5, found by OWASP ZAP's baseline). nginx's image renders this template at
+# start (envsubst, only ${STORAGE_ORIGIN}) into /var/run/, the one writable place in a
+# read-only container; nginx.conf includes it in the locations that serve the SPA and its assets
+# (not /api, where Spring Security sets its own).
+#
+# CSP, source by source:
+#   script-src  'self' + Razorpay Checkout (loaded the first time someone pays). No 'unsafe-inline':
+#               the build doesn't inline critical CSS (angular.json), whose loader is an inline script.
+#   style-src   'unsafe-inline': Angular adds component styles as <style> elements at runtime.
+#   connect-src storage: the browser PUTs upload parts and hls.js fetches segments, presigned.
+#   media-src   blob: (hls.js feeds the <video> through Media Source Extensions) + storage.
+#   worker-src  blob: (hls.js transmuxes in a worker built from a blob).
+#   frame-src   Razorpay's checkout iframe. frame-ancestors 'none': nobody frames us (clickjacking).
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: ${STORAGE_ORIGIN} https://*.razorpay.com; media-src 'self' blob: ${STORAGE_ORIGIN}; connect-src 'self' ${STORAGE_ORIGIN} https://*.razorpay.com; worker-src 'self' blob:; frame-src https://api.razorpay.com https://checkout.razorpay.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" always;
+add_header X-Frame-Options "DENY" always; # frame-ancestors' fallback for old browsers
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(self \"https://checkout.razorpay.com\" \"https://api.razorpay.com\")" always;
+# Browsers ignore HSTS over plain http (compose); behind TLS (the cluster's Traefik) it pins https.
+add_header Strict-Transport-Security "max-age=31536000" always;

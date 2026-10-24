@@ -1,6 +1,6 @@
 # Runbooks
 
-**Last updated:** 2026-10-15
+**Last updated:** 2026-10-24
 
 One runbook per alert, written in Phase D3 when the alert is created. Each one answers four
 questions:
@@ -28,3 +28,4 @@ Locally, notifications land in Mailpit (<http://localhost:8026>) through Alertma
 | Task | Runbook |
 |---|---|
 | Deploy (GitOps), roll back, failed migration, drain a node | [deploy-and-rollback.md](deploy-and-rollback.md) |
+| Restore the database to a point in time (data is wrong, not down) | [restore-database.md](restore-database.md) |

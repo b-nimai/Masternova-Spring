@@ -64,6 +64,10 @@ worker:
 
 web:
   replicas: 2
+  # The CSP's storage origin (D5.5): where browsers PUT upload parts and fetch HLS segments. Empty =
+  # config.STORAGE_PUBLIC_ENDPOINT, else config.STORAGE_ENDPOINT. Real S3 (STORAGE_ENDPOINT "")
+  # sets it: https://<bucket>.s3.<region>.amazonaws.com
+  storageOrigin: ""
   resources:
     requests: { cpu: 20m, memory: 32Mi }
     limits: { cpu: 500m, memory: 128Mi }

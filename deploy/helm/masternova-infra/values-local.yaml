@@ -1,4 +1,8 @@
 # The local k3d cluster (Argo CD's masternova-infra Application, D4.7)
+postgres:
+  backup:
+    enabled: true # into the in-cluster SeaweedFS: the drill's store, not an off-site copy
+    devCredentials: true
 seaweedfs:
   corsOrigins: [https://masternova.localhost:8443]
 ingress:

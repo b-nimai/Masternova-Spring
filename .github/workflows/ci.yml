@@ -9,6 +9,9 @@
 #                  images by digest, with SBOM + provenance attestations
 #   publish      → on main: one tag for both platforms (:sha-<commit>, :main), signed keylessly with cosign
 #   helm         → lint both charts, validate what they render (kubeconform, CRD schemas included)
+#   secrets      → gitleaks over the WHOLE git history, on every run (no path filter: a secret can
+#                  arrive in any file)
+#   e2e (+ DAST) → after Playwright, OWASP ZAP's baseline scans the same running stack
 # Versioned releases (vX.Y.Z tags) live in release.yml. Deploying is GitOps (D4.7): a commit that
 # changes the image tag in deploy/helm/masternova/values-local.yaml, synced by Argo CD.
 name: CI
@@ -354,6 +357,18 @@ jobs:
           DIGEST: ${{ steps.index.outputs.digest }}
         run: cosign sign --yes "$IMAGE@$DIGEST"
 
+  # ⭐ The whole history, not the diff: a secret committed and deleted later is still in git, and
+  #    only rotating it fixes that. Same command as `make secrets-scan` (.gitleaks.toml allowlists
+  #    only test fixtures under src/test).
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: gitleaks (all commits)
+        run: make secrets-scan
+
   e2e:
     needs: [changes, images]
     if: >-
@@ -400,6 +415,9 @@ jobs:
           tags: masternova-spring/web:local
           load: true
           cache-from: type=gha,scope=web-amd64
+      # the ZAP image is large: pull it while the stack boots and Playwright runs (DAST step below)
+      - name: Pull the ZAP image in the background
+        run: nohup docker pull -q "$(make -s -f Makefile print-zap-image)" >/dev/null 2>&1 &
       - name: Start the stack
         run: |
           make secrets
@@ -422,6 +440,17 @@ jobs:
       - name: Run e2e tests
         working-directory: e2e
         run: pnpm test
+      # ⭐ DAST on the stack Playwright just used: spider + passive rules (headers, cookies,
+      #    information leaks), no attacks. .zap/rules.tsv decides what FAILs; the rest is a WARN in
+      #    the report. A finding is fixed in nginx/Spring Security or justified in rules.tsv.
+      - name: DAST (OWASP ZAP baseline)
+        run: make zap
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap
+          path: .zap/report.*
       - name: Upload Playwright report and traces
         if: failure()
         uses: actions/upload-artifact@v7
@@ -439,7 +468,7 @@ jobs:
   #    single stable status, so the protection rule never needs editing.
   ci-ok:
     if: always()
-    needs: [changes, backend, patterns-lab, frontend, workflows, observability, helm, images, publish, e2e]
+    needs: [changes, backend, patterns-lab, frontend, workflows, observability, helm, secrets, images, publish, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Every job succeeded or was skipped

@@ -71,3 +71,18 @@ export function linkTo(text: string, path: string): string {
   }
   return match[0];
 }
+
+/**
+ * Collects every Content-Security-Policy violation the page reports (D5.5). A blocked font, image
+ * or worker breaks nothing a test asserts on, so without this a CSP regression passes silently.
+ * Call before navigating; assert `toEqual([])` at the end.
+ */
+export function cspViolations(page: Page): string[] {
+  const seen: string[] = [];
+  page.on('console', (msg) => {
+    if (msg.type() === 'error' && /Content Security Policy/i.test(msg.text())) {
+      seen.push(msg.text());
+    }
+  });
+  return seen;
+}

@@ -77,6 +77,34 @@ scan: images ## Scan images for HIGH/CRITICAL CVEs with Trivy (runs in Docker)
 	    --severity HIGH,CRITICAL --ignore-unfixed masternova-spring/$$img:local; \
 	done
 
+GITLEAKS_IMAGE := ghcr.io/gitleaks/gitleaks:v8.30.1
+secrets-scan: ## Scan the whole git history for secrets (gitleaks, .gitleaks.toml); CI runs the same
+	@# ⭐ safe.directory: the mount's owner differs from the container's user, so git refuses the repo
+	@#    and gitleaks reports "0 commits scanned … no leaks found" with exit 0: a scan that passes by
+	@#    scanning nothing. Hence the env config, and the commit-count check after it.
+	@# No pipe into tee: a pipeline's status is the last command's, which hid a failed pull or a
+	@# gitleaks crash. Its own exit code (1 = leaks), then proof that it scanned something.
+	@docker run --rm -v "$$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 \
+	  -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo $(GITLEAKS_IMAGE) \
+	  git --config .gitleaks.toml --redact --no-banner --no-color . >.gitleaks.log 2>&1; status=$$?; \
+	cat .gitleaks.log; \
+	grep -qE "(^|[^0-9])[1-9][0-9]* commits scanned" .gitleaks.log || { echo "secrets-scan: nothing was scanned"; exit 1; }; \
+	exit $$status
+
+# ZAP's baseline: spider the running stack, passive rules only (no attacks), .zap/rules.tsv sets
+# which findings fail. Default target: the compose stack's web; the cluster: ZAP_TARGET=https://…
+ZAP_IMAGE := ghcr.io/zaproxy/zaproxy:2.16.1
+ZAP_TARGET ?= http://localhost:8081
+print-zap-image: # for CI: one source of truth for the pinned image
+	@echo $(ZAP_IMAGE)
+
+zap: ## DAST: OWASP ZAP baseline scan of the running stack (make stack && make zap); report in .zap/
+	@# ZAP runs as its own user (uid 1000, its config lives in /home/zap); the report dir must be
+	@# writable for it whoever owns the checkout (a CI runner is uid 1001)
+	chmod a+rwx .zap
+	docker run --rm --network host -v "$$PWD/.zap:/zap/wrk:rw" $(ZAP_IMAGE) \
+	  zap-baseline.py -t $(ZAP_TARGET) -c rules.tsv -r report.html -J report.json -I -m 2
+
 E2E_RUN = cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
 e2e: ## Browser e2e tests (Playwright) against the running stack: make stack && make e2e
 	$(MAKE) seed COURSES=60
@@ -91,6 +119,7 @@ TAG ?= $(eval TAG := $(shell h=$$(git rev-parse --short=7 HEAD); \
   git diff --quiet HEAD -- backend frontend && echo sha-$$h \
   || echo sha-$$h-dirty-$$(git diff HEAD -- backend frontend | shasum | cut -c1-7)))$(TAG)
 REGISTRY := localhost:5050
+BARMAN_PLUGIN := https://github.com/cloudnative-pg/plugin-barman-cloud/releases/download/v0.15.1/manifest.yaml
 
 k8s-up: ## Create the local k3d cluster (3 nodes, registry on :5050, ingress on :8082/:8443)
 	k3d cluster list masternova >/dev/null 2>&1 || k3d cluster create --config deploy/k3d/cluster.yaml
@@ -112,6 +141,9 @@ k8s-platform: ## Install the cluster add-ons: Traefik config, cert-manager (+ lo
 	  -n cert-manager --create-namespace --set crds.enabled=true --wait
 	kubectl apply -f deploy/k3d/local-ca.yaml
 	kubectl -n cert-manager wait certificate/masternova-local-ca --for=condition=Ready --timeout=60s
+	@# CNPG's Barman Cloud plugin (D5.4): WAL archiving + base backups as a sidecar; needs cert-manager
+	kubectl apply -f $(BARMAN_PLUGIN)
+	kubectl -n cnpg-system rollout status deploy/barman-cloud --timeout=180s
 	helm repo add argo https://argoproj.github.io/argo-helm --force-update >/dev/null
 	helm upgrade --install argocd argo/argo-cd --version 10.10.5 -n argocd --create-namespace \
 	  -f deploy/k3d/argocd-values.yaml --wait
@@ -173,6 +205,13 @@ k8s-gitops: ## Hand the cluster to Argo CD: the project + the root Application (
 	@echo "Argo CD UI: https://argocd.masternova.localhost:8443  (admin / \
 	$$(kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d))"
 
+k8s-drill: ## Open a drill window (D5): pause Argo CD's auto-sync so a branch's change can be applied by hand; `make k8s-gitops` ends it
+	@# the root first: it owns the child Applications and would restore their sync policy
+	for app in masternova-root masternova-infra masternova; do \
+	  kubectl -n argocd patch application $$app --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'; \
+	done
+	@echo "GitOps paused: nothing reverts a kubectl change now. Resume with: make k8s-gitops"
+
 k8s-bump: ## GitOps deploy: commit image tag TAG (must exist on GHCR) into the local values: make k8s-bump TAG=sha-abc1234
 	deploy/argocd/bump.sh $(TAG)
 
@@ -209,4 +248,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack ai obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-bump helm-check k8s-seed k8s-e2e release
+.PHONY: help up down nuke secrets secrets-scan zap stack ai obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-drill k8s-bump helm-check k8s-seed k8s-e2e release

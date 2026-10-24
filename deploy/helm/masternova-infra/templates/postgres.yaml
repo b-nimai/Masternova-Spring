@@ -14,7 +14,12 @@ metadata:
 spec:
   instances: {{ $p.instances }}
   imageName: {{ $p.image }}
-  primaryUpdateStrategy: unsupervised # a minor upgrade: standbys first, then a switchover
+  primaryUpdateStrategy: unsupervised # a minor upgrade: standbys first, then the primary
+  # ⭐ D5.4: switchover, not the default `restart`. Adding the backup sidecar restarted the primary IN
+  #    PLACE, and its node took 10 min to pull the new image: 10 min with no database. Switchover
+  #    promotes the standby (already updated, already running) first, then restarts the old primary
+  #    as a replica: seconds of read-only, not minutes of nothing.
+  primaryUpdateMethod: switchover
   bootstrap:
     initdb:
       database: {{ $p.database }}
@@ -28,8 +33,21 @@ spec:
   storage:
     size: {{ $p.storage }}
   resources: {{- toYaml $p.resources | nindent 4 }}
+  {{- $params := deepCopy ($p.parameters | default dict) }}
+  {{- if $p.backup.enabled }}
+  {{- /* switch WAL segments at least this often: the RPO bound */}}
+  {{- $_ := set $params "archive_timeout" $p.backup.archiveTimeout }}
+  {{- end }}
   postgresql:
-    parameters: {{- toYaml $p.parameters | nindent 6 }}
+    parameters: {{- toYaml $params | nindent 6 }}
+  {{- if $p.backup.enabled }}
+  # ⭐ the WAL archiver: every finished segment goes to the object store, so a restore can replay
+  #    up to any second; a failed archive keeps the segment on disk (and pages, D3) until it lands
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters: { barmanObjectName: {{ $p.backup.objectStore }} }
+  {{- end }}
   {{- with $p.readerRole }}
   {{- if .name }}
   managed:

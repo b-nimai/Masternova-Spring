@@ -18,6 +18,13 @@ FROM nginx:1.31-alpine
 ARG APK_REFRESH=
 RUN echo "packages as of ${APK_REFRESH:-build}" && apk upgrade --no-cache
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Security headers (D5.5): rendered at start by the image's envsubst step into /var/run (writable
+# in a read-only container). STORAGE_ORIGIN is where the browser uploads to and streams from; each
+# environment sets it, so one image serves every one.
+COPY security-headers.conf.template /etc/nginx/templates/security-headers.conf.template
+ENV STORAGE_ORIGIN=http://localhost:9010 \
+    NGINX_ENVSUBST_OUTPUT_DIR=/var/run \
+    NGINX_ENVSUBST_FILTER=^STORAGE_ORIGIN$
 COPY --from=build /app/dist/frontend/browser /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1/healthz || exit 1
