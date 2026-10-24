@@ -95,6 +95,9 @@ secrets-scan: ## Scan the whole git history for secrets (gitleaks, .gitleaks.tom
 # which findings fail. Default target: the compose stack's web; the cluster: ZAP_TARGET=https://…
 ZAP_IMAGE := ghcr.io/zaproxy/zaproxy:2.16.1
 ZAP_TARGET ?= http://localhost:8081
+print-zap-image: # for CI: one source of truth for the pinned image
+	@echo $(ZAP_IMAGE)
+
 zap: ## DAST: OWASP ZAP baseline scan of the running stack (make stack && make zap); report in .zap/
 	@# ZAP runs as its own user (uid 1000, its config lives in /home/zap); the report dir must be
 	@# writable for it whoever owns the checkout (a CI runner is uid 1001)
@@ -245,4 +248,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets secrets-scan zap stack ai obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-bump helm-check k8s-seed k8s-e2e release
+.PHONY: help up down nuke secrets secrets-scan zap stack ai obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-drill k8s-bump helm-check k8s-seed k8s-e2e release

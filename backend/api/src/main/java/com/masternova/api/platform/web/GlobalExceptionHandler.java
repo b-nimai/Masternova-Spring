@@ -16,7 +16,6 @@ import java.net.URI;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,7 +51,6 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-  private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
   @ExceptionHandler(DomainException.class)
   ResponseEntity<ProblemDetail> handleDomain(DomainException ex, HttpServletRequest request) {
@@ -109,9 +107,17 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest request) {
-    Optional<String> unavailable = DatabaseFailures.code(ex);
+    Optional<DatabaseFailures.Unavailable> unavailable =
+        DatabaseFailures.classify(ex, request.getMethod());
     if (unavailable.isPresent()) {
-      return unavailable(unavailable.get(), request);
+      // the database is busy or gone: not a bug, so no stack trace per request at the worst moment
+      DatabaseFailures.Unavailable u = unavailable.get();
+      log.warn("{} on {} {}", u.code(), request.getMethod(), request.getRequestURI());
+      ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE);
+      if (u.retryable()) {
+        response.header(HttpHeaders.RETRY_AFTER, "1");
+      }
+      return response.body(problem(HttpStatus.SERVICE_UNAVAILABLE, u.code(), u.detail(), request));
     }
     log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -169,33 +175,6 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       problem.setProperty("code", code);
     }
     return response;
-  }
-
-  /**
-   * The database is busy or gone: not a bug, so no stack trace per request at the worst moment.
-   *
-   * <p>⭐ A safe method gets {@code Retry-After}: retrying a read is always fine. An unsafe one
-   * doesn't: the connection may have died AFTER its COMMIT reached Postgres, so whether the write
-   * happened is unknown, and the idempotency key was released with this 5xx. Inviting a retry could
-   * apply it twice (D5 review).
-   */
-  private static ResponseEntity<ProblemDetail> unavailable(
-      String code, HttpServletRequest request) {
-    log.warn("{} on {} {}", code, request.getMethod(), request.getRequestURI());
-    boolean safe = SAFE_METHODS.contains(request.getMethod());
-    String detail =
-        code.equals("OVERLOADED")
-            ? "The service is busy. Retry shortly."
-            : safe
-                ? "The database is unavailable. Retry shortly."
-                : "The database became unavailable during the request; it may or may not have been"
-                    + " applied. Check before retrying.";
-    ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE);
-    if (safe || code.equals("OVERLOADED")) {
-      // OVERLOADED never reached the database: nothing was written, a retry is safe
-      response.header(HttpHeaders.RETRY_AFTER, "1");
-    }
-    return response.body(problem(HttpStatus.SERVICE_UNAVAILABLE, code, detail, request));
   }
 
   private static ProblemDetail problem(

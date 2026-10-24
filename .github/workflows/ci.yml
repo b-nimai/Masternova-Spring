@@ -415,6 +415,9 @@ jobs:
           tags: masternova-spring/web:local
           load: true
           cache-from: type=gha,scope=web-amd64
+      # the ZAP image is large: pull it while the stack boots and Playwright runs (DAST step below)
+      - name: Pull the ZAP image in the background
+        run: nohup docker pull -q "$(make -s -f Makefile print-zap-image)" >/dev/null 2>&1 &
       - name: Start the stack
         run: |
           make secrets

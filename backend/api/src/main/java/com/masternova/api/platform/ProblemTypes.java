@@ -1,10 +1,14 @@
 package com.masternova.api.platform;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import java.net.URI;
 import java.util.Locale;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Builds problems in the one Masternova shape, for code that runs OUTSIDE Spring MVC's exception
@@ -30,5 +34,13 @@ public final class ProblemTypes {
     problem.setInstance(URI.create(request.getRequestURI()));
     problem.setProperty("code", code);
     return problem;
+  }
+
+  /** Writes a problem straight to a servlet response: for filters, which run outside Spring MVC. */
+  public static void write(HttpServletResponse response, JsonMapper json, ProblemDetail problem)
+      throws IOException {
+    response.setStatus(problem.getStatus());
+    response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
+    response.getOutputStream().write(json.writeValueAsBytes(problem));
   }
 }

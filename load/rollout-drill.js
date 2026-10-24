@@ -10,7 +10,7 @@
 //   DURATION=8m k6 run load/rollout-drill.js
 import http from 'k6/http';
 import { check, fail, sleep } from 'k6';
-import { BASE, insecureSkipTLSVerify } from './lib.js';
+import { BASE, insecureSkipTLSVerify, loginRequest } from './lib.js';
 
 const DURATION = __ENV.DURATION || '5m';
 
@@ -27,11 +27,8 @@ export const options = {
 };
 
 function logIn() {
-  const login = http.post(
-    `${BASE}/api/v1/auth/login`,
-    JSON.stringify({ email: 'instructor@seed.test', password: 'seed-password' }),
-    { headers: { 'Content-Type': 'application/json' }, tags: { name: 'login' } },
-  );
+  const { method, url, body, params } = loginRequest('instructor@seed.test');
+  const login = http.request(method, url, body, params);
   if (login.status !== 200) fail(`seed instructor login: ${login.status} (make k8s-seed first)`);
   return login.json('accessToken');
 }

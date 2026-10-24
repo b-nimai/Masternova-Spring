@@ -10,12 +10,9 @@
 # 5. the marker must be there (the accident undone), and the restore is timed (RTO).
 # The live database is never touched except for the drill schema, dropped at the end.
 set -euo pipefail
-NS=masternova
+source "$(dirname "$0")/lib.sh"
 SRC=masternova-db
 DST=masternova-db-pitr
-
-primary() { kubectl -n $NS get pod -l cnpg.io/cluster="$1",cnpg.io/instanceRole=primary -o name; }
-sql() { kubectl -n $NS exec -i "$(primary "$1")" -c postgres -- psql -qtA -d masternova -v ON_ERROR_STOP=1 -c "$2"; }
 now() { date +%s; }
 
 # the drill schema goes even when a step fails (a restore that times out, say)

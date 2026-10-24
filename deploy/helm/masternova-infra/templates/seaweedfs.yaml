@@ -36,7 +36,7 @@ spec:
             # ⭐ D5.3: Go's GC paces itself on the heap, not the cgroup: without a soft limit the heap
             #    grew past 850 MiB of anonymous memory after a few large uploads and then spun at the
             #    hard limit. GOMEMLIMIT (75 % of it) makes the GC collect, and return memory, earlier.
-            - { name: GOMEMLIMIT, value: 768MiB }
+            - { name: GOMEMLIMIT, value: "{{ div (mul $s.memoryLimitMi 3) 4 }}MiB" }
           ports: [{ name: s3, containerPort: 8333 }]
           readinessProbe:
             httpGet: { path: /healthz, port: s3 }
@@ -50,11 +50,11 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 6
-          # D5.3: 512Mi wasn't enough. Two 167 MiB multipart uploads took it from 149Mi to 479Mi, and
-          # near the limit Go's GC spun at 5 cores until the process wedged.
+          # D5.3: 512Mi wasn't enough (values: memoryLimitMi). Two 167 MiB multipart uploads took it
+          # from 149Mi to 479Mi, and near the limit Go's GC spun at 5 cores until the process wedged.
           resources:
-            requests: { cpu: 100m, memory: 512Mi }
-            limits: { memory: 1Gi }
+            requests: { cpu: 100m, memory: {{ div $s.memoryLimitMi 2 }}Mi }
+            limits: { memory: {{ $s.memoryLimitMi }}Mi }
           volumeMounts: [{ name: data, mountPath: /data }]
   volumeClaimTemplates:
     - metadata: { name: data }

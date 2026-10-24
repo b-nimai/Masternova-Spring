@@ -6,10 +6,10 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Which database failures are the database being unavailable or busy, not a bug (D5.1, D5.3): the
- * one classification shared by {@code GlobalExceptionHandler} (controllers) and servlet filters
- * that reach the database before Spring MVC does (idempotency). Part of the platform module's
- * public API, like {@link ProblemTypes}.
+ * Which database failures are the database being busy or gone, not a bug, and what the client is
+ * told (D5.1, D5.3): the ONE policy for {@code GlobalExceptionHandler} (controllers) and the
+ * servlet filters that reach the database before Spring MVC does (idempotency). Part of the
+ * platform module's public API, like {@link ProblemTypes}.
  */
 public final class DatabaseFailures {
 
@@ -21,27 +21,45 @@ public final class DatabaseFailures {
   private static final Set<String> UNAVAILABLE_STATES =
       Set.of("08000", "08001", "08003", "08004", "08006", "57P01", "57P02", "57P03");
 
+  private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS");
+
+  /**
+   * What to answer: always a 503 with this {@code code} and {@code detail}; {@code Retry-After}
+   * only when {@code retryable}.
+   */
+  public record Unavailable(String code, String detail, boolean retryable) {}
+
   private DatabaseFailures() {}
 
   /**
-   * {@code DATABASE_UNAVAILABLE}: the database went away (checked first: Hikari's timeout carries
-   * the connection error as its cause when the database is down); {@code OVERLOADED}: no pooled
-   * connection within the pool's timeout; empty: anything else, which is a bug.
+   * {@code DATABASE_UNAVAILABLE}: the database went away (it wins over a pool timeout: Hikari's
+   * timeout carries the connection error as its cause while the database is down); {@code
+   * OVERLOADED}: no pooled connection in time; empty: anything else, which is a bug.
+   *
+   * <p>⭐ Retryable: always for {@code OVERLOADED} (nothing reached the database), for {@code
+   * DATABASE_UNAVAILABLE} only on a safe method. A write's connection may have died AFTER its
+   * COMMIT reached Postgres, so its outcome is unknown, and the idempotency key was released with
+   * the 5xx: inviting a retry could apply it twice.
    */
-  public static Optional<String> code(Throwable ex) {
+  public static Optional<Unavailable> classify(Throwable ex, String method) {
+    boolean poolTimeout = false;
     for (Throwable t = ex; t != null; t = t.getCause()) {
-      if (t instanceof SQLException sql
-          && sql.getSQLState()
-              != null // Set.of rejects contains(null); Hikari's own timeout has none
-          && UNAVAILABLE_STATES.contains(sql.getSQLState())) {
-        return Optional.of("DATABASE_UNAVAILABLE");
+      String state = t instanceof SQLException sql ? sql.getSQLState() : null;
+      if (state != null && UNAVAILABLE_STATES.contains(state)) {
+        return Optional.of(
+            SAFE_METHODS.contains(method)
+                ? new Unavailable(
+                    "DATABASE_UNAVAILABLE", "The database is unavailable. Retry shortly.", true)
+                : new Unavailable(
+                    "DATABASE_UNAVAILABLE",
+                    "The database became unavailable during the request; it may or may not have"
+                        + " been applied. Check before retrying.",
+                    false));
       }
+      poolTimeout |= t instanceof SQLTransientConnectionException;
     }
-    for (Throwable t = ex; t != null; t = t.getCause()) {
-      if (t instanceof SQLTransientConnectionException) {
-        return Optional.of("OVERLOADED");
-      }
-    }
-    return Optional.empty();
+    return poolTimeout
+        ? Optional.of(new Unavailable("OVERLOADED", "The service is busy. Retry shortly.", true))
+        : Optional.empty();
   }
 }

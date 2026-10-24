@@ -9,7 +9,7 @@
 # new primary was serving.
 set -euo pipefail
 target=${1:?api | primary}
-NS=masternova
+source "$(dirname "$0")/lib.sh"
 RATE=${RATE:-100}
 out=$(cd "$(dirname "$0")/.." && pwd)/results/chaos-$target-$(date +%Y%m%d-%H%M%S)
 mkdir -p "$out"
@@ -19,15 +19,7 @@ mkdir -p "$out"
 k6pid=$!
 sleep 60
 
-# ⭐ a crash gets no signal: kill -9 the container's main process from its node. (`kubectl delete
-#    --force --grace-period=0` still sends SIGTERM with a ~1-2 s grace: a fast graceful stop.)
-kill9() {
-  local pod=$1 container=$2 node cid pid
-  node=$(kubectl -n $NS get "$pod" -o jsonpath='{.spec.nodeName}')
-  cid=$(kubectl -n $NS get "$pod" -o jsonpath="{.status.containerStatuses[?(@.name=='$container')].containerID}" | sed 's#.*://##')
-  pid=$(docker exec "$node" crictl inspect --output go-template --template '{{.info.pid}}' "$cid")
-  docker exec "$node" kill -9 "$pid"
-}
+verb=$([ "${GRACEFUL:-0}" = 1 ] && echo delete || echo "kill -9")
 stop() { # pod container
   if [ "${GRACEFUL:-0}" = 1 ]; then kubectl -n $NS delete "$1" --wait=false; else kill9 "$1" "$2"; fi
 }
@@ -35,12 +27,12 @@ stop() { # pod container
 case $target in
   api)
     victim=$(kubectl -n $NS get pods -l app.kubernetes.io/name=api -o name | head -1)
-    echo "→ $([ "${GRACEFUL:-0}" = 1 ] && echo delete || echo kill -9) $victim at $(date +%T)"
+    echo "→ $verb $victim at $(date +%T)"
     stop "$victim" api
     ;;
   primary)
-    victim=$(kubectl -n $NS get pod -l cnpg.io/cluster=masternova-db,cnpg.io/instanceRole=primary -o name)
-    echo "→ $([ "${GRACEFUL:-0}" = 1 ] && echo delete || echo kill -9) the primary $victim at $(date +%T)"
+    victim=$(primary)
+    echo "→ $verb the primary $victim at $(date +%T)"
     killed=$(date +%s)
     stop "$victim" postgres
     seen_down=0 recovered=0
@@ -48,9 +40,11 @@ case $target in
       now_primary=$(kubectl -n $NS get cluster masternova-db -o jsonpath='{.status.currentPrimary}')
       ready=$(kubectl -n $NS get pod "$now_primary" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || true)
       [ "pod/$now_primary" = "$victim" ] && [ "$ready" != true ] && seen_down=1
-      [ "pod/$now_primary" != "$victim" ] && [ "$ready" = true ] && recovered=1 && break
-      # a crashed container is restarted in place by the kubelet; CNPG may keep it as the primary
-      [ "pod/$now_primary" = "$victim" ] && [ "$seen_down" = 1 ] && [ "$ready" = true ] && recovered=1 && break
+      # a new primary, or (a crash) the same one back after it was seen down: restarted in place
+      if [ "$ready" = true ] && { [ "pod/$now_primary" != "$victim" ] || [ "$seen_down" = 1 ]; }; then
+        recovered=1
+        break
+      fi
       sleep 1
     done
     if [ "$recovered" = 1 ]; then

@@ -65,6 +65,7 @@ redis:
 seaweedfs:
   enabled: true # S3 for media (ADR-0012); false where real S3 exists
   image: chrislusf/seaweedfs:4.48
+  memoryLimitMi: 1024 # D5.3: 512 wedged after a few large uploads; GOMEMLIMIT is derived (75 %)
   bucket: masternova-media
   storage: 5Gi
   corsOrigins: [] # the SPA's origins: the browser PUTs presigned parts straight to storage

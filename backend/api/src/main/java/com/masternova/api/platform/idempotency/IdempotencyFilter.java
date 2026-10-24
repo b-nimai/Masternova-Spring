@@ -18,12 +18,9 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
-import java.util.Optional;
 import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -103,19 +100,13 @@ class IdempotencyFilter extends OncePerRequestFilter {
               now.plus(settings.retention()));
     } catch (RuntimeException e) {
       // ⭐ this filter reaches the database BEFORE Spring MVC, so GlobalExceptionHandler never sees
-      //    its failures: classify them here, or a busy pool becomes a bare 500. Nothing was
-      //    claimed, so a retry is safe.
-      Optional<String> code = DatabaseFailures.code(e);
-      if (code.isEmpty()) {
-        throw e;
+      //    its failures: the same policy here, or a busy pool becomes a bare 500
+      DatabaseFailures.Unavailable u =
+          DatabaseFailures.classify(e, request.getMethod()).orElseThrow(() -> e);
+      if (u.retryable()) {
+        response.setHeader(HttpHeaders.RETRY_AFTER, "1");
       }
-      response.setHeader(HttpHeaders.RETRY_AFTER, "1");
-      writeProblem(
-          request,
-          response,
-          HttpStatus.SERVICE_UNAVAILABLE,
-          code.get(),
-          "The service is busy. Retry shortly.");
+      writeProblem(request, response, HttpStatus.SERVICE_UNAVAILABLE, u.code(), u.detail());
       return;
     }
 
@@ -192,10 +183,7 @@ class IdempotencyFilter extends OncePerRequestFilter {
       String code,
       String detail)
       throws IOException {
-    ProblemDetail problem = ProblemTypes.problem(status, code, detail, request);
-    response.setStatus(status.value());
-    response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-    response.getOutputStream().write(json.writeValueAsBytes(problem));
+    ProblemTypes.write(response, json, ProblemTypes.problem(status, code, detail, request));
   }
 
   /** Keys are scoped PER CALLER: one user can never see another user's stored response. */

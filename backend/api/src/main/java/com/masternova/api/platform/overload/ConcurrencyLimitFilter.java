@@ -18,8 +18,6 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
@@ -94,15 +92,14 @@ class ConcurrencyLimitFilter extends OncePerRequestFilter {
   }
 
   private void reject(HttpServletRequest request, HttpServletResponse response) throws IOException {
-    ProblemDetail problem =
+    response.setHeader(HttpHeaders.RETRY_AFTER, "1");
+    ProblemTypes.write(
+        response,
+        json,
         ProblemTypes.problem(
             HttpStatus.SERVICE_UNAVAILABLE,
             "OVERLOADED",
             "The service is busy. Retry shortly.",
-            request);
-    response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
-    response.setHeader(HttpHeaders.RETRY_AFTER, "1");
-    response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-    response.getOutputStream().write(json.writeValueAsBytes(problem));
+            request));
   }
 }

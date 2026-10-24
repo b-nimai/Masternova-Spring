@@ -14,10 +14,12 @@
 //   load/capacity-sweep.sh 50 100 200 300 400       # the steps, one table (docs/hld/03-capacity.md)
 import http from 'k6/http';
 import { check, fail } from 'k6';
-import { BASE, insecureSkipTLSVerify } from './lib.js';
+import { BASE, insecureSkipTLSVerify, loginRequest } from './lib.js';
 
 const RATE = Number(__ENV.RATE || 100);
 const LEARNERS = Number(__ENV.LEARNERS || 50);
+// the request kinds of the mix (each request is tagged with its name)
+const NAMES = ['list', 'filter', 'course', 'reviews', 'search', 'suggest', 'learning', 'progress', 'heartbeat'];
 const TERMS = ['kubernetes', 'spring boot', 'docker', 'postgres', 'react', 'system design', 'rust'];
 
 export const options = {
@@ -38,15 +40,8 @@ export const options = {
     'http_req_failed{scenario:mix}': ['rate<0.005'],
     'http_req_duration{scenario:mix}': ['p(95)<300'],
     'http_reqs{scenario:mix}': ['count>0'], // listed so the summary export carries the step's own count
-    'http_req_duration{name:list}': ['p(95)<300'],
-    'http_req_duration{name:filter}': ['p(95)<300'],
-    'http_req_duration{name:course}': ['p(95)<300'],
-    'http_req_duration{name:reviews}': ['p(95)<300'],
-    'http_req_duration{name:search}': ['p(95)<300'],
-    'http_req_duration{name:suggest}': ['p(95)<300'],
-    'http_req_duration{name:learning}': ['p(95)<300'],
-    'http_req_duration{name:progress}': ['p(95)<300'],
-    'http_req_duration{name:heartbeat}': ['p(95)<300'],
+    // …and for every request kind of the mix: a kind added to NAMES is checked without a new line
+    ...Object.fromEntries(NAMES.map((n) => [`http_req_duration{name:${n}}`, ['p(95)<300']])),
     dropped_iterations: ['count==0'], // k6 kept up: the rate asked for is the rate measured
   },
   summaryTrendStats: ['avg', 'med', 'p(95)', 'p(99)', 'max'],
@@ -63,26 +58,25 @@ export function setup() {
 
   const free = http.get(`${BASE}/api/v1/courses?price=FREE&limit=20`).json().items;
   if (!free.length) fail('no free course: make k8s-seed first');
-  const courses = free.map((c) => {
-    const detail = http.get(`${BASE}/api/v1/courses/${c.slug}`).json();
+  // the setup's ~120 requests in three batches, not one by one (logins are bcrypt-bound)
+  const details = http.batch(free.map((c) => ['GET', `${BASE}/api/v1/courses/${c.slug}`]));
+  const courses = details.map((r) => {
+    const detail = r.json();
     return { id: detail.id, lectures: detail.sections.flatMap((s) => s.lectures.map((l) => l.id)) };
   });
 
-  const learners = [];
-  for (let n = 1; n <= LEARNERS; n++) {
-    const email = n === 1 ? 'learner@seed.test' : `learner${n}@seed.test`;
-    const login = http.post(`${BASE}/api/v1/auth/login`, JSON.stringify({ email, password: 'seed-password' }), {
-      headers: json,
-    });
-    if (login.status !== 200) fail(`${email} login: ${login.status} (make k8s-seed first)`);
-    const token = login.json('accessToken');
-    const course = courses[n % courses.length];
-    const enrolled = http.put(`${BASE}/api/v1/me/enrollments/${course.id}`, null, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (enrolled.status !== 200) fail(`${email} enroll: ${enrolled.status} ${enrolled.body}`);
-    learners.push({ token, course });
-  }
+  const emails = Array.from({ length: LEARNERS }, (_, i) => (i === 0 ? 'learner@seed.test' : `learner${i + 1}@seed.test`));
+  const logins = http.batch(emails.map(loginRequest));
+  logins.forEach((r, i) => {
+    if (r.status !== 200) fail(`${emails[i]} login: ${r.status} (make k8s-seed first)`);
+  });
+  const learners = logins.map((r, i) => ({ token: r.json('accessToken'), course: courses[(i + 1) % courses.length] }));
+  const enrolled = http.batch(
+    learners.map((l) => ['PUT', `${BASE}/api/v1/me/enrollments/${l.course.id}`, null, { headers: { Authorization: `Bearer ${l.token}` } }]),
+  );
+  enrolled.forEach((r, i) => {
+    if (r.status !== 200) fail(`${emails[i]} enroll: ${r.status} ${r.body}`);
+  });
   return { courses: page.items.map((c) => ({ id: c.id, slug: c.slug })), categories: flat(tree), learners };
 }
 

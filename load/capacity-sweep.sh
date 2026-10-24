@@ -12,10 +12,11 @@ cd "$(dirname "$0")"
 out="results/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$out"
 
+ready() { kubectl -n masternova get deploy api -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "?"; }
+
 echo "| rate/s | achieved/s | p50 ms | p95 ms | p99 ms | max ms | failed | dropped | api pods | SLOs |"
 echo "|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|"
 for rate in "$@"; do
-  ready() { kubectl -n masternova get deploy api -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "?"; }
   pods=$(ready)
   if RATE=$rate k6 run --quiet --summary-export "$out/$rate.json" slo-mix.js >"$out/$rate.log" 2>&1; then
     verdict="✅"
@@ -24,19 +25,17 @@ for rate in "$@"; do
   fi
   pods="${pods}→$(ready)" # the HPA may scale during a step: start → end
   jq -r --arg rate "$rate" --arg pods "$pods" --arg v "$verdict" '
+    def r1: . * 10 | round / 10;
     .metrics as $m
     | $m["http_req_duration{scenario:mix}"] as $d
     | [$rate,
        ($m["http_reqs{scenario:mix}"].rate | floor),
-       ($d.med | . * 10 | round / 10),
-       ($d["p(95)"] | . * 10 | round / 10),
-       ($d["p(99)"] | . * 10 | round / 10),
-       ($d.max | round),
-       (($m["http_req_failed{scenario:mix}"].value // 0) * 100 | . * 100 | round / 100 | tostring + " %"),
+       ($d.med | r1), ($d["p(95)"] | r1), ($d["p(99)"] | r1), ($d.max | round),
+       (($m["http_req_failed{scenario:mix}"].value // 0) * 10000 | round / 100 | tostring + " %"),
        ($m.dropped_iterations.count // 0),
        $pods, $v]
     | "| " + (map(tostring) | join(" | ")) + " |"' "$out/$rate.json"
-  sleep "${PAUSE:-30}"
+  [ "$rate" = "${!#}" ] || sleep "${PAUSE:-30}" # not after the last step
 done
 echo
 echo "raw summaries and logs: load/$out/"

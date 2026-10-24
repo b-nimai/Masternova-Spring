@@ -10,15 +10,12 @@
 # times how long until the asset is READY and checks the job ran to DONE exactly once.
 set -euo pipefail
 BASE=${BASE_URL:-https://masternova.localhost:8443}
-NS=masternova
 CURL=(curl -sk --fail-with-body)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-psql() {
-  kubectl -n $NS exec -i "$(kubectl -n $NS get pod -l cnpg.io/cluster=masternova-db,cnpg.io/instanceRole=primary -o name)" \
-    -c postgres -- psql -qtA -d masternova -c "$1"
-}
+source "$(dirname "$0")/lib.sh"
+psql() { sql masternova-db "$1"; }
 now() { date +%s; }
 
 echo "→ a 90 s 1080p test video (ffmpeg testsrc2 + a tone)"
@@ -64,14 +61,9 @@ if [ "${GRACEFUL:-0}" = 1 ]; then
   echo "→ delete $pod (graceful: SIGTERM, the runner releases its job)"
   kubectl -n $NS delete "$pod" --wait=false
 else
-  # ⭐ NOT `kubectl delete --force --grace-period=0`: that removes the API object at once, but the
-  #    kubelet still sends SIGTERM with a ~1-2 s grace, so the worker releases its jobs (the graceful
-  #    path). A crash (OOM kill, node loss) gets no signal at all: kill -9 the JVM from its node.
-  node=$(kubectl -n $NS get "$pod" -o jsonpath='{.spec.nodeName}')
-  cid=$(kubectl -n $NS get "$pod" -o jsonpath='{.status.containerStatuses[0].containerID}' | sed 's#.*://##')
-  pid=$(docker exec "$node" crictl inspect --output go-template --template '{{.info.pid}}' "$cid")
-  echo "→ kill -9 the worker JVM (pid $pid on $node): no release, the 2 min lease has to lapse"
-  docker exec "$node" kill -9 "$pid"
+  # ⭐ a crash (OOM kill, node loss) gets no signal: lib.sh's kill9, not `kubectl delete --force`
+  echo "→ kill -9 the worker JVM: no release, the 2 min lease has to lapse"
+  kill9 "$pod" worker
 fi
 
 echo "→ wait for READY"
