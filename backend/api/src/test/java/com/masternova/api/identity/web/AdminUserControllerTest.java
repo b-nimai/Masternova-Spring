@@ -47,12 +47,12 @@ import org.springframework.test.web.servlet.assertj.MvcTestResult;
  */
 @WebMvcTest(
     controllers = AdminUserController.class,
-    // the idempotency filter is a platform web component the slice would pick up; it isn't under
-    // test here and needs a database-backed store
+    // the idempotency and overload (bulkhead) filters are platform web components the slice would
+    // pick up; neither is under test here, and they need a database-backed store / typed settings
     excludeFilters =
         @ComponentScan.Filter(
             type = FilterType.REGEX,
-            pattern = "com\\.masternova\\.api\\.platform\\.idempotency\\..*"))
+            pattern = "com\\.masternova\\.api\\.platform\\.(idempotency|overload)\\..*"))
 @Import(SecuritySliceConfig.class)
 class AdminUserControllerTest {
 

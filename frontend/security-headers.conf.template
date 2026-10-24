@@ -1,7 +1,7 @@
 # Security headers (D5.5, found by OWASP ZAP's baseline). nginx's image renders this template at
 # start (envsubst, only ${STORAGE_ORIGIN}) into /var/run/, the one writable place in a
-# read-only container; nginx.conf includes it in the server AND in every location that sets its
-# own add_header, because a location's add_header drops all inherited ones.
+# read-only container; nginx.conf includes it in the locations that serve the SPA and its assets
+# (not /api, where Spring Security sets its own).
 #
 # CSP, source by source:
 #   script-src  'self' + Razorpay Checkout (loaded the first time someone pays). No 'unsafe-inline':

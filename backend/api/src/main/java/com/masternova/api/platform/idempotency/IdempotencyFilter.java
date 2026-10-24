@@ -1,5 +1,6 @@
 package com.masternova.api.platform.idempotency;
 
+import com.masternova.api.platform.DatabaseFailures;
 import com.masternova.api.platform.MasternovaProperties;
 import com.masternova.api.platform.ProblemTypes;
 import com.masternova.api.platform.idempotency.IdempotencyStore.Claim;
@@ -17,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -89,14 +91,33 @@ class IdempotencyFilter extends OncePerRequestFilter {
     byte[] body = StreamUtils.copyToByteArray(request.getInputStream());
     String caller = caller();
     Instant now = clock.instant();
-    Claim claim =
-        store.claim(
-            caller,
-            key,
-            hash(request, body),
-            now,
-            now.plus(settings.inProgressTimeout()),
-            now.plus(settings.retention()));
+    Claim claim;
+    try {
+      claim =
+          store.claim(
+              caller,
+              key,
+              hash(request, body),
+              now,
+              now.plus(settings.inProgressTimeout()),
+              now.plus(settings.retention()));
+    } catch (RuntimeException e) {
+      // ⭐ this filter reaches the database BEFORE Spring MVC, so GlobalExceptionHandler never sees
+      //    its failures: classify them here, or a busy pool becomes a bare 500. Nothing was
+      //    claimed, so a retry is safe.
+      Optional<String> code = DatabaseFailures.code(e);
+      if (code.isEmpty()) {
+        throw e;
+      }
+      response.setHeader(HttpHeaders.RETRY_AFTER, "1");
+      writeProblem(
+          request,
+          response,
+          HttpStatus.SERVICE_UNAVAILABLE,
+          code.get(),
+          "The service is busy. Retry shortly.");
+      return;
+    }
 
     // ⭐ exhaustive over the sealed Claim type (note 02)
     switch (claim) {

@@ -31,7 +31,10 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports: [{ name: http, containerPort: 80 }]
           env: # the CSP's storage origin (D5.5): where browsers upload to and stream from
-            - { name: STORAGE_ORIGIN, value: {{ .Values.config.STORAGE_PUBLIC_ENDPOINT | default "http://localhost:9010" | quote }} }
+            # web.storageOrigin, else the public endpoint, else the endpoint; never a guess: a wrong
+            # origin blocks every upload and segment with nothing but console errors
+            - name: STORAGE_ORIGIN
+              value: {{ required "web.storageOrigin (or config.STORAGE_PUBLIC_ENDPOINT / STORAGE_ENDPOINT): the CSP's storage origin" (coalesce .Values.web.storageOrigin .Values.config.STORAGE_PUBLIC_ENDPOINT .Values.config.STORAGE_ENDPOINT) | quote }}
           # nginx's master starts as root to bind :80, then drops to `nginx`: compose's exact set.
           # `baseline` allows it; the reason the namespace can't enforce `restricted`.
           {{- include "masternova.restrictedContainer" (dict "add" (list "CHOWN" "SETUID" "SETGID" "NET_BIND_SERVICE")) | nindent 10 }}

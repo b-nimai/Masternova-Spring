@@ -82,10 +82,14 @@ secrets-scan: ## Scan the whole git history for secrets (gitleaks, .gitleaks.tom
 	@# ⭐ safe.directory: the mount's owner differs from the container's user, so git refuses the repo
 	@#    and gitleaks reports "0 commits scanned … no leaks found" with exit 0: a scan that passes by
 	@#    scanning nothing. Hence the env config, and the commit-count check after it.
-	docker run --rm -v "$$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 \
+	@# No pipe into tee: a pipeline's status is the last command's, which hid a failed pull or a
+	@# gitleaks crash. Its own exit code (1 = leaks), then proof that it scanned something.
+	@docker run --rm -v "$$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 \
 	  -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo $(GITLEAKS_IMAGE) \
-	  git --config .gitleaks.toml --redact --no-banner . 2>&1 | tee .gitleaks.log
-	@! grep -q " 0 commits scanned" .gitleaks.log && ! grep -q "leaks found: [1-9]" .gitleaks.log
+	  git --config .gitleaks.toml --redact --no-banner --no-color . >.gitleaks.log 2>&1; status=$$?; \
+	cat .gitleaks.log; \
+	grep -qE "(^|[^0-9])[1-9][0-9]* commits scanned" .gitleaks.log || { echo "secrets-scan: nothing was scanned"; exit 1; }; \
+	exit $$status
 
 # ZAP's baseline: spider the running stack, passive rules only (no attacks), .zap/rules.tsv sets
 # which findings fail. Default target: the compose stack's web; the cluster: ZAP_TARGET=https://…

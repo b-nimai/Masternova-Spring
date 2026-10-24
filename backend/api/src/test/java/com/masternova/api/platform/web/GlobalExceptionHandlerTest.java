@@ -77,6 +77,11 @@ class GlobalExceptionHandlerTest {
           new SQLException("An I/O error occurred while sending to the backend.", "08006"));
     }
 
+    @PostMapping("/connection-lost")
+    void connectionLostOnAWrite() {
+      connectionLost();
+    }
+
     @PostMapping("/courses")
     void create(@Valid @RequestBody CreateRequest request) {}
   }
@@ -209,6 +214,19 @@ class GlobalExceptionHandlerTest {
         .isLenientlyEqualTo(
             """
             {"code":"DATABASE_UNAVAILABLE","status":503}
+            """);
+  }
+
+  @Test
+  void aWriteThatLostItsConnectionIsNotInvitedToRetry() {
+    // the COMMIT may have landed before the socket died: the outcome is unknown
+    assertThat(mvc.post().uri("/connection-lost"))
+        .hasStatus(HttpStatus.SERVICE_UNAVAILABLE)
+        .doesNotContainHeader("Retry-After")
+        .bodyJson()
+        .isLenientlyEqualTo(
+            """
+            {"code":"DATABASE_UNAVAILABLE"}
             """);
   }
 }

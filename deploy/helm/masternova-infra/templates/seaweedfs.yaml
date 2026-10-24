@@ -86,7 +86,8 @@ spec:
             - { name: AWS_DEFAULT_REGION, value: us-east-1 }
             - { name: BUCKET, value: {{ $s.bucket }} }
             - name: BACKUP_BUCKET
-              value: {{ ternary (trimPrefix "s3://" .Values.postgres.backup.destinationPath | trimSuffix "/") "" .Values.postgres.backup.enabled | quote }}
+              # the bucket only: s3://bucket/some/prefix/ → bucket
+              value: {{ ternary (trimPrefix "s3://" .Values.postgres.backup.destinationPath | regexFind "^[^/]+") "" .Values.postgres.backup.enabled | quote }}
             - name: CORS
               value: {{ dict "CORSRules" (list (dict "AllowedOrigins" $s.corsOrigins "AllowedMethods" (list "PUT" "GET" "HEAD") "AllowedHeaders" (list "*") "ExposeHeaders" (list "ETag") "MaxAgeSeconds" 3000)) | toJson | quote }}
           command: [/bin/sh, -c]

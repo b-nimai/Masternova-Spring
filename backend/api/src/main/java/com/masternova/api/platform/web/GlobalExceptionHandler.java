@@ -1,6 +1,7 @@
 package com.masternova.api.platform.web;
 
 import com.masternova.api.platform.ConflictException;
+import com.masternova.api.platform.DatabaseFailures;
 import com.masternova.api.platform.DomainException;
 import com.masternova.api.platform.ForbiddenException;
 import com.masternova.api.platform.NotFoundException;
@@ -12,10 +13,10 @@ import com.masternova.api.platform.ValidationException;
 import com.masternova.api.platform.ValidationException.FieldError;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
-import java.sql.SQLException;
-import java.sql.SQLTransientConnectionException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +52,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+  private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS");
 
   @ExceptionHandler(DomainException.class)
   ResponseEntity<ProblemDetail> handleDomain(DomainException ex, HttpServletRequest request) {
@@ -107,23 +109,9 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(Exception.class)
   ResponseEntity<ProblemDetail> handleUnexpected(Exception ex, HttpServletRequest request) {
-    if (isPoolTimeout(ex)) {
-      // ⭐ no free connection within the pool's timeout: overload, not a bug (D5.1). A 503 with
-      //    Retry-After, like the bulkhead's, and no stack trace per request at the worst moment.
-      log.warn("No database connection for {} {}", request.getMethod(), request.getRequestURI());
-      return unavailable("OVERLOADED", "The service is busy. Retry shortly.", request);
-    }
-    if (isConnectionLost(ex)) {
-      // ⭐ the database went away under the request: a failover (D5.3), a restart. Not a bug either,
-      //    and a retry after the new primary is up succeeds. A write's idempotency key was released
-      //    with this 5xx, so retrying it with the same key runs it again.
-      log.warn(
-          "Database connection lost on {} {}: {}",
-          request.getMethod(),
-          request.getRequestURI(),
-          ex.getMessage());
-      return unavailable(
-          "DATABASE_UNAVAILABLE", "The database is unavailable. Retry shortly.", request);
+    Optional<String> unavailable = DatabaseFailures.code(ex);
+    if (unavailable.isPresent()) {
+      return unavailable(unavailable.get(), request);
     }
     log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -184,41 +172,30 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   }
 
   /**
-   * Hikari's "Connection is not available" arrives wrapped differently per caller (JPA's {@code
-   * CannotCreateTransactionException}, JDBC's {@code CannotGetJdbcConnectionException}): look for
-   * its cause, not its wrapper.
+   * The database is busy or gone: not a bug, so no stack trace per request at the worst moment.
+   *
+   * <p>⭐ A safe method gets {@code Retry-After}: retrying a read is always fine. An unsafe one
+   * doesn't: the connection may have died AFTER its COMMIT reached Postgres, so whether the write
+   * happened is unknown, and the idempotency key was released with this 5xx. Inviting a retry could
+   * apply it twice (D5 review).
    */
-  private static boolean isPoolTimeout(Throwable ex) {
-    for (Throwable t = ex; t != null; t = t.getCause()) {
-      if (t instanceof SQLTransientConnectionException) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /**
-   * SQLSTATE class 08 (connection exception: the socket died mid-statement) or 57P01–57P03 (the
-   * server is shutting down, crashed, or not accepting connections yet): what a client sees while
-   * CNPG fails over.
-   */
-  private static boolean isConnectionLost(Throwable ex) {
-    for (Throwable t = ex; t != null; t = t.getCause()) {
-      if (t instanceof SQLException sql && sql.getSQLState() != null) {
-        String state = sql.getSQLState();
-        if (state.startsWith("08") || state.startsWith("57P0")) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   private static ResponseEntity<ProblemDetail> unavailable(
-      String code, String detail, HttpServletRequest request) {
-    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-        .header(HttpHeaders.RETRY_AFTER, "1")
-        .body(problem(HttpStatus.SERVICE_UNAVAILABLE, code, detail, request));
+      String code, HttpServletRequest request) {
+    log.warn("{} on {} {}", code, request.getMethod(), request.getRequestURI());
+    boolean safe = SAFE_METHODS.contains(request.getMethod());
+    String detail =
+        code.equals("OVERLOADED")
+            ? "The service is busy. Retry shortly."
+            : safe
+                ? "The database is unavailable. Retry shortly."
+                : "The database became unavailable during the request; it may or may not have been"
+                    + " applied. Check before retrying.";
+    ResponseEntity.BodyBuilder response = ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE);
+    if (safe || code.equals("OVERLOADED")) {
+      // OVERLOADED never reached the database: nothing was written, a retry is safe
+      response.header(HttpHeaders.RETRY_AFTER, "1");
+    }
+    return response.body(problem(HttpStatus.SERVICE_UNAVAILABLE, code, detail, request));
   }
 
   private static ProblemDetail problem(

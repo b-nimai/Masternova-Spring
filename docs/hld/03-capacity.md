@@ -171,11 +171,20 @@ way.
 | 1 | 10.1 s / 79 % | **3.6 s / 49 %** |
 | 2 | 6.6 s / 61 % | **5.0 s / 24 %** |
 
-**Pool 5 won both pairs** on p95, throughput and errors, and it's the new default
-(`DATABASE_POOL_SIZE`, 5). The *size* of the gain is not trustworthy: an earlier pool-5 run
-served 300 rps with a p95 of 87 ms, so run-to-run noise on this laptop is larger than the effect.
-Only the direction is solid: it held in both pairs, and Little's law predicts it.
+**Pool 5 won both pairs** on p95, throughput and errors, but the *size* of the gain isn't
+trustworthy: an earlier pool-5 run served 300 rps with a p95 of 87 ms, so run-to-run noise on this
+laptop is larger than the effect.
 
-At the bulkhead's 64 permits and a pool of 5, a pod admits up to 59 requests that wait for a
+**And then the integration tests found what the load mix couldn't: a hot row.**
+`CourseAuthoringIT` sends ten concurrent edits to *one* course. Each waits on that row's lock
+**while holding a connection**; with 5 connections and Hikari's 2 s timeout, half the edits got 503
+`OVERLOADED` instead of 200 or 409. The read-heavy mix never has two requests fighting over one
+row, so the A/B couldn't see it. With 10 connections the test passes.
+
+**Decision: the default stays at Hikari's 10** (`DATABASE_POOL_SIZE` to change it). A gain inside
+the noise doesn't pay for a measured failure mode. The measurement still matters: at 0.19 busy
+connections per pod the pool isn't the limit below the knee, so a pool change wouldn't move it.
+
+At the bulkhead's 64 permits and a pool of 10, a pod admits up to 54 requests that wait for a
 connection, for at most 2 s (`connection-timeout`), before a 503. That's deliberate: the wait
 absorbs bursts the pool can catch up with, and the timeout caps the cost when it can't.

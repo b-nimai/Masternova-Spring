@@ -33,12 +33,13 @@ spec:
   storage:
     size: {{ $p.storage }}
   resources: {{- toYaml $p.resources | nindent 4 }}
+  {{- $params := deepCopy ($p.parameters | default dict) }}
+  {{- if $p.backup.enabled }}
+  {{- /* switch WAL segments at least this often: the RPO bound */}}
+  {{- $_ := set $params "archive_timeout" $p.backup.archiveTimeout }}
+  {{- end }}
   postgresql:
-    parameters:
-      {{- toYaml $p.parameters | nindent 6 }}
-      {{- if $p.backup.enabled }}
-      archive_timeout: {{ $p.backup.archiveTimeout }} # switch WAL segments at least this often: the RPO
-      {{- end }}
+    parameters: {{- toYaml $params | nindent 6 }}
   {{- if $p.backup.enabled }}
   # ⭐ the WAL archiver: every finished segment goes to the object store, so a restore can replay
   #    up to any second; a failed archive keeps the segment on disk (and pages, D3) until it lands

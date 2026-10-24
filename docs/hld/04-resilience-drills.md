@@ -80,7 +80,7 @@ failover. Both trade a faster failover for a risk of promoting during a short bl
 **What clients saw, both times:** fast, retryable errors, not hangs. During the gap almost every
 request got a 503 `OVERLOADED` after Hikari's 2 s timeout (D5.1): 939–1,552 per api pod. Five per
 pod reached a connection that died mid-statement and became 500 `INTERNAL`. They're 503
-`DATABASE_UNAVAILABLE` now (§4); the drill ran on the image before that fix.
+`DATABASE_UNAVAILABLE` now (§5); the drill ran on the image before that fix.
 
 The api never restarted. Its liveness doesn't check the database (D4), and Hikari replaced the
 dead connections on its own: `masternova-db-rw` follows the primary.
@@ -112,7 +112,7 @@ Runbook: [restore-database.md](../runbooks/restore-database.md).
 | Finding | Fix |
 |---|---|
 | **SeaweedFS wedged.** After ~19 h through host sleep cycles and large uploads it spun at 5.1 cores at 475 Mi of a 512 Mi limit; its own `AssignVolume` RPCs timed out. Readiness took it out of the Service, and the api answered every upload with a fast 503 `STORAGE_UNAVAILABLE`, as designed. But nothing restarted it: there was no liveness probe | A liveness probe (`/healthz`, 6 × 5 s); memory 512 Mi → 1 Gi; `GOMEMLIMIT=768MiB`. It held 855 MB of *anonymous* memory after a few 167 MiB uploads: Go's GC paces on the heap, not the cgroup. After the change, one 167 MiB upload took it from 139 Mi to 535 Mi (anon 556 MB): still under the soft limit, so whether the GC holds it at ~768 Mi is not yet observed. The liveness probe is the safety net either way. |
-| **A failover surfaced as a few 500s.** Most requests in the gap got 503 `OVERLOADED` (no connection within 2 s). The ones on a connection that died mid-statement (`PSQLException`, SQLSTATE `08006`) fell through to 500 `INTERNAL` | `GlobalExceptionHandler`: SQLSTATE class `08` and `57P01–03` → 503 `DATABASE_UNAVAILABLE` + `Retry-After` (API conventions §1) |
+| **A failover surfaced as a few 500s, and as `OVERLOADED`.** Most requests in the gap got 503 `OVERLOADED`: Hikari's 2 s timeout, though the cause was a dead primary, not load. The ones on a connection that died mid-statement (`PSQLException`, SQLSTATE `08006`) fell through to 500 `INTERNAL` | `DatabaseFailures` (one classification, used by `GlobalExceptionHandler` and the idempotency filter, which runs before Spring MVC): exact SQLSTATEs `08000/01/03/04/06`, `57P01–03` → 503 `DATABASE_UNAVAILABLE`, checked before the pool timeout. `Retry-After` on reads only: a write's COMMIT may have landed (API conventions §1) |
 | **Enabling backups took the database down for ~10 min.** CNPG's default `primaryUpdateMethod: restart` restarts the primary *in place* for a change that needs a restart (here: adding the sidecar). Its node took 10 min to pull the sidecar image, with no primary meanwhile | `primaryUpdateMethod: switchover` in the chart: the standby, already updated and running, is promoted first |
 | **The first PITR drill "passed" while its restore had timed out.** A `grep` after the script hid its exit code, and the script's cleanup didn't run on failure (the drill schema stayed in the live database) | `trap` cleanup in the script; drill results are read from the script's own verdict line |
 | **The SeaweedFS spin was also load-test noise.** A storage server spinning at 5 cores on an 8-vCPU laptop explains some of the D5.1 runs that measured far worse than their neighbours | Recorded in [capacity §6](03-capacity.md) |

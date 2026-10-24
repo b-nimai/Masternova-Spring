@@ -54,6 +54,10 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 echo "  archived up to $done_wal (needed $wal)"
+if [[ "$done_wal" < "$wal" ]]; then
+  echo "the WAL holding the target was never archived: check ContinuousArchiving" >&2
+  exit 1
+fi
 
 echo "→ restore into a new cluster, $DST, at the target"
 kubectl -n $NS delete cluster $DST --ignore-not-found --wait

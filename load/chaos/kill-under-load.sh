@@ -43,17 +43,21 @@ case $target in
     echo "→ $([ "${GRACEFUL:-0}" = 1 ] && echo delete || echo kill -9) the primary $victim at $(date +%T)"
     killed=$(date +%s)
     stop "$victim" postgres
-    seen_down=0
+    seen_down=0 recovered=0
     for _ in $(seq 1 180); do
       now_primary=$(kubectl -n $NS get cluster masternova-db -o jsonpath='{.status.currentPrimary}')
       ready=$(kubectl -n $NS get pod "$now_primary" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || true)
       [ "pod/$now_primary" = "$victim" ] && [ "$ready" != true ] && seen_down=1
-      [ "pod/$now_primary" != "$victim" ] && [ "$ready" = true ] && break
+      [ "pod/$now_primary" != "$victim" ] && [ "$ready" = true ] && recovered=1 && break
       # a crashed container is restarted in place by the kubelet; CNPG may keep it as the primary
-      [ "pod/$now_primary" = "$victim" ] && [ "$seen_down" = 1 ] && [ "$ready" = true ] && break
+      [ "pod/$now_primary" = "$victim" ] && [ "$seen_down" = 1 ] && [ "$ready" = true ] && recovered=1 && break
       sleep 1
     done
-    echo "  primary $now_primary ready after $(($(date +%s) - killed)) s"
+    if [ "$recovered" = 1 ]; then
+      echo "  primary $now_primary ready after $(($(date +%s) - killed)) s"
+    else
+      echo "  NO primary ready after $(($(date +%s) - killed)) s (gave up waiting)" >&2
+    fi
     ;;
   *) echo "api | primary"; exit 2 ;;
 esac
