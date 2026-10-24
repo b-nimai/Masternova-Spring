@@ -129,9 +129,9 @@ Phases are listed **in the order you do them**.
 | 15 | [10 — Enrollment & progress](#phase-10--enrollment--progress) | 6 | 6 | 14 h | ~15 h | ✅ |
 | 16 | [11 — Engagement + search](#phase-11--engagement--search-cuttable) *(cuttable)* | 5 | 5 | 20 h | ~21 h | ✅ |
 | 17 | [UI — StudyNotion design pass](#phase-ui--studynotion-design-pass) | 11 | 11 | 38 h | ~29 h | ✅ |
-| 18 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 0 | 16 h | — | ☐ |
+| 18 | [D5 — Hardening & proof](#phase-d5--hardening--proof) | 6 | 5 | 16 h | ~16 h | 🔨 |
 | 19 | [D6 — AWS](#phase-d6--aws-optional) *(optional)* | 5 | 0 | 24 h | — | ☐ |
-| | **Total** | **148** | **136** | **~364 h** | ~289 h | |
+| | **Total** | **148** | **141** | **~364 h** | ~305 h | |
 
 **Pace check:** at ~15 h/week this is about 22 weeks. If time runs short, cut in this order:
 D6 → Phase 11 → D5.3/D5.4 → Phase 10's Angular polish.
@@ -492,7 +492,7 @@ Each screen's deviations from its frame are listed in Angular note 11.
 | D5.3 | Chaos drills: kill a worker mid-transcode, kill an api pod under load, CNPG failover. `load/chaos/`: a crash is `kill -9` from the node (`crictl`), **not** `kubectl delete --force` (still SIGTERM: the first round measured the graceful path by mistake). Worker crash mid-transcode: READY 258 s, lease takeover, DONE once (graceful: 130 s). api crash at 100 rps: 42 of 18,001 failed. Primary deleted: failover 21 s; primary **crashed: no failover**, restarted in place, 70 s. Found: SeaweedFS wedged with no liveness probe (5 cores at its memory limit) → probe, 1 Gi, `GOMEMLIMIT`; a connection lost mid-statement was a 500 → 503 `DATABASE_UNAVAILABLE` (`docs/hld/04-resilience-drills.md`) | resilience testing | 3 h | ✅ | 2026-10-24 |
 | D5.4 | Backup + point-in-time restore drill (CNPG → S3, SeaweedFS replaced MinIO in ADR-0012). The **Barman Cloud plugin** (v0.15.1, `make k8s-platform`), not the in-tree `barmanObjectStore`: `standard` images have no barman binaries. `ObjectStore` + daily `ScheduledBackup`, 7 d retention, `archive_timeout: 60s` (**RPO ≤ 60 s**). `pitr-drill.sh`: marker → T → "accident" → restore a NEW cluster to T → the row is back. **RTO 57 s** with images cached, **73 min** on a cold node (image pulls). Found: CNPG's default `primaryUpdateMethod: restart` took the primary down ~10 min to add the sidecar → `switchover`. Runbook `restore-database.md` | RPO/RTO | 2 h | ✅ | 2026-10-24 |
 | D5.5 | Security: OWASP ZAP baseline in CI, `security-review` skill pass, secrets scan. **gitleaks** over the whole history (CI job `secrets`): its first run scanned **0 commits and passed** (git's "dubious ownership" in Docker) → `safe.directory` via env + a guard that fails on "0 commits"; 199 commits clean. **ZAP baseline** after Playwright in CI: found no CSP, no anti-clickjacking, no `nosniff`/Permissions-Policy/HSTS, nginx version leaked → a CSP built source by source (critical-CSS inlining off: no inline script), rendered per environment (`STORAGE_ORIGIN`, envsubst into `/var/run` of a read-only container); 0 FAIL / 59 PASS, six rules now FAIL the build. e2e fails on any CSP violation (`csp.spec.ts`, media). Review of the phase diff: no high-confidence finding (`docs/hld/05-security-scans.md`) | DAST, secret scanning | 2 h | ✅ | 2026-10-24 |
-| D5.6 | README polish, architecture diagram, 3-minute demo video | storytelling | 3.5 h | ☐ | |
+| D5.6 | README polish, architecture diagram, 3-minute demo video. README rewritten around evidence: a deployment-level architecture diagram (Mermaid) and a **Proof** table linking every claim to its measurement (capacity, drills, PITR, scans). The demo has a timed script and shot list (`docs/demo-script.md`); **the video itself is not recorded** (a screen recording is yours to make) | storytelling | 3.5 h | 🔨 | 2026-10-24 |
 
 ---
 
