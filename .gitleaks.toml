@@ -1,0 +1,11 @@
+# gitleaks (D5.5): the default rules, plus one allowlist for unit-test fixture keys.
+#   CI: the `secrets` job scans the whole git history (`gitleaks git`), so a secret removed in a later
+#   commit still fails the build: it is in the history, and only a rotation fixes that.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Unit-test HMAC fixtures, spelled test-…secret-<hex>: valid only inside a test"
+condition = "AND" # both: a fixture-shaped value under src/test, never one or the other
+paths = ['''/src/test/''']
+regexes = ['''test-[a-z-]*secret-[0-9a-f-]+''']

@@ -77,6 +77,27 @@ scan: images ## Scan images for HIGH/CRITICAL CVEs with Trivy (runs in Docker)
 	    --severity HIGH,CRITICAL --ignore-unfixed masternova-spring/$$img:local; \
 	done
 
+GITLEAKS_IMAGE := ghcr.io/gitleaks/gitleaks:v8.30.1
+secrets-scan: ## Scan the whole git history for secrets (gitleaks, .gitleaks.toml); CI runs the same
+	@# ⭐ safe.directory: the mount's owner differs from the container's user, so git refuses the repo
+	@#    and gitleaks reports "0 commits scanned … no leaks found" with exit 0: a scan that passes by
+	@#    scanning nothing. Hence the env config, and the commit-count check after it.
+	docker run --rm -v "$$PWD:/repo" -w /repo -e GIT_CONFIG_COUNT=1 \
+	  -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/repo $(GITLEAKS_IMAGE) \
+	  git --config .gitleaks.toml --redact --no-banner . 2>&1 | tee .gitleaks.log
+	@! grep -q " 0 commits scanned" .gitleaks.log && ! grep -q "leaks found: [1-9]" .gitleaks.log
+
+# ZAP's baseline: spider the running stack, passive rules only (no attacks), .zap/rules.tsv sets
+# which findings fail. Default target: the compose stack's web; the cluster: ZAP_TARGET=https://…
+ZAP_IMAGE := ghcr.io/zaproxy/zaproxy:2.16.1
+ZAP_TARGET ?= http://localhost:8081
+zap: ## DAST: OWASP ZAP baseline scan of the running stack (make stack && make zap); report in .zap/
+	@# ZAP runs as its own user (uid 1000, its config lives in /home/zap); the report dir must be
+	@# writable for it whoever owns the checkout (a CI runner is uid 1001)
+	chmod a+rwx .zap
+	docker run --rm --network host -v "$$PWD/.zap:/zap/wrk:rw" $(ZAP_IMAGE) \
+	  zap-baseline.py -t $(ZAP_TARGET) -c rules.tsv -r report.html -J report.json -I -m 2
+
 E2E_RUN = cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test
 e2e: ## Browser e2e tests (Playwright) against the running stack: make stack && make e2e
 	$(MAKE) seed COURSES=60
@@ -220,4 +241,4 @@ release: ## Tag and push a release from an up-to-date, clean main: make release 
 	git tag -a "v$(VERSION)" -m "v$(VERSION)"
 	git push origin "v$(VERSION)"
 
-.PHONY: help up down nuke secrets stack ai obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-bump helm-check k8s-seed k8s-e2e release
+.PHONY: help up down nuke secrets secrets-scan zap stack ai obs obs-check api worker web test format images scan e2e k8s-up k8s-down k8s-images k8s-platform k8s-secrets k8s-deploy k8s-gitops k8s-bump helm-check k8s-seed k8s-e2e release
