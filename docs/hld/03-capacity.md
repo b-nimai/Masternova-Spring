@@ -1,6 +1,6 @@
 # Capacity: the api against its SLOs
 
-**Last updated:** 2026-10-23 (D5.1) · **Status:** measured on the local k3d cluster
+**Last updated:** 2026-10-24 (D5.1, D5.2: pool sizing) · **Status:** measured on the local k3d cluster
 
 The question: **how much traffic does the api take while it still meets its SLOs, and what happens
 past that?** The SLOs (D3.5, [runbooks](../runbooks/api-latency.md)): **p95 < 300 ms** and
@@ -143,3 +143,36 @@ load/capacity-sweep.sh 50 100 150 200 300
 ```
 
 Raw summaries and logs land in `load/results/<timestamp>/` (gitignored).
+
+## 8. Pool sizing (D5.2)
+
+**Measured, at 100 rps** (one api pod's Hikari meters, sampled every 10 s, differences over 40 s):
+
+| Meter | Value |
+|---|---|
+| connections checked out | 42 per second per pod |
+| held per checkout (`hikaricp_connections_usage`) | **4.5 ms** mean |
+| waited per checkout (`hikaricp_connections_acquire`) | 0.28 ms mean |
+| busy on average (Little's law: 42 × 0.0045) | **0.19 of 10** |
+
+Ten connections per pod are ~50× what a pod uses at 100 rps. They matter only when queries
+slow down, and then they hurt: 4 pods × 10 let 40 statements run at once against a Postgres
+whose CPU is shared with everything else, so each one runs slower and holds its connection longer.
+HikariCP's own guidance (connections ≈ cores × 2 + disks, *for the whole database*) points the same
+way.
+
+**A/B at 300 rps** (2× the knee), alternating so drift hits both sides, 4 warm pods each:
+
+| Pair | pool 10: p95 / failed | pool 5: p95 / failed |
+|---|---|---|
+| 1 | 10.1 s / 79 % | **3.6 s / 49 %** |
+| 2 | 6.6 s / 61 % | **5.0 s / 24 %** |
+
+**Pool 5 won both pairs** on p95, throughput and errors, and it's the new default
+(`DATABASE_POOL_SIZE`, 5). The *size* of the gain is not trustworthy: an earlier pool-5 run
+served 300 rps with a p95 of 87 ms, so run-to-run noise on this laptop is larger than the effect.
+Only the direction is solid: it held in both pairs, and Little's law predicts it.
+
+At the bulkhead's 64 permits and a pool of 5, a pod admits up to 59 requests that wait for a
+connection, for at most 2 s (`connection-timeout`), before a 503. That's deliberate: the wait
+absorbs bursts the pool can catch up with, and the timeout caps the cost when it can't.

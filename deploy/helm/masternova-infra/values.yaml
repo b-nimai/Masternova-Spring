@@ -15,6 +15,11 @@ postgres:
   parameters:
     shared_buffers: 128MB
     max_connections: "100"
+    # ⭐ D5.2: which statements cost the most in total (calls × mean), not which one looks slow. Any
+    #    pg_stat_statements.* parameter makes CNPG preload the library and create the extension.
+    #    Changing shared_preload_libraries restarts Postgres: CNPG rolls the standby, then switches over.
+    pg_stat_statements.max: "5000"
+    pg_stat_statements.track: top
   # Roles the operator keeps in sync (created, password from the Secret, kept present). The
   # autoscaler reads queue depths with this one: two columns of two tables (granted by the apps'
   # db-grants hook), no writes, no DDL (devops/06 §6). "" = none.

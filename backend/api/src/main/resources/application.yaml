@@ -22,6 +22,10 @@ spring:
       # ⭐ D5.1: fail fast. Hikari's default 30 s wait let ~1,500 requests per pod queue for 10
       #    connections; past 2 s a request becomes a 503 OVERLOADED (GlobalExceptionHandler), not a stall.
       connection-timeout: ${DATABASE_POOL_TIMEOUT_MS:2000}
+      # ⭐ D5.2: 5, not Hikari's 10. Measured at 100 rps: 42 checkouts/s per pod × 4.5 ms held = 0.19
+      #    connections busy (Little's law). At 4 pods, 10 each let 40 queries share the database's CPU;
+      #    at 300 rps pool 5 beat pool 10 in both A/B pairs (docs/hld/03-capacity.md §8).
+      maximum-pool-size: ${DATABASE_POOL_SIZE:5}
   data:
     redis:
       host: ${REDIS_HOST:localhost}
