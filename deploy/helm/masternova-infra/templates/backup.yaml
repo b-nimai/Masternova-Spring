@@ -4,7 +4,9 @@
 # into an S3 bucket; together they allow a restore to any second inside the retention window
 # (point-in-time recovery). The plugin, not CNPG's in-tree `barmanObjectStore`: the "standard"
 # Postgres images carry no barman-cloud binaries, the plugin brings them as a sidecar
-# (docs/runbooks/restore-database.md).
+# (docs/runbooks/restore-database.md). The S3 keys' Secret is not here: Secrets never come from git
+# (the Argo CD project refuses them); `make k8s-secrets` creates it, a real environment's secret
+# store does (or IRSA: inheritFromIAMRole).
 apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
 metadata:
@@ -34,18 +36,4 @@ spec:
   cluster: { name: masternova-db }
   method: plugin
   pluginConfiguration: { name: barman-cloud.cloudnative-pg.io }
-{{- if $b.devCredentials }}
----
-# The local stack's SeaweedFS accepts any key (ADR-0012). A real environment never sets
-# devCredentials: its Secret comes from the secret store (or IRSA: inheritFromIAMRole).
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{ $b.credentialsSecret }}
-  labels: {{- include "infra.labels" (dict "root" . "component" "postgres") | nindent 4 }}
-type: Opaque
-stringData:
-  ACCESS_KEY_ID: masternova
-  ACCESS_SECRET_KEY: masternova-dev-secret
-{{- end }}
 {{- end }}

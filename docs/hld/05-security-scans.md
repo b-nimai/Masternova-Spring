@@ -77,7 +77,7 @@ Two design points:
 
 `security-review` on everything D5 changed: **no high-confidence finding.** Ten candidates were
 examined and rejected (the bulkhead runs before authentication: DoS, out of scope and deliberate;
-the dev-only backup credentials sit behind `devCredentials`, default `false`; a 503 on a lost
+the backup S3 keys are created by `make k8s-secrets`, never templated: the first version rendered them in the chart, and Argo CD's project, which refuses Secrets from git, failed the sync after the merge (fixed in a follow-up PR); a 503 on a lost
 connection releases the idempotency key, as every 5xx already did; …). The phase *removed* the
 header gaps above and a secrets scan that scanned nothing.
 
