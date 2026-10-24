@@ -40,6 +40,7 @@ Every error is `application/problem+json`. Spring builds it natively (`ProblemDe
 | `RuleViolationException(code, msg)` | 422 | the rule's own (`COUPON_EXPIRED`) | optional |
 | Spring MVC's own (malformed JSON, 405, 415, no route) | as Spring decides | the status name (`BAD_REQUEST`, `METHOD_NOT_ALLOWED`…) | — |
 | overload: the pod's bulkhead is full, or no database connection within 2 s (D5.1) | 503 + `Retry-After: 1` | `OVERLOADED` | none. Safe to retry after the delay; [capacity](../hld/03-capacity.md) |
+| the database connection died mid-request: a failover or restart (SQLSTATE `08…`, `57P01–03`, D5.3) | 503 + `Retry-After: 1` | `DATABASE_UNAVAILABLE` | none. Retry after the delay; a write retried with its `Idempotency-Key` runs again (the key was released) |
 | anything else (a bug) | 500 | `INTERNAL` | none. Logged with the stack trace; the message is never sent. |
 
 `type` is always `https://masternova.dev/problems/<code-in-kebab-case>`, and `instance` is the

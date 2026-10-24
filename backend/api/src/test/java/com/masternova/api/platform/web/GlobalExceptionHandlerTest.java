@@ -10,8 +10,10 @@ import com.masternova.api.platform.ValidationException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
+import java.sql.SQLException;
 import java.sql.SQLTransientConnectionException;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
@@ -65,6 +67,14 @@ class GlobalExceptionHandlerTest {
       throw new CannotCreateTransactionException(
           "Could not open JPA EntityManager for transaction",
           new SQLTransientConnectionException("HikariPool-1 - Connection is not available"));
+    }
+
+    @GetMapping("/connection-lost")
+    void connectionLost() {
+      // what Spring throws when the primary dies mid-statement during a failover
+      throw new DataAccessResourceFailureException(
+          "could not execute statement",
+          new SQLException("An I/O error occurred while sending to the backend.", "08006"));
     }
 
     @PostMapping("/courses")
@@ -187,6 +197,18 @@ class GlobalExceptionHandlerTest {
         .isLenientlyEqualTo(
             """
             {"code":"OVERLOADED","type":"https://masternova.dev/problems/overloaded","status":503}
+            """);
+  }
+
+  @Test
+  void aLostDatabaseConnectionIsA503DatabaseUnavailable() {
+    assertThat(mvc.get().uri("/connection-lost"))
+        .hasStatus(HttpStatus.SERVICE_UNAVAILABLE)
+        .hasHeader("Retry-After", "1")
+        .bodyJson()
+        .isLenientlyEqualTo(
+            """
+            {"code":"DATABASE_UNAVAILABLE","status":503}
             """);
   }
 }

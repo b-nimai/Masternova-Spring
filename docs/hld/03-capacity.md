@@ -131,6 +131,9 @@ Metrics: `masternova_overload_rejected_total` and `masternova_overload_in_flight
   `max = 1,042,558 ms`. k6's request timeout is 60 s, so that's the k6 process itself frozen for
   17 minutes: the Mac slept mid-step. That row was rerun. An earlier attempt ran with the Mac
   swapping (load average 87); it was discarded.
+- **SeaweedFS was spinning during some runs.** The D5.3 drills found it wedged at 5.1 cores
+  (of the laptop's 8) near its memory limit ([drills §4](04-resilience-drills.md)). For how long
+  isn't known; it's the likeliest reason some runs measured far worse than their neighbours.
 - The api never got to use its own 4-pod HPA ceiling well: CPU-based HPA reacts in ~1 min, while
   the collapse took under a minute. Scaling on in-flight requests is a follow-up, not done here.
 

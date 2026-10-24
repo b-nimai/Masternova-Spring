@@ -12,6 +12,7 @@ import com.masternova.api.platform.ValidationException;
 import com.masternova.api.platform.ValidationException.FieldError;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
+import java.sql.SQLException;
 import java.sql.SQLTransientConnectionException;
 import java.util.Comparator;
 import java.util.List;
@@ -110,14 +111,19 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       // ⭐ no free connection within the pool's timeout: overload, not a bug (D5.1). A 503 with
       //    Retry-After, like the bulkhead's, and no stack trace per request at the worst moment.
       log.warn("No database connection for {} {}", request.getMethod(), request.getRequestURI());
-      return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-          .header(HttpHeaders.RETRY_AFTER, "1")
-          .body(
-              problem(
-                  HttpStatus.SERVICE_UNAVAILABLE,
-                  "OVERLOADED",
-                  "The service is busy. Retry shortly.",
-                  request));
+      return unavailable("OVERLOADED", "The service is busy. Retry shortly.", request);
+    }
+    if (isConnectionLost(ex)) {
+      // ⭐ the database went away under the request: a failover (D5.3), a restart. Not a bug either,
+      //    and a retry after the new primary is up succeeds. A write's idempotency key was released
+      //    with this 5xx, so retrying it with the same key runs it again.
+      log.warn(
+          "Database connection lost on {} {}: {}",
+          request.getMethod(),
+          request.getRequestURI(),
+          ex.getMessage());
+      return unavailable(
+          "DATABASE_UNAVAILABLE", "The database is unavailable. Retry shortly.", request);
     }
     log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
     return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -189,6 +195,30 @@ class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       }
     }
     return false;
+  }
+
+  /**
+   * SQLSTATE class 08 (connection exception: the socket died mid-statement) or 57P01–57P03 (the
+   * server is shutting down, crashed, or not accepting connections yet): what a client sees while
+   * CNPG fails over.
+   */
+  private static boolean isConnectionLost(Throwable ex) {
+    for (Throwable t = ex; t != null; t = t.getCause()) {
+      if (t instanceof SQLException sql && sql.getSQLState() != null) {
+        String state = sql.getSQLState();
+        if (state.startsWith("08") || state.startsWith("57P0")) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private static ResponseEntity<ProblemDetail> unavailable(
+      String code, String detail, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .header(HttpHeaders.RETRY_AFTER, "1")
+        .body(problem(HttpStatus.SERVICE_UNAVAILABLE, code, detail, request));
   }
 
   private static ProblemDetail problem(
