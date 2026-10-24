@@ -2,7 +2,6 @@
 postgres:
   backup:
     enabled: true # into the in-cluster SeaweedFS: the drill's store, not an off-site copy
-    devCredentials: true
 seaweedfs:
   corsOrigins: [https://masternova.localhost:8443]
 ingress:

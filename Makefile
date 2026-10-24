@@ -172,6 +172,10 @@ k8s-secrets: secrets ## Create the cluster's Secrets from the local secret files
 	  --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG)
 	kubectl -n masternova create secret generic masternova-redis --from-file=password=secrets/redis_password \
 	  --dry-run=client -o yaml | kubectl apply -f - | tee -a $(K8S_SECRETS_LOG)
+	@# the database backups' S3 keys (D5.4): the local SeaweedFS accepts any key, these are compose's
+	kubectl -n masternova create secret generic masternova-backup-s3 \
+	  --from-literal=ACCESS_KEY_ID=masternova --from-literal=ACCESS_SECRET_KEY=masternova-dev-secret \
+	  --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 	@# the read-only role KEDA queries with: CNPG creates it from the copy in masternova, KEDA
 	@# reads the copy in its own namespace (it may read no other namespace's Secrets)
 	@# (keda's namespace may not exist yet; masternova's comes from namespace.yaml — re-creating it

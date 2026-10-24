@@ -28,8 +28,7 @@ postgres:
     objectStore: masternova-backups
     destinationPath: s3://masternova-backups/
     endpointURL: http://seaweedfs:8333
-    credentialsSecret: masternova-backup-s3
-    devCredentials: false # true only where the S3 accepts any key (the local SeaweedFS)
+    credentialsSecret: masternova-backup-s3 # ACCESS_KEY_ID + ACCESS_SECRET_KEY, created outside git
     retention: 7d # base backups + WAL older than this go: the PITR window
     schedule: "0 0 3 * * *" # daily, 03:00 UTC
     # how stale the newest archived WAL may get on a quiet database: the RPO bound

@@ -15,6 +15,7 @@ bad migration's data change, or a deleted course that must come back.
 | WAL archive | every finished WAL segment → `s3://masternova-backups/masternova-db/wals/`, and `archive_timeout: 60s` closes a segment at least once a minute | **RPO ≤ 60 s** on a quiet database (seconds when busy) |
 | Base backups | `ScheduledBackup masternova-db-daily`, 03:00 UTC; on demand with a `Backup` | the starting point a restore replays WAL on top of |
 | Retention | `ObjectStore.retentionPolicy: 7d` | any second in the last 7 days |
+| S3 keys | Secret `masternova-backup-s3` (`ACCESS_KEY_ID`, `ACCESS_SECRET_KEY`), from `make k8s-secrets`: never from git | the plugin's access to the bucket |
 
 Check that it's working:
 
