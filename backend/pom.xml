@@ -11,7 +11,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>4.1.1</version>
+		<version>4.1.2</version>
 		<relativePath/>
 	</parent>
 
@@ -32,13 +32,13 @@
 
 	<properties>
 		<java.version>25</java.version>
-		<spring-modulith.version>2.1.1</spring-modulith.version>
+		<spring-modulith.version>2.1.2</spring-modulith.version>
 		<!-- the embedding model client only (ADR-0024): no starter, no auto-configuration -->
-		<spring-ai.version>2.0.1</spring-ai.version>
-		<spotless.version>3.10.4</spotless.version>
+		<spring-ai.version>2.0.2</spring-ai.version>
+		<spotless.version>3.11.0</spotless.version>
 		<!-- 1.36+ adds a commonmark dependency Spotless 3.10 fails to load; bump when Spotless fixes it. -->
 		<google-java-format.version>1.35.0</google-java-format.version>
-		<jacoco.version>0.8.15</jacoco.version>
+		<jacoco.version>0.8.16</jacoco.version>
 		<!-- coverage floors (0.00–1.00); each module may raise its own -->
 		<coverage.line>0.00</coverage.line>
 		<coverage.branch>0.00</coverage.branch>
@@ -49,8 +49,8 @@
 		-->
 		<tomcat.version>11.0.26</tomcat.version>
 		<jackson-bom.version>3.1.7</jackson-bom.version>
-		<aws-sdk.version>2.55.15</aws-sdk.version>
-		<shedlock.version>7.10.1</shedlock.version>
+		<aws-sdk.version>2.57.12</aws-sdk.version>
+		<shedlock.version>7.11.0</shedlock.version>
 	</properties>
 
 	<dependencyManagement>
